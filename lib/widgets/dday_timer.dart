@@ -10,7 +10,7 @@ class DdayTimer extends StatefulWidget {
 }
 
 class _DdayTimerState extends State<DdayTimer> {
-  static final DateTime _examDate = AppConfig.examDate;
+  DateTime get _examDate => AppConfig.examDate;
   late Timer _timer;
   Duration _remaining = Duration.zero;
   bool _examPassed = false;
@@ -114,7 +114,7 @@ class _DdayTimerState extends State<DdayTimer> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${AppConfig.examDate.year}년 ${AppConfig.examDate.month}월 ${AppConfig.examDate.day}일',
+              '${AppConfig.examRoundLabel} | ${AppConfig.examDate.month}월 ${AppConfig.examDate.day}일',
               style: TextStyle(
                 color: Colors.grey[500],
                 fontSize: 12,

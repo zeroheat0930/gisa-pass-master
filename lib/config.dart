@@ -9,8 +9,25 @@ class AppConfig {
   static const String appSubtitle = '2026 정보처리기사 실기';
   static const String examLabel = '정보처리기사 실기 시험';
 
-  // === 시험 날짜 (D-Day 타이머용) ===
-  static final DateTime examDate = DateTime(2026, 4, 18);
+  // === 시험 일정 (자동으로 다음 회차 전환) ===
+  static final List<({int year, int round, DateTime date})> _examSchedule = [
+    (year: 2026, round: 1, date: DateTime(2026, 4, 18)),
+    (year: 2026, round: 2, date: DateTime(2026, 7, 5)),
+    (year: 2026, round: 3, date: DateTime(2026, 10, 18)),
+    (year: 2027, round: 1, date: DateTime(2027, 4, 17)),
+  ];
+
+  /// 다음 시험 정보 (자동 전환)
+  static ({int year, int round, DateTime date}) get nextExam {
+    final now = DateTime.now();
+    for (final exam in _examSchedule) {
+      if (exam.date.isAfter(now)) return exam;
+    }
+    return _examSchedule.last;
+  }
+
+  static DateTime get examDate => nextExam.date;
+  static String get examRoundLabel => '${nextExam.year}년 ${nextExam.round}회';
 
   // === 테마 컬러 ===
   static const Color primaryColor = Color(0xFFE53935);
