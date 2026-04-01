@@ -25,6 +25,7 @@ class _DdayTimerState extends State<DdayTimer> {
   }
 
   void _updateRemaining() {
+    if (!mounted) return;
     final now = DateTime.now();
     final diff = _examDate.difference(now);
     setState(() {

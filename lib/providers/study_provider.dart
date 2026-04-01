@@ -176,20 +176,9 @@ class StudyProvider extends ChangeNotifier {
 
   // === 내부 헬퍼 ===
 
-  /// 모든 문제의 오답률 계산 (PredictionEngine 입력용)
+  /// 모든 문제의 오답률 계산 (PredictionEngine 입력용) — 단일 쿼리
   Future<Map<int, double>> _buildErrorRates(List<Question> questions) async {
-    final errorRates = <int, double>{};
-    for (final q in questions) {
-      if (q.id == null) continue;
-      final records = await _db.getRecordsByQuestion(q.id!);
-      if (records.isEmpty) {
-        errorRates[q.id!] = 0.0;
-      } else {
-        final wrongCount = records.where((r) => !r.isCorrect).length;
-        errorRates[q.id!] = wrongCount / records.length;
-      }
-    }
-    return errorRates;
+    return await _db.getAllErrorRates();
   }
 
   void _setLoading(bool loading) {

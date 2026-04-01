@@ -16,12 +16,28 @@ import 'screens/past_exam_screen.dart';
 import 'screens/cheat_sheet_screen.dart';
 import 'screens/stats_screen.dart';
 
+// 서비스는 앱 시작 시 한 번만 생성
+late final DatabaseService _db;
+late final PredictionEngine _predictionEngine;
+late final SpacedRepetitionService _spacedRepetitionService;
+late final AdService _adService;
+late final PurchaseService _purchaseService;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
   }
   await AdService.initialize();
+
+  _db = DatabaseService();
+  _predictionEngine = PredictionEngine();
+  _spacedRepetitionService = SpacedRepetitionService(_db);
+  _adService = AdService()..loadInterstitialAd();
+  _purchaseService = PurchaseService()
+    ..setAdService(_adService)
+    ..initialize();
+
   runApp(const GisaPassMasterApp());
 }
 
@@ -30,28 +46,22 @@ class GisaPassMasterApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final db = DatabaseService();
-    final predictionEngine = PredictionEngine();
-    final spacedRepetitionService = SpacedRepetitionService(db);
-    final adService = AdService()..loadInterstitialAd();
-    final purchaseService = PurchaseService()
-      ..setAdService(adService)
-      ..initialize();
-
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
           create: (_) => StudyProvider(
-            db: db,
-            predictionEngine: predictionEngine,
-            spacedRepetitionService: spacedRepetitionService,
-            adService: adService,
+            db: _db,
+            predictionEngine: _predictionEngine,
+            spacedRepetitionService: _spacedRepetitionService,
+            adService: _adService,
           ),
         ),
         ChangeNotifierProvider(
-          create: (_) => StatsProvider(db: db),
+          create: (_) => StatsProvider(db: _db),
         ),
-        ChangeNotifierProvider.value(value: purchaseService),
+        ChangeNotifierProvider(
+          create: (_) => _purchaseService,
+        ),
       ],
       child: MaterialApp(
         title: AppConfig.appTitle,
@@ -92,22 +102,27 @@ class _RootNavigator extends StatefulWidget {
 
 class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
+  late final List<Widget> _screens;
 
-  List<Widget> _screens(BuildContext context) => [
-    const HomeScreen(),
-    PastExamScreen(
-      loadQuestions: () => Provider.of<StudyProvider>(context, listen: false).db.getAllQuestions(),
-    ),
-    const CheatSheetScreen(),
-    const StatsScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const HomeScreen(),
+      PastExamScreen(
+        loadQuestions: () => _db.getAllQuestions(),
+      ),
+      const CheatSheetScreen(),
+      const StatsScreen(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens(context),
+        children: _screens,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,

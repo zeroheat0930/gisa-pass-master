@@ -136,6 +136,29 @@ class DatabaseService {
     );
   }
 
+  /// 전체 문제의 오답률을 한 번의 쿼리로 계산
+  Future<Map<int, double>> getAllErrorRates() async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT question_id,
+             COUNT(*) as total,
+             SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) as wrong
+      FROM answer_records
+      GROUP BY question_id
+    ''');
+    final map = <int, double>{};
+    for (final row in results) {
+      final qid = row['question_id'];
+      final total = row['total'];
+      final wrong = row['wrong'];
+      final qidInt = qid is int ? qid : (qid as num).toInt();
+      final totalInt = total is int ? total : (total as num).toInt();
+      final wrongInt = wrong is int ? wrong : (wrong as num).toInt();
+      map[qidInt] = totalInt > 0 ? wrongInt / totalInt : 0.0;
+    }
+    return map;
+  }
+
   Future<List<AnswerRecord>> getRecordsByQuestion(int questionId) async {
     final db = await database;
     final maps = await db.query(
@@ -319,7 +342,10 @@ class DatabaseService {
     final db = await database;
     final now = DateTime.now().toIso8601String();
     return await db.rawQuery('''
-      SELECT sr.*, q.*
+      SELECT q.id, q.year, q.round, q.subject, q.question_type,
+             q.question_text, q.code_snippet, q.code_language,
+             q.answer, q.explanation, q.difficulty, q.frequency_weight,
+             sr.stage, sr.next_review_at, sr.consecutive_correct, sr.last_reviewed_at
       FROM spaced_repetition sr
       JOIN questions q ON sr.question_id = q.id
       WHERE sr.next_review_at <= ?
