@@ -13,6 +13,7 @@ import 'services/ad_service.dart';
 import 'services/purchase_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/past_exam_screen.dart';
+import 'screens/cheat_sheet_screen.dart';
 import 'screens/stats_screen.dart';
 
 void main() async {
@@ -95,6 +96,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
     PastExamScreen(
       loadQuestions: () => Provider.of<StudyProvider>(context, listen: false).db.getAllQuestions(),
     ),
+    const CheatSheetScreen(),
     const StatsScreen(),
   ];
 
@@ -122,6 +124,11 @@ class _RootNavigatorState extends State<_RootNavigator> {
             icon: const Icon(Icons.history_edu_outlined),
             selectedIcon: Icon(Icons.history_edu, color: AppConfig.primaryColor),
             label: '기출문제',
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book, color: AppConfig.primaryColor),
+            label: '족보',
           ),
           NavigationDestination(
             icon: const Icon(Icons.bar_chart_outlined),
