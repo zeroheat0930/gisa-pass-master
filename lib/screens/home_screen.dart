@@ -221,6 +221,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Quick stats
               _QuickStats(stats: stats),
+              const SizedBox(height: 20),
+
+              // 개발자 메시지 + 광고 제거 유도
+              _DevMessageCard(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const SubscriptionScreen()),
+                ),
+              ),
             ],
           ),
         ),
@@ -515,6 +525,94 @@ class _StatItem extends StatelessWidget {
           style: TextStyle(color: Colors.grey[500], fontSize: 11),
         ),
       ],
+    );
+  }
+}
+
+class _DevMessageCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _DevMessageCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A2332),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color(0xFF2A3A4A),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2196F3).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.coffee,
+                    color: Color(0xFF2196F3),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    '개발자의 한마디',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '안녕하세요! 저도 정보처리기사 준비하면서 급하게 만든 앱입니다. '
+              '혹시 광고가 거슬리시다면... 커피 한 잔 값으로 광고 없이 '
+              '공부에만 집중할 수 있어요 ☕',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 12.5,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2196F3).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF2196F3).withValues(alpha: 0.3),
+                ),
+              ),
+              child: const Text(
+                '광고 제거하고 공부에 집중하기 →',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF2196F3),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
