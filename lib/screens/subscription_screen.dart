@@ -392,13 +392,10 @@ class _FeatureRow {
   final String label;
   final bool free;
   final bool premium;
-  final bool freeIsNegative;
-
   const _FeatureRow({
     required this.label,
     required this.free,
     required this.premium,
-    this.freeIsNegative = false,
   });
 }
 
@@ -411,11 +408,9 @@ class _FeatureRowWidget extends StatelessWidget {
     required this.isLast,
   });
 
-  Widget _icon(bool available, {bool negative = false}) {
+  Widget _icon(bool available) {
     if (available) {
-      final color = negative ? AppConfig.wrongColor : AppConfig.correctColor;
-      final icon = negative ? Icons.close_rounded : Icons.check_rounded;
-      return Icon(icon, color: color, size: 18);
+      return Icon(Icons.check_rounded, color: AppConfig.correctColor, size: 18);
     }
     return Icon(Icons.close_rounded, color: Colors.grey[700], size: 18);
   }
@@ -447,7 +442,7 @@ class _FeatureRowWidget extends StatelessWidget {
           Expanded(
             flex: 2,
             child: Center(
-              child: _icon(feature.free, negative: feature.freeIsNegative),
+              child: _icon(feature.free),
             ),
           ),
           Expanded(

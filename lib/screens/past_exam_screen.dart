@@ -1102,7 +1102,7 @@ class _ReviewScreenState extends State<_ReviewScreen> {
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: widget.questions.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final question = widget.questions[index];
             final isExpanded = _expanded[index];
