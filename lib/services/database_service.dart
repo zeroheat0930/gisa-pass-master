@@ -205,8 +205,9 @@ class DatabaseService {
   static const _allowedFields = {'subject', 'question_type'};
 
   Future<Map<String, double>> getAccuracyByField(String field) async {
-    assert(_allowedFields.contains(field), 'Invalid field: $field');
-    if (!_allowedFields.contains(field)) return {};
+    if (!_allowedFields.contains(field)) {
+      throw ArgumentError('Invalid field: $field');
+    }
     final db = await database;
     final results = await db.rawQuery('''
       SELECT q.$field,
