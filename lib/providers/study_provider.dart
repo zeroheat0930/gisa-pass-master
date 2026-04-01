@@ -43,6 +43,7 @@ class StudyProvider extends ChangeNotifier {
   bool _shouldShowAd = false;
 
   // === Getters ===
+  DatabaseService get db => _db;
   List<Question> get questionList => _questionList;
   int get questionIndex => _questionIndex;
   bool get isAnswered => _isAnswered;

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../config.dart';
@@ -15,13 +16,26 @@ class DatabaseService {
   }
 
   Future<Database> _initDB() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, AppConfig.dbName);
+    final String path;
+    if (kIsWeb) {
+      path = AppConfig.dbName;
+    } else {
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, AppConfig.dbName);
+    }
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('DROP TABLE IF EXISTS spaced_repetition');
+          await db.execute('DROP TABLE IF EXISTS answer_records');
+          await db.execute('DROP TABLE IF EXISTS questions');
+          await _onCreate(db, newVersion);
+        }
+      },
     );
   }
 
@@ -73,9 +87,14 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_spaced_repetition_next ON spaced_repetition(next_review_at)');
 
-    // 시드 데이터 삽입
-    for (final q in QuestionSeedData.questions) {
-      await db.insert('questions', q.toMap()..remove('id'));
+    // JSON 에셋에서 시드 데이터 로드 및 삽입
+    final questions = await QuestionSeedData.loadAll();
+    for (final q in questions) {
+      final m = q.toMap()..remove('id');
+      await db.execute(
+        'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [m['year'], m['round'], m['subject'], m['question_type'], m['question_text'], m['code_snippet'], m['code_language'], m['answer'], m['explanation'], m['difficulty'], m['frequency_weight']],
+      );
     }
   }
 
@@ -108,7 +127,11 @@ class DatabaseService {
 
   Future<void> insertAnswerRecord(AnswerRecord record) async {
     final db = await database;
-    await db.insert('answer_records', record.toMap()..remove('id'));
+    final m = record.toMap()..remove('id');
+    await db.execute(
+      'INSERT INTO answer_records (question_id, is_correct, user_answer, answered_at, time_spent_seconds) VALUES (?, ?, ?, ?, ?)',
+      [m['question_id'], m['is_correct'], m['user_answer'], m['answered_at'], m['time_spent_seconds']],
+    );
   }
 
   Future<List<AnswerRecord>> getRecordsByQuestion(int questionId) async {
@@ -122,25 +145,29 @@ class DatabaseService {
     return maps.map((m) => AnswerRecord.fromMap(m)).toList();
   }
 
+  int _firstInt(List<Map<String, dynamic>> result) {
+    if (result.isEmpty) return 0;
+    final val = result.first.values.first;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    return 0;
+  }
+
   Future<Map<String, dynamic>> getOverallStats() async {
     final db = await database;
 
-    final total = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM answer_records')) ??
-        0;
-    final correct = Sqflite.firstIntValue(await db
-            .rawQuery('SELECT COUNT(*) FROM answer_records WHERE is_correct = 1')) ??
-        0;
+    final total = _firstInt(
+        await db.rawQuery('SELECT COUNT(*) FROM answer_records'));
+    final correct = _firstInt(await db
+        .rawQuery('SELECT COUNT(*) FROM answer_records WHERE is_correct = 1'));
 
     final today = DateTime.now().toIso8601String().substring(0, 10);
-    final todayTotal = Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT COUNT(*) FROM answer_records WHERE answered_at LIKE ?',
-            ['$today%'])) ??
-        0;
-    final todayCorrect = Sqflite.firstIntValue(await db.rawQuery(
-            'SELECT COUNT(*) FROM answer_records WHERE answered_at LIKE ? AND is_correct = 1',
-            ['$today%'])) ??
-        0;
+    final todayTotal = _firstInt(await db.rawQuery(
+        'SELECT COUNT(*) FROM answer_records WHERE answered_at LIKE ?',
+        ['$today%']));
+    final todayCorrect = _firstInt(await db.rawQuery(
+        'SELECT COUNT(*) FROM answer_records WHERE answered_at LIKE ? AND is_correct = 1',
+        ['$today%']));
 
     return {
       'total': total,
@@ -171,6 +198,101 @@ class DatabaseService {
     return map;
   }
 
+  Future<Map<String, int>> getSolvedCountByField(String field) async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT q.$field, COUNT(*) as total
+      FROM answer_records ar
+      JOIN questions q ON ar.question_id = q.id
+      GROUP BY q.$field
+    ''');
+
+    final map = <String, int>{};
+    for (final row in results) {
+      final key = row[field] as String;
+      final total = row['total'];
+      map[key] = total is int ? total : (total as num).toInt();
+    }
+    return map;
+  }
+
+  Future<Map<int, double>> getAccuracyByDifficulty() async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT q.difficulty,
+             COUNT(*) as total,
+             SUM(CASE WHEN ar.is_correct = 1 THEN 1 ELSE 0 END) as correct
+      FROM answer_records ar
+      JOIN questions q ON ar.question_id = q.id
+      GROUP BY q.difficulty
+    ''');
+
+    final map = <int, double>{};
+    for (final row in results) {
+      final diff = row['difficulty'];
+      final diffInt = diff is int ? diff : (diff as num).toInt();
+      final total = row['total'];
+      final correct = row['correct'];
+      final totalInt = total is int ? total : (total as num).toInt();
+      final correctInt = correct is int ? correct : (correct as num).toInt();
+      map[diffInt] = totalInt > 0 ? (correctInt / totalInt) * 100 : 0;
+    }
+    return map;
+  }
+
+  Future<int> getTotalQuestionCount() async {
+    final db = await database;
+    return _firstInt(await db.rawQuery('SELECT COUNT(*) FROM questions'));
+  }
+
+  Future<int> getStreakDays() async {
+    final db = await database;
+    // Get distinct dates with answer records, ordered descending
+    final results = await db.rawQuery('''
+      SELECT DISTINCT substr(answered_at, 1, 10) as day
+      FROM answer_records
+      ORDER BY day DESC
+    ''');
+
+    if (results.isEmpty) return 0;
+
+    int streak = 0;
+    final today = DateTime.now();
+    DateTime check = DateTime(today.year, today.month, today.day);
+
+    for (final row in results) {
+      final dayStr = row['day'] as String;
+      final parts = dayStr.split('-');
+      if (parts.length != 3) break;
+      final rowDate = DateTime(
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      );
+      if (rowDate == check) {
+        streak++;
+        check = check.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  Future<List<Map<String, dynamic>>> getLast7DaysStats() async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT substr(answered_at, 1, 10) as day,
+             COUNT(*) as total,
+             SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct
+      FROM answer_records
+      WHERE answered_at >= date('now', '-6 days')
+      GROUP BY day
+      ORDER BY day ASC
+    ''');
+    return results;
+  }
+
   // === Spaced Repetition ===
 
   Future<void> upsertSpacedRepetition({
@@ -180,16 +302,9 @@ class DatabaseService {
     required int consecutiveCorrect,
   }) async {
     final db = await database;
-    await db.insert(
-      'spaced_repetition',
-      {
-        'question_id': questionId,
-        'stage': stage,
-        'next_review_at': nextReviewAt.toIso8601String(),
-        'consecutive_correct': consecutiveCorrect,
-        'last_reviewed_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await db.execute(
+      'INSERT OR REPLACE INTO spaced_repetition (question_id, stage, next_review_at, consecutive_correct, last_reviewed_at) VALUES (?, ?, ?, ?, ?)',
+      [questionId, stage, nextReviewAt.toIso8601String(), consecutiveCorrect, DateTime.now().toIso8601String()],
     );
   }
 

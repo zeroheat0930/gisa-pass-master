@@ -6,6 +6,8 @@ import '../providers/study_provider.dart';
 import '../providers/stats_provider.dart';
 import '../widgets/dday_timer.dart';
 import 'quiz_screen.dart';
+import 'ai_prediction_screen.dart';
+import 'subscription_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,6 +46,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _startAiPrediction(BuildContext context) async {
+    final provider = context.read<StudyProvider>();
+    await provider.loadQuestions();
+    if (!context.mounted) return;
+
+    final questions = provider.questionList;
+    if (questions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('문제가 없습니다.')),
+      );
+      return;
+    }
+
+    // AI 예측 모의고사: 최대 20문제 선별
+    final examQuestions = questions.take(20).toList();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AiPredictionScreen(questions: examQuestions),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final stats = context.watch<StatsProvider>().stats;
@@ -56,22 +81,67 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // App title
-              Text(
-                AppConfig.appTitle,
-                style: const TextStyle(
-                  color: AppConfig.primaryColor,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-                textAlign: TextAlign.center,
+              // Header row: title + premium button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Spacer(),
+                  const Text(
+                    '기사패스마스터',
+                    style: TextStyle(
+                      color: AppConfig.primaryColor,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const SubscriptionScreen()),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.workspace_premium,
+                              color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'PRO',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
 
               // D-Day timer
               const DdayTimer(),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
+
+              // AI 예측 모의고사 (가장 눈에 띄는 버튼)
+              _AiPredictionButton(
+                onTap: () => _startAiPrediction(context),
+              ),
+              const SizedBox(height: 12),
 
               // Primary: 예측 학습
               _ModeButton(
@@ -153,6 +223,108 @@ class _HomeScreenState extends State<HomeScreen> {
               _QuickStats(stats: stats),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiPredictionButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AiPredictionButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF6A1B9A), Color(0xFF8E24AA)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6A1B9A).withValues(alpha: 0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.psychology, color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'AI 실전 모의고사',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        _AiBadge(),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'AI가 기출 패턴을 분석하여 실시간 출제',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white70, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiBadge extends StatelessWidget {
+  const _AiBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'AI',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

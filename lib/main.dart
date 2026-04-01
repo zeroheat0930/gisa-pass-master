@@ -10,7 +10,9 @@ import 'services/database_service.dart';
 import 'services/prediction_engine.dart';
 import 'services/spaced_repetition_service.dart';
 import 'services/ad_service.dart';
+import 'services/purchase_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/past_exam_screen.dart';
 import 'screens/stats_screen.dart';
 
 void main() async {
@@ -31,6 +33,7 @@ class GisaPassMasterApp extends StatelessWidget {
     final predictionEngine = PredictionEngine();
     final spacedRepetitionService = SpacedRepetitionService(db);
     final adService = AdService()..loadInterstitialAd();
+    final purchaseService = PurchaseService()..initialize();
 
     return MultiProvider(
       providers: [
@@ -45,6 +48,7 @@ class GisaPassMasterApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => StatsProvider(db: db),
         ),
+        ChangeNotifierProvider.value(value: purchaseService),
       ],
       child: MaterialApp(
         title: AppConfig.appTitle,
@@ -86,9 +90,12 @@ class _RootNavigator extends StatefulWidget {
 class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
 
-  static const List<Widget> _screens = [
-    HomeScreen(),
-    StatsScreen(),
+  List<Widget> _screens(BuildContext context) => [
+    const HomeScreen(),
+    PastExamScreen(
+      loadQuestions: () => Provider.of<StudyProvider>(context, listen: false).db.getAllQuestions(),
+    ),
+    const StatsScreen(),
   ];
 
   @override
@@ -96,7 +103,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: _screens(context),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -110,6 +117,11 @@ class _RootNavigatorState extends State<_RootNavigator> {
             icon: const Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home, color: AppConfig.primaryColor),
             label: '홈',
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.history_edu_outlined),
+            selectedIcon: Icon(Icons.history_edu, color: AppConfig.primaryColor),
+            label: '기출문제',
           ),
           NavigationDestination(
             icon: const Icon(Icons.bar_chart_outlined),

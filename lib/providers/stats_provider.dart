@@ -39,20 +39,39 @@ class StatsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 전체/오늘 통계와 필드별 정확도 fetch
       final overall = await _db.getOverallStats();
       final subjectAcc = await _db.getAccuracyByField('subject');
+      final subjectSolved = await _db.getSolvedCountByField('subject');
       final typeAcc = await _db.getAccuracyByField('question_type');
+      final typeSolved = await _db.getSolvedCountByField('question_type');
+      final difficultyAcc = await _db.getAccuracyByDifficulty();
+      final totalAvailable = await _db.getTotalQuestionCount();
+      final streakDays = await _db.getStreakDays();
+      final last7Raw = await _db.getLast7DaysStats();
+
+      final last7Days = last7Raw.map((row) {
+        final total = row['total'];
+        final correct = row['correct'];
+        return DailyStats(
+          date: row['day'] as String,
+          solved: total is int ? total : (total as num).toInt(),
+          correct: correct is int ? correct : (correct as num).toInt(),
+        );
+      }).toList();
 
       _stats = StudyStats(
         totalSolved: overall['total'] as int? ?? 0,
         totalCorrect: overall['correct'] as int? ?? 0,
         todaySolved: overall['todayTotal'] as int? ?? 0,
         todayCorrect: overall['todayCorrect'] as int? ?? 0,
+        totalAvailable: totalAvailable,
         subjectAccuracy: subjectAcc,
+        subjectSolved: subjectSolved,
         typeAccuracy: typeAcc,
-        // streakDays: DB에 streak 추적 테이블 없으므로 0 유지
-        streakDays: 0,
+        typeSolved: typeSolved,
+        difficultyAccuracy: difficultyAcc,
+        streakDays: streakDays,
+        last7Days: last7Days,
       );
     } finally {
       _isLoading = false;

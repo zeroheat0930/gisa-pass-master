@@ -35,6 +35,10 @@ class AppConfig {
     'short_answer': '단답형',
   };
 
+  // === 구독 설정 ===
+  static const int premiumMonthlyPrice = 4900; // 원
+  static const int freeTrialDays = 7;
+
   // === 과목 라벨 ===
   static const Map<String, IconData> questionTypeIcons = {
     'code_reading': Icons.code,

@@ -35,6 +35,18 @@ class CodeViewer extends StatelessWidget {
     'override', 'switch', 'case', 'break', 'continue', 'default',
   };
 
+  static const _pythonKeywords = {
+    'def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while',
+    'in', 'not', 'and', 'or', 'is', 'import', 'from', 'as', 'with',
+    'try', 'except', 'finally', 'raise', 'pass', 'break', 'continue',
+    'lambda', 'yield', 'global', 'nonlocal', 'assert', 'del',
+    'True', 'False', 'None', 'print', 'range', 'len', 'int', 'str',
+    'list', 'dict', 'tuple', 'set', 'float', 'bool', 'type',
+    'self', 'super', '__init__', '__str__', '__repr__',
+    'map', 'filter', 'zip', 'enumerate', 'sorted', 'reversed',
+    'input', 'open', 'append', 'extend', 'pop', 'remove',
+  };
+
   static const _sqlKeywords = {
     'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER',
     'ON', 'GROUP', 'BY', 'ORDER', 'HAVING', 'INSERT', 'INTO', 'VALUES',
@@ -43,12 +55,17 @@ class CodeViewer extends StatelessWidget {
     'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'AS', 'AND', 'OR', 'NOT',
     'IN', 'LIKE', 'BETWEEN', 'IS', 'NULL', 'UNION', 'ALL', 'LIMIT',
     'OFFSET', 'ASC', 'DESC', 'WITH', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
+    'GRANT', 'REVOKE', 'VIEW', 'REPLACE', 'EXISTS', 'TRIGGER',
+    'VARCHAR', 'INTEGER', 'INT', 'TEXT', 'DATE', 'FLOAT', 'BOOLEAN',
+    'DEFAULT', 'CHECK', 'UNIQUE', 'CASCADE', 'CONSTRAINT',
   };
 
   Set<String> get _keywords {
     switch (language.toLowerCase()) {
       case 'java':
         return _javaKeywords;
+      case 'python':
+        return _pythonKeywords;
       case 'sql':
         return _sqlKeywords;
       default:
@@ -60,11 +77,24 @@ class CodeViewer extends StatelessWidget {
     final spans = <TextSpan>[];
     final keywords = _keywords;
     final isSql = language.toLowerCase() == 'sql';
+    final isPython = language.toLowerCase() == 'python';
 
     int i = 0;
     while (i < source.length) {
+      // Python comment #
+      if (isPython && source[i] == '#') {
+        final end = source.indexOf('\n', i);
+        final commentEnd = end == -1 ? source.length : end;
+        spans.add(TextSpan(
+          text: source.substring(i, commentEnd),
+          style: const TextStyle(color: _commentColor),
+        ));
+        i = commentEnd;
+        continue;
+      }
+
       // Line comment //
-      if (!isSql && i + 1 < source.length && source[i] == '/' && source[i + 1] == '/') {
+      if (!isSql && !isPython && i + 1 < source.length && source[i] == '/' && source[i + 1] == '/') {
         final end = source.indexOf('\n', i);
         final commentEnd = end == -1 ? source.length : end;
         spans.add(TextSpan(
