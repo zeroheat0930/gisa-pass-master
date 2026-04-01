@@ -34,9 +34,6 @@ class PurchaseService extends ChangeNotifier {
 
     // 상품 정보 로드
     await _loadProducts();
-
-    // 이전 구매 복원
-    await _iap.restorePurchases();
   }
 
   Future<void> _loadProducts() async {

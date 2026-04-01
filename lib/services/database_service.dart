@@ -87,15 +87,17 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_spaced_repetition_next ON spaced_repetition(next_review_at)');
 
-    // JSON 에셋에서 시드 데이터 로드 및 삽입
+    // JSON 에셋에서 시드 데이터 로드 및 삽입 (배치로 고속 처리)
     final questions = await QuestionSeedData.loadAll();
+    final batch = db.batch();
     for (final q in questions) {
       final m = q.toMap()..remove('id');
-      await db.execute(
+      batch.execute(
         'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [m['year'], m['round'], m['subject'], m['question_type'], m['question_text'], m['code_snippet'], m['code_language'], m['answer'], m['explanation'], m['difficulty'], m['frequency_weight']],
       );
     }
+    await batch.commit(noResult: true);
   }
 
   // === Questions CRUD ===
@@ -177,7 +179,11 @@ class DatabaseService {
     };
   }
 
+  static const _allowedFields = {'subject', 'question_type'};
+
   Future<Map<String, double>> getAccuracyByField(String field) async {
+    assert(_allowedFields.contains(field), 'Invalid field: $field');
+    if (!_allowedFields.contains(field)) return {};
     final db = await database;
     final results = await db.rawQuery('''
       SELECT q.$field,
@@ -199,6 +205,7 @@ class DatabaseService {
   }
 
   Future<Map<String, int>> getSolvedCountByField(String field) async {
+    if (!_allowedFields.contains(field)) return {};
     final db = await database;
     final results = await db.rawQuery('''
       SELECT q.$field, COUNT(*) as total

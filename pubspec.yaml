@@ -1,5 +1,5 @@
 name: gisa_pass_master
-description: "A new Flutter project."
+description: "2026 정보처리기사 실기 시험 대비 학습 앱"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -7,15 +6,21 @@ class AdService {
   InterstitialAd? _interstitialAd;
   bool _isAdLoaded = false;
 
-  // 테스트 광고 ID (Google 공식 테스트 ID)
+  // TODO: 출시 전 실제 AdMob 광고 ID로 교체 필수!
+  // 현재는 Google 공식 테스트 ID 사용 중
+  static const String _androidAdUnitId = 'ca-app-pub-3940256099942544/1033173712';
+  static const String _iosAdUnitId = 'ca-app-pub-3940256099942544/4411468910';
+
   static String get interstitialAdUnitId {
-    if (kIsWeb) return ''; // 웹은 광고 미지원
-    if (Platform.isAndroid) {
-      return 'ca-app-pub-3940256099942544/1033173712'; // Android 테스트
-    } else if (Platform.isIOS) {
-      return 'ca-app-pub-3940256099942544/4411468910'; // iOS 테스트
+    if (kIsWeb) return '';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return _androidAdUnitId;
+      case TargetPlatform.iOS:
+        return _iosAdUnitId;
+      default:
+        return '';
     }
-    return '';
   }
 
   bool get isAdLoaded => _isAdLoaded;
@@ -26,7 +31,11 @@ class AdService {
   /// 광고 SDK 초기화
   static Future<void> initialize() async {
     if (!_adsEnabled || kIsWeb) return;
-    await MobileAds.instance.initialize();
+    try {
+      await MobileAds.instance.initialize();
+    } catch (e) {
+      debugPrint('AdMob 초기화 실패: $e');
+    }
   }
 
   /// 전면광고 미리 로드
@@ -48,7 +57,7 @@ class AdService {
               ad.dispose();
               _isAdLoaded = false;
               _interstitialAd = null;
-              loadInterstitialAd(); // 다음 광고 미리 로드
+              loadInterstitialAd();
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               ad.dispose();
@@ -71,7 +80,7 @@ class AdService {
     if (_isAdLoaded && _interstitialAd != null) {
       _interstitialAd!.show();
     } else {
-      loadInterstitialAd(); // 로드 안 됐으면 다시 시도
+      loadInterstitialAd();
     }
   }
 

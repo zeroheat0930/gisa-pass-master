@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../models/question.dart';
 
@@ -39,7 +40,7 @@ class QuestionSeedData {
           ));
         }
       } catch (e) {
-        // 파일이 없거나 파싱 에러 시 건너뜀
+        debugPrint('문제 로드 실패 ($file): $e');
       }
     }
 

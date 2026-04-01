@@ -120,7 +120,7 @@ class StudyProvider extends ChangeNotifier {
   /// 답안 제출: 정답 확인, DB 기록, 스파르타 복습 스케줄 갱신
   Future<void> submitAnswer(String answer) async {
     final question = currentQuestion;
-    if (question == null || _isAnswered) return;
+    if (question == null || _isAnswered || question.id == null) return;
 
     // 대소문자 무시, 앞뒤 공백 제거 후 비교
     final trimmedAnswer = answer.trim();
