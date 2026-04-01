@@ -221,8 +221,8 @@ class DatabaseService {
     final map = <String, double>{};
     for (final row in results) {
       final key = row[field] as String;
-      final total = row['total'] as int;
-      final correct = row['correct'] as int;
+      final total = row['total'] is int ? row['total'] as int : (row['total'] as num).toInt();
+      final correct = row['correct'] is int ? row['correct'] as int : ((row['correct'] ?? 0) as num).toInt();
       map[key] = total > 0 ? (correct / total) * 100 : 0;
     }
     return map;
@@ -291,6 +291,21 @@ class DatabaseService {
     final today = DateTime.now();
     DateTime check = DateTime(today.year, today.month, today.day);
 
+    // 첫 번째 기록이 어제인 경우도 스트릭에 포함
+    final firstDayStr = results.first['day'] as String;
+    final firstParts = firstDayStr.split('-');
+    if (firstParts.length == 3) {
+      final firstDate = DateTime(
+        int.parse(firstParts[0]),
+        int.parse(firstParts[1]),
+        int.parse(firstParts[2]),
+      );
+      final yesterday = check.subtract(const Duration(days: 1));
+      if (firstDate == yesterday) {
+        check = yesterday;
+      }
+    }
+
     for (final row in results) {
       final dayStr = row['day'] as String;
       final parts = dayStr.split('-');
@@ -317,10 +332,10 @@ class DatabaseService {
              COUNT(*) as total,
              SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct
       FROM answer_records
-      WHERE answered_at >= date('now', '-6 days')
+      WHERE answered_at >= ?
       GROUP BY day
       ORDER BY day ASC
-    ''');
+    ''', [DateTime.now().subtract(const Duration(days: 6)).toIso8601String().substring(0, 10)]);
     return results;
   }
 
