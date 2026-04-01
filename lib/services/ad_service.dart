@@ -1,36 +1,68 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// AdMob 전면광고 서비스
+/// AdMob 광고 서비스
 class AdService {
   InterstitialAd? _interstitialAd;
   bool _isAdLoaded = false;
+  bool _isPremium = false;
 
-  // TODO: 출시 전 실제 AdMob 광고 ID로 교체 필수!
-  // 현재는 Google 공식 테스트 ID 사용 중
-  static const String _androidAdUnitId = 'ca-app-pub-3940256099942544/1033173712';
-  static const String _iosAdUnitId = 'ca-app-pub-3940256099942544/4411468910';
+  // TODO: AdMob 인증 완료 후 실제 ID로 교체!
+  // Android 전면광고 ID
+  static const String _androidInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
+  // iOS 전면광고 ID
+  static const String _iosInterstitialId = 'ca-app-pub-3940256099942544/4411468910';
+  // Android 배너광고 ID
+  static const String _androidBannerId = 'ca-app-pub-3940256099942544/6300978111';
+  // iOS 배너광고 ID
+  static const String _iosBannerId = 'ca-app-pub-3940256099942544/2934735716';
 
   static String get interstitialAdUnitId {
     if (kIsWeb) return '';
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return _androidAdUnitId;
+        return _androidInterstitialId;
       case TargetPlatform.iOS:
-        return _iosAdUnitId;
+        return _iosInterstitialId;
+      default:
+        return '';
+    }
+  }
+
+  static String get bannerAdUnitId {
+    if (kIsWeb) return '';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return _androidBannerId;
+      case TargetPlatform.iOS:
+        return _iosBannerId;
       default:
         return '';
     }
   }
 
   bool get isAdLoaded => _isAdLoaded;
+  bool get isPremium => _isPremium;
 
-  // === 오픈 이벤트: 광고 비활성화 (출시 후 활성화) ===
-  static const bool _adsEnabled = false;
+  // 광고 활성화 (true = 광고 표시, false = 비활성화)
+  static const bool adsEnabled = true;
+
+  /// 프리미엄 사용자 설정 (광고 숨김)
+  void setPremium(bool value) {
+    _isPremium = value;
+    if (_isPremium) {
+      _interstitialAd?.dispose();
+      _interstitialAd = null;
+      _isAdLoaded = false;
+    }
+  }
+
+  /// 광고를 보여야 하는지 여부
+  bool get shouldShowAds => adsEnabled && !_isPremium && !kIsWeb;
 
   /// 광고 SDK 초기화
   static Future<void> initialize() async {
-    if (!_adsEnabled || kIsWeb) return;
+    if (!adsEnabled || kIsWeb) return;
     try {
       await MobileAds.instance.initialize();
     } catch (e) {
@@ -40,7 +72,7 @@ class AdService {
 
   /// 전면광고 미리 로드
   void loadInterstitialAd() {
-    if (!_adsEnabled || kIsWeb) return;
+    if (!shouldShowAds) return;
     final adUnitId = interstitialAdUnitId;
     if (adUnitId.isEmpty) return;
 
@@ -75,8 +107,9 @@ class AdService {
     );
   }
 
-  /// 전면광고 표시 (로드된 경우에만)
+  /// 전면광고 표시 (프리미엄이면 표시 안 함)
   void showInterstitialAd() {
+    if (!shouldShowAds) return;
     if (_isAdLoaded && _interstitialAd != null) {
       _interstitialAd!.show();
     } else {

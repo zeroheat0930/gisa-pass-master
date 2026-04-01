@@ -34,7 +34,9 @@ class GisaPassMasterApp extends StatelessWidget {
     final predictionEngine = PredictionEngine();
     final spacedRepetitionService = SpacedRepetitionService(db);
     final adService = AdService()..loadInterstitialAd();
-    final purchaseService = PurchaseService()..initialize();
+    final purchaseService = PurchaseService()
+      ..setAdService(adService)
+      ..initialize();
 
     return MultiProvider(
       providers: [

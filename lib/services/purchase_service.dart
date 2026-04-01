@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'ad_service.dart';
 
 class PurchaseService extends ChangeNotifier {
   static const String premiumMonthlyId = 'gisa_pass_premium_monthly';
 
   final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
+  AdService? _adService;
 
   bool _available = false;
   bool _isPremium = false;
@@ -17,6 +19,11 @@ class PurchaseService extends ChangeNotifier {
   bool get available => _available;
   List<ProductDetails> get products => _products;
   bool get loading => _loading;
+
+  /// AdService 연결 (프리미엄 구매 시 광고 끄기용)
+  void setAdService(AdService adService) {
+    _adService = adService;
+  }
 
   /// 초기화 (웹에서는 비활성)
   Future<void> initialize() async {
@@ -74,6 +81,7 @@ class PurchaseService extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
         _isPremium = true;
+        _adService?.setPremium(true);
         notifyListeners();
 
         // 구매 완료 처리
