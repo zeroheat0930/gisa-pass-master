@@ -20,15 +20,18 @@ class AdService {
 
   bool get isAdLoaded => _isAdLoaded;
 
+  // === 오픈 이벤트: 광고 비활성화 (출시 후 활성화) ===
+  static const bool _adsEnabled = false;
+
   /// 광고 SDK 초기화
   static Future<void> initialize() async {
-    if (kIsWeb) return;
+    if (!_adsEnabled || kIsWeb) return;
     await MobileAds.instance.initialize();
   }
 
   /// 전면광고 미리 로드
   void loadInterstitialAd() {
-    if (kIsWeb) return;
+    if (!_adsEnabled || kIsWeb) return;
     final adUnitId = interstitialAdUnitId;
     if (adUnitId.isEmpty) return;
 
