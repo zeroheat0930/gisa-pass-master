@@ -107,6 +107,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
     final question = provider.currentQuestion;
     if (question == null) {
+      final daysLeft = AppConfig.examDate.difference(DateTime.now()).inDays;
       return Scaffold(
         backgroundColor: AppConfig.backgroundColor,
         appBar: _buildAppBar(context),
@@ -123,6 +124,48 @@ class _QuizScreenState extends State<QuizScreen> {
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold),
+              ),
+              if (provider.maxCombo >= 2) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.local_fire_department,
+                        color: Color(0xFFFF6D00), size: 24),
+                    const SizedBox(width: 6),
+                    Text(
+                      '최대 콤보: ${provider.maxCombo}연속 정답!',
+                      style: const TextStyle(
+                        color: Color(0xFFFF6D00),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppConfig.primaryColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppConfig.primaryColor.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  daysLeft > 0
+                      ? '시험까지 D-$daysLeft! 포기하지 마세요!'
+                      : '시험 당일! 최선을 다하세요!',
+                  style: TextStyle(
+                    color: daysLeft <= 7
+                        ? AppConfig.primaryColor
+                        : Colors.grey[300],
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
