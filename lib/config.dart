@@ -43,6 +43,9 @@ class AppConfig {
   // === 데이터베이스 ===
   static const String dbName = 'gisa_pass_master.db';
 
+  // === 관리자 모드 (true면 광고 없음 + 프리미엄 전체 해금) ===
+  static const bool adminMode = true; // 출시 시 false로 변경!
+
   // === 광고 설정 ===
   static const int adIntervalQuestions = 5; // N문제마다 전면광고
 

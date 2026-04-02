@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import '../config.dart';
 
 /// AdMob 광고 서비스
 class AdService {
@@ -54,7 +55,7 @@ class AdService {
   }
 
   /// 광고를 보여야 하는지 여부
-  bool get shouldShowAds => adsEnabled && !_isPremium && !kIsWeb;
+  bool get shouldShowAds => adsEnabled && !_isPremium && !kIsWeb && !AppConfig.adminMode;
 
   /// 광고 SDK 초기화
   static Future<void> initialize() async {
