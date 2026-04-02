@@ -550,7 +550,7 @@ class _Section {
 
 class _SectionCard extends StatefulWidget {
   final _Section section;
-  const _SectionCard({super.key, required this.section});
+  const _SectionCard({required this.section});
 
   @override
   State<_SectionCard> createState() => _SectionCardState();
@@ -650,7 +650,7 @@ class _SectionCardState extends State<_SectionCard> {
 
 class _ListContent extends StatelessWidget {
   final List<_Item> items;
-  const _ListContent({super.key, required this.items});
+  const _ListContent({required this.items});
 
   @override
   Widget build(BuildContext context) {
@@ -745,7 +745,7 @@ class _TableContent extends StatelessWidget {
   final List<List<String>> rows;
 
   const _TableContent(
-      {super.key, required this.headers, required this.rows});
+      {required this.headers, required this.rows});
 
   @override
   Widget build(BuildContext context) {
