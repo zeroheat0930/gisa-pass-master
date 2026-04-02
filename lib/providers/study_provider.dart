@@ -123,8 +123,9 @@ class StudyProvider extends ChangeNotifier {
     if (question == null || _isAnswered || question.id == null) return;
 
     // 대소문자 무시, 앞뒤 공백 제거 후 비교
-    final trimmedAnswer = answer.trim();
-    final correct = question.answer.trim().toLowerCase() ==
+    final trimmedAnswer = answer.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final normalizedCorrect = question.answer.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final correct = normalizedCorrect.toLowerCase() ==
         trimmedAnswer.toLowerCase();
 
     _userAnswer = trimmedAnswer;
@@ -158,7 +159,7 @@ class StudyProvider extends ChangeNotifier {
 
   /// 다음 문제로 이동
   void nextQuestion() {
-    if (_questionIndex < _questionList.length - 1) {
+    if (_questionIndex < _questionList.length) {
       _questionIndex++;
       _resetAnswerState();
       notifyListeners();

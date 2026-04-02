@@ -31,11 +31,11 @@ class _QuizScreenState extends State<QuizScreen> {
     await provider.submitAnswer(answer);
 
     if (!mounted) return;
+    if (!provider.isAnswered) return; // question.id null 등으로 제출 실패 시
 
     // 광고 표시 (5문제마다)
     if (provider.shouldShowAd) {
       provider.clearAdFlag();
-      // AdService.showInterstitialAd()는 이미 provider에서 호출됨
     }
 
     AnswerEffectOverlay.show(

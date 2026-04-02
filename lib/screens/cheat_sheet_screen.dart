@@ -21,14 +21,15 @@ class _CheatSheetScreenState extends State<CheatSheetScreen> {
   @override
   Widget build(BuildContext context) {
     final sections = _buildSections();
-    final filtered = _searchQuery.isEmpty
+    final query = _searchQuery.toLowerCase();
+    final filtered = query.isEmpty
         ? sections
         : sections
             .where((s) =>
-                s.title.contains(_searchQuery) ||
+                s.title.toLowerCase().contains(query) ||
                 s.content.any((item) =>
-                    item.term.contains(_searchQuery) ||
-                    item.definition.contains(_searchQuery)))
+                    item.term.toLowerCase().contains(query) ||
+                    item.definition.toLowerCase().contains(query)))
             .toList();
 
     return Scaffold(
@@ -224,8 +225,8 @@ class _CheatSheetScreenState extends State<CheatSheetScreen> {
           ['6', '표현(Presentation)', '데이터 형식변환·암호화·압축', 'SSL,TLS,JPEG', '데이터'],
           ['5', '세션(Session)', '세션 설정·유지·종료', 'NetBIOS,RPC', '데이터'],
           ['4', '전송(Transport)', '종단간 신뢰성, 흐름/혼잡 제어', 'TCP,UDP', '세그먼트'],
-          ['3', '네트워크(Network)', '논리적 주소(IP), 라우팅', 'IP,ICMP,ARP 라우터', '패킷'],
-          ['2', '데이터링크(Data Link)', '물리 주소(MAC), 오류 검출', 'Ethernet,PPP 스위치', '프레임'],
+          ['3', '네트워크(Network)', '논리적 주소(IP), 라우팅', 'IP,ICMP,OSPF 라우터', '패킷'],
+          ['2', '데이터링크(Data Link)', '물리 주소(MAC), 오류 검출', 'ARP,Ethernet,PPP 스위치', '프레임'],
           ['1', '물리(Physical)', '비트 전송, 전기 신호', '허브,리피터,케이블', '비트'],
         ],
         content: [],

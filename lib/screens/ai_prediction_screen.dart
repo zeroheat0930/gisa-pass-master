@@ -82,8 +82,9 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
     if (answer.isEmpty) return;
 
     final question = widget.questions[_currentIndex];
-    final correct = answer.toLowerCase().trim() ==
-        question.answer.toLowerCase().trim();
+    final normalizedAnswer = answer.replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    final normalizedCorrect = question.answer.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    final correct = normalizedAnswer == normalizedCorrect;
 
     setState(() {
       _userAnswers.add(answer);
@@ -171,6 +172,15 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
   // ── Quiz screen ───────────────────────────────────────────────────────────
 
   Widget _buildQuizScreen() {
+    if (widget.questions.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppConfig.backgroundColor,
+        appBar: AppBar(title: const Text('AI 실전 모의고사')),
+        body: const Center(
+          child: Text('문제가 없습니다.', style: TextStyle(color: Colors.grey, fontSize: 18)),
+        ),
+      );
+    }
     final question = widget.questions[_currentIndex];
     final total = widget.questions.length;
     final current = _currentIndex + 1;

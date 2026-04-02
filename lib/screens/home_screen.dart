@@ -17,6 +17,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  bool _isNavigating = false;
+
   @override
   void initState() {
     super.initState();
@@ -26,6 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _startMode(BuildContext context, StudyMode mode, {String? subType}) {
+    if (_isNavigating) return;
+    _isNavigating = true;
     final provider = context.read<StudyProvider>();
     Future<void> loader;
     if (mode == StudyMode.wrongAnswer) {
@@ -36,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
       loader = provider.loadQuestions();
     }
     loader.then((_) {
+      _isNavigating = false;
       if (!context.mounted) return;
       Navigator.push(
         context,
@@ -43,12 +48,17 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (_) => QuizScreen(mode: mode),
         ),
       );
+    }).catchError((_) {
+      _isNavigating = false;
     });
   }
 
   void _startAiPrediction(BuildContext context) async {
+    if (_isNavigating) return;
+    _isNavigating = true;
     final provider = context.read<StudyProvider>();
     await provider.loadQuestions();
+    _isNavigating = false;
     if (!context.mounted) return;
 
     final questions = provider.questionList;
@@ -59,7 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // AI 예측 모의고사: 최대 20문제 선별
     final examQuestions = questions.take(20).toList();
     Navigator.push(
       context,

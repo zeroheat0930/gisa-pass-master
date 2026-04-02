@@ -21,7 +21,8 @@ class AppConfig {
   static ({int year, int round, DateTime date}) get nextExam {
     final now = DateTime.now();
     for (final exam in _examSchedule) {
-      if (exam.date.isAfter(now)) return exam;
+      final today = DateTime(now.year, now.month, now.day);
+      if (!exam.date.isBefore(today)) return exam;
     }
     return _examSchedule.last;
   }
