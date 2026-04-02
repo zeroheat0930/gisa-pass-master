@@ -77,14 +77,28 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
 
   // ── Quiz actions ──────────────────────────────────────────────────────────
 
+  static bool _isCorrectAnswer(String userAnswer, String correctAnswer) {
+    String normalize(String s) => s
+        .trim()
+        .replaceAll('\n', ', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
+    final normUser = normalize(userAnswer);
+    final normCorrect = normalize(correctAnswer);
+    if (normUser == normCorrect) return true;
+    if (normUser.replaceAll(' ', '') == normCorrect.replaceAll(' ', '')) return true;
+    Set<String> tokens(String s) =>
+        s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
+    if (tokens(normUser) == tokens(normCorrect)) return true;
+    return false;
+  }
+
   void _submit() {
     final answer = _answerController.text.trim();
     if (answer.isEmpty) return;
 
     final question = widget.questions[_currentIndex];
-    final normalizedAnswer = answer.replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
-    final normalizedCorrect = question.answer.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
-    final correct = normalizedAnswer == normalizedCorrect;
+    final correct = _isCorrectAnswer(answer, question.answer);
 
     setState(() {
       _userAnswers.add(answer);

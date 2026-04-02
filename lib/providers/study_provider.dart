@@ -122,11 +122,8 @@ class StudyProvider extends ChangeNotifier {
     final question = currentQuestion;
     if (question == null || _isAnswered || question.id == null) return;
 
-    // 대소문자 무시, 앞뒤 공백 제거 후 비교
-    final trimmedAnswer = answer.trim().replaceAll(RegExp(r'\s+'), ' ');
-    final normalizedCorrect = question.answer.trim().replaceAll(RegExp(r'\s+'), ' ');
-    final correct = normalizedCorrect.toLowerCase() ==
-        trimmedAnswer.toLowerCase();
+    final trimmedAnswer = answer.trim();
+    final correct = _isCorrectAnswer(trimmedAnswer, question.answer);
 
     _userAnswer = trimmedAnswer;
     _isAnswered = true;
@@ -178,6 +175,29 @@ class StudyProvider extends ChangeNotifier {
   }
 
   // === 내부 헬퍼 ===
+
+  /// 답안 비교 (줄바꿈, 쉼표 순서, 공백, 대소문자 무시)
+  static bool _isCorrectAnswer(String userAnswer, String correctAnswer) {
+    String normalize(String s) => s
+        .trim()
+        .replaceAll('\n', ', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
+
+    final normUser = normalize(userAnswer);
+    final normCorrect = normalize(correctAnswer);
+    if (normUser == normCorrect) return true;
+
+    // 공백 완전 제거 비교 (상호배제 vs 상호 배제)
+    if (normUser.replaceAll(' ', '') == normCorrect.replaceAll(' ', '')) return true;
+
+    // 쉼표 리스트 순서 무관 비교
+    Set<String> tokens(String s) =>
+        s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
+    if (tokens(normUser) == tokens(normCorrect)) return true;
+
+    return false;
+  }
 
   /// 모든 문제의 오답률 계산 (PredictionEngine 입력용) — 단일 쿼리
   Future<Map<int, double>> _buildErrorRates(List<Question> questions) async {
