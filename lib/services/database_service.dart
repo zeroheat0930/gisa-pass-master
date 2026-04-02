@@ -1,10 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../config.dart';
 import '../models/question.dart';
 import '../models/answer_record.dart';
-import 'question_seed_data.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -87,17 +88,30 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_spaced_repetition_next ON spaced_repetition(next_review_at)');
 
-    // JSON 에셋에서 시드 데이터 로드 및 삽입 (배치로 고속 처리)
-    final questions = await QuestionSeedData.loadAll();
-    final batch = db.batch();
-    for (final q in questions) {
-      final m = q.toMap()..remove('id');
-      batch.execute(
-        'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [m['year'], m['round'], m['subject'], m['question_type'], m['question_text'], m['code_snippet'], m['code_language'], m['answer'], m['explanation'], m['difficulty'], m['frequency_weight']],
-      );
+    // JSON 에셋에서 시드 데이터를 파일별로 로드+삽입 (메모리 절약)
+    const files = [
+      'assets/questions/c_questions.json',
+      'assets/questions/java_questions.json',
+      'assets/questions/python_questions.json',
+      'assets/questions/sql_questions.json',
+      'assets/questions/short_answer_questions.json',
+    ];
+    for (final file in files) {
+      try {
+        final jsonStr = await rootBundle.loadString(file);
+        final List<dynamic> items = json.decode(jsonStr);
+        final batch = db.batch();
+        for (final item in items) {
+          batch.execute(
+            'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [item['year'], item['round'], item['subject'], item['questionType'], item['questionText'], item['codeSnippet'], item['codeLanguage'], item['answer'], item['explanation'], item['difficulty'] ?? 3, (item['frequencyWeight'] ?? 0.5)],
+          );
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        debugPrint('시드 로드 실패 ($file): $e');
+      }
     }
-    await batch.commit(noResult: true);
   }
 
   // === Questions CRUD ===
@@ -105,6 +119,12 @@ class DatabaseService {
   Future<List<Question>> getAllQuestions() async {
     final db = await database;
     final maps = await db.query('questions');
+    return maps.map((m) => Question.fromMap(m)).toList();
+  }
+
+  Future<List<Question>> getRandomQuestions(int limit) async {
+    final db = await database;
+    final maps = await db.query('questions', orderBy: 'RANDOM()', limit: limit);
     return maps.map((m) => Question.fromMap(m)).toList();
   }
 

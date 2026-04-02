@@ -76,7 +76,7 @@ class StudyProvider extends ChangeNotifier {
     _studyMode = StudyMode.prediction;
 
     try {
-      final questions = await _db.getAllQuestions();
+      final questions = await _db.getRandomQuestions(50);
       final errorRates = await _buildErrorRates(questions);
       _questionList = _predictionEngine.getPrioritizedQuestions(questions, errorRates);
       _questionIndex = 0;
