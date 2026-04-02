@@ -7,15 +7,11 @@ class AdService {
   bool _isAdLoaded = false;
   bool _isPremium = false;
 
-  // TODO: AdMob 인증 완료 후 실제 ID로 교체!
-  // Android 전면광고 ID
-  static const String _androidInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
-  // iOS 전면광고 ID
-  static const String _iosInterstitialId = 'ca-app-pub-3940256099942544/4411468910';
-  // Android 배너광고 ID
-  static const String _androidBannerId = 'ca-app-pub-3940256099942544/6300978111';
-  // iOS 배너광고 ID
-  static const String _iosBannerId = 'ca-app-pub-3940256099942544/2934735716';
+  // AdMob 실제 광고 ID
+  static const String _androidInterstitialId = 'ca-app-pub-5911237489066113/6189482948';
+  static const String _iosInterstitialId = 'ca-app-pub-5911237489066113/1152778683';
+  static const String _androidBannerId = 'ca-app-pub-5911237489066113/3631497162';
+  static const String _iosBannerId = 'ca-app-pub-5911237489066113/2286625905';
 
   static String get interstitialAdUnitId {
     if (kIsWeb) return '';
