@@ -142,8 +142,10 @@ class StudyProvider extends ChangeNotifier {
     );
     await _db.insertAnswerRecord(record);
 
-    // 스파르타 복습 인터벌 갱신
-    await _spacedRepetitionService.processAnswer(question.id!, correct);
+    // 스파르타 오답노트: 틀린 문제만 복습 스케줄에 등록
+    if (!correct) {
+      await _spacedRepetitionService.processAnswer(question.id!, correct);
+    }
 
     // 연속 풀이 카운트 → 전면광고 트리거
     _consecutiveAnswers++;

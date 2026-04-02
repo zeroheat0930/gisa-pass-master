@@ -106,6 +106,8 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
   }
 
   void _retry() {
+    _timerTick?.cancel();
+    _timerTick = null;
     _answerController.clear();
     _userAnswers.clear();
     _isCorrectList.clear();

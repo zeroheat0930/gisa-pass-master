@@ -116,7 +116,6 @@ class _RootNavigatorState extends State<_RootNavigator> {
 
   @override
   Widget build(BuildContext context) {
-    _loadedTabs.add(_selectedIndex);
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
@@ -127,6 +126,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
+          _loadedTabs.add(index);
           setState(() => _selectedIndex = index);
         },
         backgroundColor: AppConfig.surfaceColor,

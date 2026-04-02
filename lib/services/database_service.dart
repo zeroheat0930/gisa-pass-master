@@ -345,6 +345,7 @@ class DatabaseService {
   }
 
   Future<int> getTotalQuestionCount() async {
+    if (kIsWeb) return (await _loadFromJson()).length;
     final db = await database;
     return _firstInt(await db.rawQuery('SELECT COUNT(*) FROM questions'));
   }

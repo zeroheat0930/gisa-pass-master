@@ -627,15 +627,24 @@ class _QuizScreenState extends State<_QuizScreen> {
   }
 
   void _retry() {
+    _timerTick?.cancel();
     _answerController.clear();
     _userAnswers.clear();
     _isCorrectList.clear();
     _stopwatch.reset();
     _stopwatch.start();
+    _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final elapsed = _stopwatch.elapsed;
+      final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+      setState(() => _elapsedDisplay = '$mm:$ss');
+    });
     setState(() {
       _currentIndex = 0;
       _showExplanation = false;
       _isFinished = false;
+      _elapsedDisplay = '00:00';
     });
   }
 
