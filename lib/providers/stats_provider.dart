@@ -52,18 +52,25 @@ class StatsProvider extends ChangeNotifier {
       final last7Days = last7Raw.map((row) {
         final total = row['total'];
         final correct = row['correct'];
+        final solvedVal = total is int ? total : (total as num? ?? 0).toInt();
+        final correctVal = correct is int ? correct : (correct as num? ?? 0).toInt();
         return DailyStats(
-          date: row['day'] as String,
-          solved: total is int ? total : (total as num).toInt(),
-          correct: correct is int ? correct : (correct as num).toInt(),
+          date: row['day'] as String? ?? '',
+          solved: solvedVal,
+          correct: correctVal.clamp(0, solvedVal),
         );
       }).toList();
 
+      final totalSolved = overall['total'] as int? ?? 0;
+      final totalCorrect = (overall['correct'] as int? ?? 0).clamp(0, totalSolved);
+      final todaySolved = overall['todayTotal'] as int? ?? 0;
+      final todayCorrect = (overall['todayCorrect'] as int? ?? 0).clamp(0, todaySolved);
+
       _stats = StudyStats(
-        totalSolved: overall['total'] as int? ?? 0,
-        totalCorrect: overall['correct'] as int? ?? 0,
-        todaySolved: overall['todayTotal'] as int? ?? 0,
-        todayCorrect: overall['todayCorrect'] as int? ?? 0,
+        totalSolved: totalSolved,
+        totalCorrect: totalCorrect,
+        todaySolved: todaySolved,
+        todayCorrect: todayCorrect,
         totalAvailable: totalAvailable,
         subjectAccuracy: subjectAcc,
         subjectSolved: subjectSolved,
@@ -73,6 +80,8 @@ class StatsProvider extends ChangeNotifier {
         streakDays: streakDays,
         last7Days: last7Days,
       );
+    } catch (e) {
+      debugPrint('통계 로드 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

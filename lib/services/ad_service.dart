@@ -68,48 +68,57 @@ class AdService {
 
   /// 전면광고 미리 로드
   void loadInterstitialAd() {
-    if (!shouldShowAds) return;
-    final adUnitId = interstitialAdUnitId;
-    if (adUnitId.isEmpty) return;
+    try {
+      if (!shouldShowAds) return;
+      final adUnitId = interstitialAdUnitId;
+      if (adUnitId.isEmpty) return;
 
-    InterstitialAd.load(
-      adUnitId: adUnitId,
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _interstitialAd = ad;
-          _isAdLoaded = true;
-          _interstitialAd!.fullScreenContentCallback =
-              FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              _isAdLoaded = false;
-              _interstitialAd = null;
-              loadInterstitialAd();
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              ad.dispose();
-              _isAdLoaded = false;
-              _interstitialAd = null;
-              loadInterstitialAd();
-            },
-          );
-        },
-        onAdFailedToLoad: (error) {
-          debugPrint('전면광고 로드 실패: ${error.message}');
-          _isAdLoaded = false;
-        },
-      ),
-    );
+      InterstitialAd.load(
+        adUnitId: adUnitId,
+        request: const AdRequest(),
+        adLoadCallback: InterstitialAdLoadCallback(
+          onAdLoaded: (ad) {
+            _interstitialAd = ad;
+            _isAdLoaded = true;
+            _interstitialAd!.fullScreenContentCallback =
+                FullScreenContentCallback(
+              onAdDismissedFullScreenContent: (ad) {
+                ad.dispose();
+                _isAdLoaded = false;
+                _interstitialAd = null;
+                loadInterstitialAd();
+              },
+              onAdFailedToShowFullScreenContent: (ad, error) {
+                ad.dispose();
+                _isAdLoaded = false;
+                _interstitialAd = null;
+                loadInterstitialAd();
+              },
+            );
+          },
+          onAdFailedToLoad: (error) {
+            debugPrint('전면광고 로드 실패: ${error.message}');
+            _isAdLoaded = false;
+          },
+        ),
+      );
+    } catch (e) {
+      debugPrint('전면광고 로드 중 오류: $e');
+      _isAdLoaded = false;
+    }
   }
 
   /// 전면광고 표시 (프리미엄이면 표시 안 함)
   void showInterstitialAd() {
-    if (!shouldShowAds) return;
-    if (_isAdLoaded && _interstitialAd != null) {
-      _interstitialAd!.show();
-    } else {
-      loadInterstitialAd();
+    try {
+      if (!shouldShowAds) return;
+      if (_isAdLoaded && _interstitialAd != null) {
+        _interstitialAd!.show();
+      } else {
+        loadInterstitialAd();
+      }
+    } catch (e) {
+      debugPrint('광고 표시 실패: $e');
     }
   }
 

@@ -179,6 +179,34 @@ class _QuizScreenState extends State<QuizScreen> {
               ),
             ),
 
+            // 콤보 카운터
+            if (provider.comboCount >= 2)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.local_fire_department,
+                        color: provider.comboCount >= 5
+                            ? const Color(0xFFFF6D00)
+                            : const Color(0xFFFFB74D),
+                        size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${provider.comboCount} COMBO!',
+                      style: TextStyle(
+                        color: provider.comboCount >= 5
+                            ? const Color(0xFFFF6D00)
+                            : const Color(0xFFFFB74D),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),

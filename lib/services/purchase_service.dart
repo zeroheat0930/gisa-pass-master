@@ -59,21 +59,29 @@ class PurchaseService extends ChangeNotifier {
 
   /// 프리미엄 구매
   Future<void> buyPremium() async {
-    if (!_available || _products.isEmpty) return;
+    try {
+      if (!_available || _products.isEmpty) return;
 
-    final product = _products.firstWhere(
-      (p) => p.id == premiumMonthlyId,
-      orElse: () => _products.first,
-    );
+      final product = _products.firstWhere(
+        (p) => p.id == premiumMonthlyId,
+        orElse: () => _products.first,
+      );
 
-    final purchaseParam = PurchaseParam(productDetails: product);
-    await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+      final purchaseParam = PurchaseParam(productDetails: product);
+      await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+    } catch (e) {
+      debugPrint('구매 실패: $e');
+    }
   }
 
   /// 구매 복원
   Future<void> restorePurchases() async {
-    if (!_available) return;
-    await _iap.restorePurchases();
+    try {
+      if (!_available) return;
+      await _iap.restorePurchases();
+    } catch (e) {
+      debugPrint('구매 복원 실패: $e');
+    }
   }
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {

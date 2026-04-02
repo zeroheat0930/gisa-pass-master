@@ -56,6 +56,11 @@ class _PastExamScreenState extends State<PastExamScreen> {
     if (_error != null) {
       return Scaffold(
         backgroundColor: AppConfig.backgroundColor,
+        appBar: AppBar(
+          backgroundColor: AppConfig.backgroundColor,
+          leading: const BackButton(color: Colors.white70),
+          elevation: 0,
+        ),
         body: Center(
           child: Text(
             '문제를 불러오지 못했습니다.\n$_error',

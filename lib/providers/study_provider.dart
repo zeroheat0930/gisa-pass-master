@@ -41,6 +41,8 @@ class StudyProvider extends ChangeNotifier {
   StudyMode _studyMode = StudyMode.prediction;
   int _consecutiveAnswers = 0;
   bool _shouldShowAd = false;
+  int _comboCount = 0;
+  int _maxCombo = 0;
 
   // === Getters ===
   DatabaseService get db => _db;
@@ -52,6 +54,13 @@ class StudyProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   StudyMode get studyMode => _studyMode;
   bool get shouldShowAd => _shouldShowAd;
+  int get comboCount => _comboCount;
+  int get maxCombo => _maxCombo;
+
+  /// 콤보 카운트 리셋
+  void resetCombo() {
+    _comboCount = 0;
+  }
 
   /// 광고 표시 플래그 리셋 (UI에서 광고 표시 후 호출)
   void clearAdFlag() {
@@ -144,6 +153,14 @@ class StudyProvider extends ChangeNotifier {
       await _spacedRepetitionService.processAnswer(question.id!, correct);
     }
 
+    // 콤보 카운트 갱신
+    if (correct) {
+      _comboCount++;
+      if (_comboCount > _maxCombo) _maxCombo = _comboCount;
+    } else {
+      _comboCount = 0;
+    }
+
     // 연속 풀이 카운트 → 전면광고 트리거
     _consecutiveAnswers++;
     if (_consecutiveAnswers >= AppConfig.adIntervalQuestions) {
@@ -219,5 +236,7 @@ class StudyProvider extends ChangeNotifier {
     _resetAnswerState();
     _consecutiveAnswers = 0;
     _shouldShowAd = false;
+    _comboCount = 0;
+    _maxCombo = 0;
   }
 }
