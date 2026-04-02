@@ -86,9 +86,24 @@ class _YearSelectorScreenState extends State<_YearSelectorScreen> {
 
   int? _expandedYear;
 
-  List<Question> _forYearRound(int year, int round) => widget.allQuestions
-      .where((q) => q.year == year && q.round == round)
-      .toList();
+  // 캐싱: 한번만 계산
+  late final Map<String, List<Question>> _cache;
+  late final Map<int, int> _yearCounts;
+
+  @override
+  void initState() {
+    super.initState();
+    _cache = {};
+    _yearCounts = {};
+    for (final q in widget.allQuestions) {
+      final key = '${q.year}_${q.round}';
+      _cache.putIfAbsent(key, () => []).add(q);
+      _yearCounts[q.year] = (_yearCounts[q.year] ?? 0) + 1;
+    }
+  }
+
+  List<Question> _forYearRound(int year, int round) =>
+      _cache['${year}_$round'] ?? [];
 
   List<Question> _forYear(int year) =>
       widget.allQuestions.where((q) => q.year == year).toList();

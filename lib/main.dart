@@ -102,27 +102,27 @@ class _RootNavigator extends StatefulWidget {
 
 class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
-  late final List<Widget> _screens;
+  final Set<int> _loadedTabs = {0}; // 홈은 즉시 로드
 
-  @override
-  void initState() {
-    super.initState();
-    _screens = [
-      const HomeScreen(),
-      PastExamScreen(
-        loadQuestions: () => _db.getAllQuestions(),
-      ),
-      const CheatSheetScreen(),
-      const StatsScreen(),
-    ];
+  Widget _buildTab(int index) {
+    switch (index) {
+      case 0: return const HomeScreen();
+      case 1: return PastExamScreen(loadQuestions: () => _db.getAllQuestions());
+      case 2: return const CheatSheetScreen();
+      case 3: return const StatsScreen();
+      default: return const SizedBox.shrink();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    _loadedTabs.add(_selectedIndex);
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: List.generate(4, (i) =>
+          _loadedTabs.contains(i) ? _buildTab(i) : const SizedBox.shrink(),
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
