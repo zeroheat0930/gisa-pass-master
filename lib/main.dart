@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:sqflite/sqflite.dart';
@@ -16,33 +17,64 @@ import 'screens/past_exam_screen.dart';
 import 'screens/cheat_sheet_screen.dart';
 import 'screens/stats_screen.dart';
 
-// 서비스는 앱 시작 시 한 번만 생성
-late final DatabaseService _db;
-late final PredictionEngine _predictionEngine;
-late final SpacedRepetitionService _spacedRepetitionService;
-late final AdService _adService;
-late final PurchaseService _purchaseService;
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
   }
-  await AdService.initialize();
 
-  _db = DatabaseService();
-  _predictionEngine = PredictionEngine();
-  _spacedRepetitionService = SpacedRepetitionService(_db);
-  _adService = AdService()..loadInterstitialAd();
-  _purchaseService = PurchaseService()
-    ..setAdService(_adService)
-    ..initialize();
+  // 광고 초기화 (실패해도 앱 실행 가능)
+  try {
+    await AdService.initialize();
+  } catch (e) {
+    debugPrint('Ad init failed: $e');
+  }
 
-  runApp(const GisaPassMasterApp());
+  // 서비스 생성 (앱 수명 동안 한 번만)
+  final db = DatabaseService();
+  final predictionEngine = PredictionEngine();
+  final spacedRepetitionService = SpacedRepetitionService(db);
+  final adService = AdService()..loadInterstitialAd();
+  final purchaseService = PurchaseService()..setAdService(adService);
+
+  // 구매 서비스 초기화 (await — 레이스 컨디션 방지)
+  try {
+    await purchaseService.initialize();
+  } catch (e) {
+    debugPrint('Purchase init failed: $e');
+  }
+
+  // DB 워밍업 — 첫 쿼리 전에 DB 준비 (흰 화면 방지)
+  try {
+    await db.database;
+  } catch (e) {
+    debugPrint('DB init failed: $e');
+  }
+
+  runApp(GisaPassMasterApp(
+    db: db,
+    predictionEngine: predictionEngine,
+    spacedRepetitionService: spacedRepetitionService,
+    adService: adService,
+    purchaseService: purchaseService,
+  ));
 }
 
 class GisaPassMasterApp extends StatelessWidget {
-  const GisaPassMasterApp({super.key});
+  final DatabaseService db;
+  final PredictionEngine predictionEngine;
+  final SpacedRepetitionService spacedRepetitionService;
+  final AdService adService;
+  final PurchaseService purchaseService;
+
+  const GisaPassMasterApp({
+    super.key,
+    required this.db,
+    required this.predictionEngine,
+    required this.spacedRepetitionService,
+    required this.adService,
+    required this.purchaseService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -50,18 +82,16 @@ class GisaPassMasterApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(
           create: (_) => StudyProvider(
-            db: _db,
-            predictionEngine: _predictionEngine,
-            spacedRepetitionService: _spacedRepetitionService,
-            adService: _adService,
+            db: db,
+            predictionEngine: predictionEngine,
+            spacedRepetitionService: spacedRepetitionService,
+            adService: adService,
           ),
         ),
         ChangeNotifierProvider(
-          create: (_) => StatsProvider(db: _db),
+          create: (_) => StatsProvider(db: db),
         ),
-        ChangeNotifierProvider(
-          create: (_) => _purchaseService,
-        ),
+        ChangeNotifierProvider.value(value: purchaseService),
       ],
       child: MaterialApp(
         title: AppConfig.appTitle,
@@ -86,15 +116,22 @@ class GisaPassMasterApp extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
           ),
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            },
+          ),
         ),
-        home: const _RootNavigator(),
+        home: _RootNavigator(db: db),
       ),
     );
   }
 }
 
 class _RootNavigator extends StatefulWidget {
-  const _RootNavigator();
+  final DatabaseService db;
+  const _RootNavigator({required this.db});
 
   @override
   State<_RootNavigator> createState() => _RootNavigatorState();
@@ -102,16 +139,21 @@ class _RootNavigator extends StatefulWidget {
 
 class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
-  final Set<int> _loadedTabs = {0}; // 홈은 즉시 로드
+  final Set<int> _loadedTabs = {0};
 
-  Widget _buildTab(int index) {
-    switch (index) {
-      case 0: return const HomeScreen();
-      case 1: return PastExamScreen(loadQuestions: () => _db.getAllQuestions());
-      case 2: return const CheatSheetScreen();
-      case 3: return const StatsScreen();
-      default: return const SizedBox.shrink();
-    }
+  // 탭별 위젯 캐싱 — 매 빌드마다 재생성 방지
+  final Map<int, Widget> _cachedTabs = {};
+
+  Widget _getTab(int index) {
+    return _cachedTabs.putIfAbsent(index, () {
+      switch (index) {
+        case 0: return const HomeScreen();
+        case 1: return PastExamScreen(loadQuestions: () => widget.db.getAllQuestions());
+        case 2: return const CheatSheetScreen();
+        case 3: return const StatsScreen();
+        default: return const SizedBox.shrink();
+      }
+    });
   }
 
   @override
@@ -120,7 +162,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
       body: IndexedStack(
         index: _selectedIndex,
         children: List.generate(4, (i) =>
-          _loadedTabs.contains(i) ? _buildTab(i) : const SizedBox.shrink(),
+          _loadedTabs.contains(i) ? _getTab(i) : const SizedBox.shrink(),
         ),
       ),
       bottomNavigationBar: NavigationBar(

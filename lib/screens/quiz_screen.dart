@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
 import '../providers/study_provider.dart';
@@ -31,7 +32,14 @@ class _QuizScreenState extends State<QuizScreen> {
     await provider.submitAnswer(answer);
 
     if (!mounted) return;
-    if (!provider.isAnswered) return; // question.id null 등으로 제출 실패 시
+    if (!provider.isAnswered) return;
+
+    // 정답/오답 햅틱 피드백
+    if (provider.isCorrect) {
+      HapticFeedback.lightImpact();
+    } else {
+      HapticFeedback.heavyImpact();
+    }
 
     // 광고 표시 (5문제마다)
     if (provider.shouldShowAd) {
