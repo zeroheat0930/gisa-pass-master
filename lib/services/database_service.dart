@@ -88,28 +88,30 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_spaced_repetition_next ON spaced_repetition(next_review_at)');
 
-    // JSON 에셋에서 시드 데이터를 파일별로 로드+삽입 (메모리 절약)
-    const files = [
-      'assets/questions/c_questions.json',
-      'assets/questions/java_questions.json',
-      'assets/questions/python_questions.json',
-      'assets/questions/sql_questions.json',
-      'assets/questions/short_answer_questions.json',
-    ];
-    for (final file in files) {
-      try {
-        final jsonStr = await rootBundle.loadString(file);
-        final List<dynamic> items = json.decode(jsonStr);
-        final batch = db.batch();
-        for (final item in items) {
-          batch.execute(
-            'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [item['year'], item['round'], item['subject'], item['questionType'], item['questionText'], item['codeSnippet'], item['codeLanguage'], item['answer'], item['explanation'], item['difficulty'] ?? 3, (item['frequencyWeight'] ?? 0.5)],
-          );
+    // 모바일에서만 DB에 시드 데이터 삽입 (웹은 JSON 직접 로드)
+    if (!kIsWeb) {
+      const files = [
+        'assets/questions/c_questions.json',
+        'assets/questions/java_questions.json',
+        'assets/questions/python_questions.json',
+        'assets/questions/sql_questions.json',
+        'assets/questions/short_answer_questions.json',
+      ];
+      for (final file in files) {
+        try {
+          final jsonStr = await rootBundle.loadString(file);
+          final List<dynamic> items = json.decode(jsonStr);
+          final batch = db.batch();
+          for (final item in items) {
+            batch.execute(
+              'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [item['year'], item['round'], item['subject'], item['questionType'], item['questionText'], item['codeSnippet'], item['codeLanguage'], item['answer'], item['explanation'], item['difficulty'] ?? 3, (item['frequencyWeight'] ?? 0.5)],
+            );
+          }
+          await batch.commit(noResult: true);
+        } catch (e) {
+          debugPrint('시드 로드 실패 ($file): $e');
         }
-        await batch.commit(noResult: true);
-      } catch (e) {
-        debugPrint('시드 로드 실패 ($file): $e');
       }
     }
   }
@@ -117,18 +119,69 @@ class DatabaseService {
   // === Questions CRUD ===
 
   Future<List<Question>> getAllQuestions() async {
+    if (kIsWeb) return _loadFromJson();
     final db = await database;
     final maps = await db.query('questions');
     return maps.map((m) => Question.fromMap(m)).toList();
   }
 
   Future<List<Question>> getRandomQuestions(int limit) async {
+    if (kIsWeb) {
+      final all = await _loadFromJson();
+      all.shuffle();
+      return all.take(limit).toList();
+    }
     final db = await database;
     final maps = await db.query('questions', orderBy: 'RANDOM()', limit: limit);
     return maps.map((m) => Question.fromMap(m)).toList();
   }
 
+  // 웹용: JSON에서 직접 문제 로드 (DB 거치지 않음)
+  static List<Question>? _jsonCache;
+  Future<List<Question>> _loadFromJson() async {
+    if (_jsonCache != null) return List.from(_jsonCache!);
+    final files = [
+      'assets/questions/c_questions.json',
+      'assets/questions/java_questions.json',
+      'assets/questions/python_questions.json',
+      'assets/questions/sql_questions.json',
+      'assets/questions/short_answer_questions.json',
+    ];
+    final all = <Question>[];
+    int id = 1;
+    for (final file in files) {
+      try {
+        final jsonStr = await rootBundle.loadString(file);
+        final List<dynamic> items = json.decode(jsonStr);
+        for (final item in items) {
+          all.add(Question(
+            id: id++,
+            year: item['year'] as int,
+            round: item['round'] as int,
+            subject: item['subject'] as String,
+            questionType: item['questionType'] as String,
+            questionText: item['questionText'] as String,
+            codeSnippet: item['codeSnippet'] as String?,
+            codeLanguage: item['codeLanguage'] as String?,
+            answer: item['answer'] as String,
+            explanation: item['explanation'] as String,
+            difficulty: item['difficulty'] as int? ?? 3,
+            frequencyWeight: (item['frequencyWeight'] as num?)?.toDouble() ?? 0.5,
+          ));
+        }
+      } catch (e) {
+        debugPrint('JSON 로드 실패 ($file): $e');
+      }
+    }
+    _jsonCache = all;
+    return List.from(all);
+  }
+
   Future<List<Question>> getQuestionsByType(String type) async {
+    if (kIsWeb) {
+      final all = await _loadFromJson();
+      return all.where((q) => q.questionType == type).toList();
+    }
     final db = await database;
     final maps = await db.query(
       'questions',
