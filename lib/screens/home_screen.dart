@@ -1,4 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
 import '../models/study_stats.dart';
@@ -9,6 +12,8 @@ import 'quiz_screen.dart';
 import 'ai_prediction_screen.dart';
 import 'subscription_screen.dart';
 
+// ─── Home Screen ─────────────────────────────────────────────────────────────
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -16,20 +21,72 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   bool _isNavigating = false;
+  late AnimationController _staggerController;
+
+  late List<Animation<double>> _fadeAnims;
+  late List<Animation<Offset>> _slideAnims;
+
+  static const int _elementCount = 7;
 
   @override
   void initState() {
     super.initState();
+
+    _staggerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+
+    _fadeAnims = List.generate(_elementCount, (i) {
+      final start = i * 0.10;
+      final end = (start + 0.45).clamp(0.0, 1.0);
+      return CurvedAnimation(
+        parent: _staggerController,
+        curve: Interval(start, end, curve: Curves.easeOut),
+      );
+    });
+
+    _slideAnims = List.generate(_elementCount, (i) {
+      final start = i * 0.10;
+      final end = (start + 0.45).clamp(0.0, 1.0);
+      return Tween<Offset>(
+        begin: const Offset(0, 0.06),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: _staggerController,
+        curve: Interval(start, end, curve: Curves.easeOutCubic),
+      ));
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<StatsProvider>().loadStats();
+      _staggerController.forward();
     });
+  }
+
+  @override
+  void dispose() {
+    _staggerController.dispose();
+    super.dispose();
+  }
+
+  Widget _staggered(int index, Widget child) {
+    return FadeTransition(
+      opacity: _fadeAnims[index],
+      child: SlideTransition(
+        position: _slideAnims[index],
+        child: child,
+      ),
+    );
   }
 
   void _startMode(BuildContext context, StudyMode mode, {String? subType}) {
     if (_isNavigating) return;
     _isNavigating = true;
+    HapticFeedback.lightImpact();
     final provider = context.read<StudyProvider>();
     Future<void> loader;
     if (mode == StudyMode.wrongAnswer) {
@@ -44,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!context.mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(
+        CupertinoPageRoute(
           builder: (_) => QuizScreen(mode: mode),
         ),
       );
@@ -56,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startAiPrediction(BuildContext context) async {
     if (_isNavigating) return;
     _isNavigating = true;
+    HapticFeedback.lightImpact();
     final provider = context.read<StudyProvider>();
     await provider.loadQuestions();
     _isNavigating = false;
@@ -72,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final examQuestions = questions.take(20).toList();
     Navigator.push(
       context,
-      MaterialPageRoute(
+      CupertinoPageRoute(
         builder: (_) => AiPredictionScreen(questions: examQuestions),
       ),
     );
@@ -90,156 +148,146 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header row: title + premium button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
-                  const Text(
-                    '기사패스마스터',
-                    style: TextStyle(
-                      color: AppConfig.primaryColor,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const SubscriptionScreen()),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.workspace_premium,
-                              color: Colors.white, size: 16),
-                          SizedBox(width: 4),
-                          Text(
-                            'PRO',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              // 0 — Header
+              _staggered(0, _Header(onProTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.push(
+                  context,
+                  CupertinoPageRoute(
+                      builder: (_) => const SubscriptionScreen()),
+                );
+              })),
               const SizedBox(height: 20),
 
-              // D-Day timer
-              const DdayTimer(),
+              // 1 — D-Day timer with Hero
+              _staggered(
+                1,
+                Hero(
+                  tag: 'dday_timer',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: const DdayTimer(),
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
 
-              // AI 예측 모의고사 (가장 눈에 띄는 버튼)
-              _AiPredictionButton(
-                onTap: () => _startAiPrediction(context),
+              // 2 — AI Prediction button
+              _staggered(
+                2,
+                _AiPredictionButton(
+                  onTap: () => _startAiPrediction(context),
+                ),
               ),
               const SizedBox(height: 12),
 
-              // Primary: 예측 학습
-              _ModeButton(
-                label: '예측 학습 시작',
-                icon: Icons.auto_awesome,
-                color: AppConfig.primaryColor,
-                subtitle: 'AI가 자주 나오는 문제를 선별합니다',
-                onTap: () => _startMode(context, StudyMode.prediction),
-              ),
-              const SizedBox(height: 12),
-
-              // Warning: 스파르타 오답노트
-              _ModeButton(
-                label: '스파르타 오답노트',
-                icon: Icons.local_fire_department,
-                color: AppConfig.warningColor,
-                subtitle: '틀린 문제를 반복 학습합니다',
-                onTap: () => _startMode(context, StudyMode.wrongAnswer),
-              ),
-              const SizedBox(height: 20),
-
-              // 유형별 학습 section
-              const Text(
-                '유형별 학습',
-                style: TextStyle(
-                  color: Color(0xFF9E9E9E),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1,
+              // 3 — Primary mode buttons
+              _staggered(
+                3,
+                Column(
+                  children: [
+                    _ModeButton(
+                      label: '예측 학습 시작',
+                      icon: Icons.auto_awesome,
+                      color: AppConfig.primaryColor,
+                      subtitle: 'AI가 자주 나오는 문제를 선별합니다',
+                      onTap: () => _startMode(context, StudyMode.prediction),
+                    ),
+                    const SizedBox(height: 12),
+                    _ModeButton(
+                      label: '스파르타 오답노트',
+                      icon: Icons.local_fire_department,
+                      color: AppConfig.warningColor,
+                      subtitle: '틀린 문제를 반복 학습합니다',
+                      onTap: () => _startMode(context, StudyMode.wrongAnswer),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 24),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: _TypeButton(
-                      label: '코드 분석',
-                      icon: Icons.code,
-                      color: const Color(0xFF569CD6),
-                      onTap: () => _startMode(
-                        context,
-                        StudyMode.byType,
-                        subType: 'code_reading',
+              // 4 — Type buttons
+              _staggered(
+                4,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '유형별 학습',
+                      style: TextStyle(
+                        color: Color(0xFF6B6B6B),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2.0,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _TypeButton(
-                      label: 'SQL',
-                      icon: Icons.storage,
-                      color: const Color(0xFFCE9178),
-                      onTap: () => _startMode(
-                        context,
-                        StudyMode.byType,
-                        subType: 'sql',
-                      ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TypeButton(
+                            label: '코드 분석',
+                            icon: Icons.code,
+                            color: const Color(0xFF569CD6),
+                            onTap: () => _startMode(
+                              context,
+                              StudyMode.byType,
+                              subType: 'code_reading',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TypeButton(
+                            label: 'SQL',
+                            icon: Icons.storage,
+                            color: const Color(0xFFCE9178),
+                            onTap: () => _startMode(
+                              context,
+                              StudyMode.byType,
+                              subType: 'sql',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TypeButton(
+                            label: '단답형',
+                            icon: Icons.edit_note,
+                            color: AppConfig.correctColor,
+                            onTap: () => _startMode(
+                              context,
+                              StudyMode.byType,
+                              subType: 'short_answer',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _TypeButton(
-                      label: '단답형',
-                      icon: Icons.edit_note,
-                      color: AppConfig.correctColor,
-                      onTap: () => _startMode(
-                        context,
-                        StudyMode.byType,
-                        subType: 'short_answer',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-
-              // Quick stats
-              _QuickStats(stats: stats),
-              const SizedBox(height: 20),
-
-              // 개발자 메시지 + 광고 제거 유도
-              _DevMessageCard(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SubscriptionScreen()),
+                  ],
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // 5 — Quick stats
+              _staggered(5, _QuickStats(stats: stats)),
+              const SizedBox(height: 20),
+
+              // 6 — Dev message card
+              _staggered(
+                6,
+                _DevMessageCard(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                          builder: (_) => const SubscriptionScreen()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -248,78 +296,288 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _AiPredictionButton extends StatelessWidget {
+// ─── Header ──────────────────────────────────────────────────────────────────
+
+class _Header extends StatelessWidget {
+  final VoidCallback onProTap;
+
+  const _Header({required this.onProTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Spacer(),
+        const Text(
+          '기사패스마스터',
+          style: TextStyle(
+            color: AppConfig.primaryColor,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const Spacer(),
+        _ProBadge(onTap: onProTap),
+      ],
+    );
+  }
+}
+
+// ─── PRO Badge with shimmer ───────────────────────────────────────────────────
+
+class _ProBadge extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _ProBadge({required this.onTap});
+
+  @override
+  State<_ProBadge> createState() => _ProBadgeState();
+}
+
+class _ProBadgeState extends State<_ProBadge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _shimmerController;
+  late Animation<double> _shimmerAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _shimmerAnim = Tween<double>(begin: -1.5, end: 2.5).animate(
+      CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _shimmerAnim,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: const [
+                  Color(0xFFFFD700),
+                  Color(0xFFFFF5CC),
+                  Color(0xFFFFA000),
+                ],
+                stops: [
+                  (_shimmerAnim.value - 0.4).clamp(0.0, 1.0),
+                  _shimmerAnim.value.clamp(0.0, 1.0),
+                  (_shimmerAnim.value + 0.4).clamp(0.0, 1.0),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.workspace_premium, color: Colors.white, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  'PRO',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─── AI Prediction Button ─────────────────────────────────────────────────────
+
+class _AiPredictionButton extends StatefulWidget {
   final VoidCallback onTap;
 
   const _AiPredictionButton({required this.onTap});
 
   @override
+  State<_AiPredictionButton> createState() => _AiPredictionButtonState();
+}
+
+class _AiPredictionButtonState extends State<_AiPredictionButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _shimmerController;
+  late Animation<double> _shimmerAnim;
+  bool _isPressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
+    _shimmerAnim = Tween<double>(begin: -1.5, end: 2.5).animate(
+      CurvedAnimation(parent: _shimmerController, curve: Curves.linear),
+    );
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6A1B9A), Color(0xFF8E24AA)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6A1B9A).withValues(alpha: 0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.psychology, color: Colors.white, size: 28),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'AI 실전 모의고사',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: AnimatedBuilder(
+              animation: _shimmerAnim,
+              builder: (context, child) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF6A1B9A),
+                        Color(0xFF8E24AA),
+                        Color(0xFF9C27B0),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6A1B9A).withValues(alpha: 0.5),
+                        blurRadius: 20,
+                        offset: const Offset(0, 6),
+                        spreadRadius: -4,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      // Shimmer overlay
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.white.withValues(alpha: 0.07),
+                                  Colors.transparent,
+                                ],
+                                stops: [
+                                  (_shimmerAnim.value - 0.3).clamp(0.0, 1.0),
+                                  _shimmerAnim.value.clamp(0.0, 1.0),
+                                  (_shimmerAnim.value + 0.3).clamp(0.0, 1.0),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                        SizedBox(width: 8),
-                        _AiBadge(),
-                      ],
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'AI가 기출 패턴을 분석하여 실시간 출제',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios,
-                  color: Colors.white70, size: 16),
-            ],
+                      // Content
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Icon(Icons.psychology,
+                                color: Colors.white, size: 28),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'AI 실전 모의고사',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    _AiBadge(),
+                                  ],
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'AI가 기출 패턴을 분석하여 실시간 출제',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios,
+                              color: Colors.white60, size: 16),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -335,8 +593,10 @@ class _AiBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.25),
+        color: Colors.white.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+            color: Colors.white.withValues(alpha: 0.3), width: 0.5),
       ),
       child: const Text(
         'AI',
@@ -344,13 +604,16 @@ class _AiBadge extends StatelessWidget {
           color: Colors.white,
           fontSize: 10,
           fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
         ),
       ),
     );
   }
 }
 
-class _ModeButton extends StatelessWidget {
+// ─── Mode Button ──────────────────────────────────────────────────────────────
+
+class _ModeButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final Color color;
@@ -366,48 +629,89 @@ class _ModeButton extends StatelessWidget {
   });
 
   @override
+  State<_ModeButton> createState() => _ModeButtonState();
+}
+
+class _ModeButtonState extends State<_ModeButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        HapticFeedback.lightImpact();
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: widget.color.withValues(alpha: 0.35),
+                  width: 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.color.withValues(alpha: 0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              Icon(Icons.arrow_forward_ios, color: color, size: 16),
-            ],
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: widget.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(widget.icon, color: widget.color, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: TextStyle(
+                            color: widget.color,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.subtitle,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios,
+                      color: widget.color.withValues(alpha: 0.7), size: 14),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -415,7 +719,9 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
-class _TypeButton extends StatelessWidget {
+// ─── Type Button ──────────────────────────────────────────────────────────────
+
+class _TypeButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final Color color;
@@ -429,31 +735,64 @@ class _TypeButton extends StatelessWidget {
   });
 
   @override
+  State<_TypeButton> createState() => _TypeButtonState();
+}
+
+class _TypeButtonState extends State<_TypeButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: color,
-        side: BorderSide(color: color.withValues(alpha: 0.6), width: 1.5),
-        backgroundColor: color.withValues(alpha: 0.08),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        HapticFeedback.lightImpact();
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.93 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 22),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: widget.color.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(widget.icon, size: 22, color: widget.color),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      color: widget.color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
+
+// ─── Quick Stats ──────────────────────────────────────────────────────────────
 
 class _QuickStats extends StatelessWidget {
   final StudyStats stats;
@@ -465,37 +804,53 @@ class _QuickStats extends StatelessWidget {
     final todaySolved = stats.todaySolved;
     final todayAccuracy = stats.todayAccuracy;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppConfig.surfaceColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppConfig.borderColor, width: 1),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _StatItem(
-              label: '오늘 풀이 수',
-              value: '$todaySolved문제',
-              icon: Icons.check_circle_outline,
-              color: AppConfig.correctColor,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppConfig.correctColor.withValues(alpha: 0.2),
+              width: 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: AppConfig.correctColor.withValues(alpha: 0.06),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
           ),
-          Container(
-            width: 1,
-            height: 40,
-            color: AppConfig.borderColor,
+          child: Row(
+            children: [
+              Expanded(
+                child: _StatItem(
+                  label: '오늘 풀이 수',
+                  value: '$todaySolved문제',
+                  icon: Icons.check_circle_outline,
+                  color: AppConfig.correctColor,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+              Expanded(
+                child: _StatItem(
+                  label: '정답률',
+                  value: '${todayAccuracy.toStringAsFixed(1)}%',
+                  icon: Icons.pie_chart_outline,
+                  color: const Color(0xFF569CD6),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _StatItem(
-              label: '정답률',
-              value: '${todayAccuracy.toStringAsFixed(1)}%',
-              icon: Icons.pie_chart_outline,
-              color: const Color(0xFF569CD6),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -526,100 +881,165 @@ class _StatItem extends StatelessWidget {
             color: color,
             fontSize: 18,
             fontWeight: FontWeight.w800,
+            letterSpacing: 0.3,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          style: TextStyle(
+            color: Colors.grey[500],
+            fontSize: 11,
+            letterSpacing: 0.2,
+          ),
         ),
       ],
     );
   }
 }
 
-class _DevMessageCard extends StatelessWidget {
+// ─── Dev Message Card ─────────────────────────────────────────────────────────
+
+class _DevMessageCard extends StatefulWidget {
   final VoidCallback onTap;
 
   const _DevMessageCard({required this.onTap});
 
   @override
+  State<_DevMessageCard> createState() => _DevMessageCardState();
+}
+
+class _DevMessageCardState extends State<_DevMessageCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A2332),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: const Color(0xFF2A3A4A),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      onTap: widget.onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D1520).withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: const Color(0xFF1E3050),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.coffee,
-                    color: Color(0xFF2196F3),
-                    size: 18,
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2196F3).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color:
+                              const Color(0xFF2196F3).withValues(alpha: 0.25),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.coffee,
+                        color: Color(0xFF2196F3),
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        '개발자의 한마디',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '안녕하세요! 저도 정보처리기사 준비하면서 급하게 만든 앱입니다. '
+                  '혹시 광고가 거슬리시다면... 커피 한 잔 값으로 광고 없이 '
+                  '공부에만 집중할 수 있어요 ☕',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12.5,
+                    height: 1.6,
+                    letterSpacing: 0.1,
                   ),
                 ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    '개발자의 한마디',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                const SizedBox(height: 12),
+                AnimatedBuilder(
+                  animation: _pulseAnim,
+                  builder: (context, child) {
+                    final glowOpacity = 0.15 + (_pulseAnim.value * 0.25);
+                    final borderOpacity = 0.25 + (_pulseAnim.value * 0.35);
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2196F3).withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF2196F3)
+                              .withValues(alpha: borderOpacity),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF2196F3)
+                                .withValues(alpha: glowOpacity),
+                            blurRadius: 12,
+                            spreadRadius: 0,
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        '광고 제거하고 공부에 집중하기 →',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF2196F3),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              '안녕하세요! 저도 정보처리기사 준비하면서 급하게 만든 앱입니다. '
-              '혹시 광고가 거슬리시다면... 커피 한 잔 값으로 광고 없이 '
-              '공부에만 집중할 수 있어요 ☕',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 12.5,
-                height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2196F3).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xFF2196F3).withValues(alpha: 0.3),
-                ),
-              ),
-              child: const Text(
-                '광고 제거하고 공부에 집중하기 →',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color(0xFF2196F3),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

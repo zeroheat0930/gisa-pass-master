@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../config.dart';
 
@@ -65,18 +66,22 @@ class _DdayTimerState extends State<DdayTimer> {
   Widget build(BuildContext context) {
     const redAccent = AppConfig.primaryColor;
 
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: redAccent, width: 2),
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: redAccent.withValues(alpha: 0.6), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: redAccent.withValues(alpha: 0.25),
-            blurRadius: 12,
-            spreadRadius: 2,
+            color: redAccent.withValues(alpha: 0.2),
+            blurRadius: 20,
+            spreadRadius: 0,
           ),
         ],
       ),
@@ -123,6 +128,8 @@ class _DdayTimerState extends State<DdayTimer> {
           ],
         ],
       ),
+    ),
+    ),
     );
   }
 }
