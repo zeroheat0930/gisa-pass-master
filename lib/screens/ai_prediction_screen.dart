@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../config.dart';
 import '../models/question.dart';
 import '../widgets/question_card.dart';
@@ -598,6 +599,50 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
                     .popUntil((route) => route.isFirst),
                 icon: const Icon(Icons.home_outlined),
                 label: const Text('홈으로'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConfig.cardColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: AppConfig.borderColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(fontSize: 16),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final percent =
+                      (correct / total * 100).toStringAsFixed(0);
+                  final daysLeft =
+                      AppConfig.examDate.difference(DateTime.now()).inDays;
+                  int maxCombo = 0;
+                  int curCombo = 0;
+                  for (final v in _isCorrectList) {
+                    if (v) {
+                      curCombo++;
+                      if (curCombo > maxCombo) maxCombo = curCombo;
+                    } else {
+                      curCombo = 0;
+                    }
+                  }
+                  final text = '🔥 기사패스마스터 학습 결과\n'
+                      '📝 ${total}문제 중 ${correct}문제 정답!\n'
+                      '🎯 정답률: $percent%\n'
+                      '🏆 최대 콤보: ${maxCombo}연속\n'
+                      '📅 시험까지 D-$daysLeft\n\n'
+                      '#정보처리기사 #기사패스마스터';
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('결과가 복사되었습니다! 붙여넣기로 공유하세요'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.share),
+                label: const Text('결과 공유하기'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppConfig.cardColor,
                   foregroundColor: Colors.white,

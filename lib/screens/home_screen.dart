@@ -29,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen>
   late List<Animation<double>> _fadeAnims;
   late List<Animation<Offset>> _slideAnims;
 
-  static const int _elementCount = 7;
+  static const int _elementCount = 8;
 
   @override
   void initState() {
@@ -172,18 +172,25 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 24),
 
-              // 2 — AI Prediction button
+              // 2 — Daily Challenge card
               _staggered(
                 2,
+                _DailyChallengeCard(stats: stats),
+              ),
+              const SizedBox(height: 16),
+
+              // 3 — AI Prediction button
+              _staggered(
+                3,
                 _AiPredictionButton(
                   onTap: () => _startAiPrediction(context),
                 ),
               ),
               const SizedBox(height: 12),
 
-              // 3 — Primary mode buttons
+              // 4 — Primary mode buttons
               _staggered(
-                3,
+                4,
                 Column(
                   children: [
                     _ModeButton(
@@ -206,9 +213,9 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 24),
 
-              // 4 — Type buttons
+              // 5 — Type buttons
               _staggered(
-                4,
+                5,
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -269,13 +276,13 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 24),
 
-              // 5 — Quick stats
-              _staggered(5, _QuickStats(stats: stats)),
+              // 6 — Quick stats
+              _staggered(6, _QuickStats(stats: stats)),
               const SizedBox(height: 20),
 
-              // 6 — Dev message card
+              // 7 — Dev message card
               _staggered(
-                6,
+                7,
                 _DevMessageCard(
                   onTap: () {
                     HapticFeedback.lightImpact();
@@ -292,6 +299,260 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Daily Challenge Card ─────────────────────────────────────────────────────
+
+class _DailyChallengeCard extends StatelessWidget {
+  final StudyStats stats;
+
+  const _DailyChallengeCard({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final solved = stats.todaySolved;
+    final mission1Done = solved >= 10;
+    // missions 2 & 3 are display-only (not yet tracked)
+    final mission2Done = stats.todaySolved < 0; // always false placeholder
+    final mission3Done = stats.todaySolved < 0; // always false placeholder
+
+    final completedCount =
+        (mission1Done ? 1 : 0) + (mission2Done ? 1 : 0) + (mission3Done ? 1 : 0);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFD700).withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFFFFD700).withValues(alpha: 0.25),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD700).withValues(alpha: 0.07),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.emoji_events,
+                      color: Color(0xFFFFD700),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      '오늘의 도전',
+                      style: TextStyle(
+                        color: Color(0xFFFFD700),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      '$completedCount/3 완료',
+                      style: const TextStyle(
+                        color: Color(0xFFFFD700),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Mission 1 — 10문제 풀기 (progress bar)
+              _MissionProgressRow(
+                label: '10문제 풀기',
+                current: solved.clamp(0, 10),
+                total: 10,
+                done: mission1Done,
+              ),
+              const SizedBox(height: 10),
+
+              // Mission 2 — 3연속 정답
+              _MissionCheckRow(
+                label: '3연속 정답 달성',
+                done: mission2Done,
+              ),
+              const SizedBox(height: 10),
+
+              // Mission 3 — 오답노트 복습
+              _MissionCheckRow(
+                label: '오답노트 복습하기',
+                done: mission3Done,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MissionProgressRow extends StatelessWidget {
+  final String label;
+  final int current;
+  final int total;
+  final bool done;
+
+  const _MissionProgressRow({
+    required this.label,
+    required this.current,
+    required this.total,
+    required this.done,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total > 0 ? current / total : 0.0;
+
+    return Row(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: done
+                ? AppConfig.correctColor.withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: done
+                  ? AppConfig.correctColor
+                  : Colors.white.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+          ),
+          child: done
+              ? const Icon(Icons.check, color: AppConfig.correctColor, size: 13)
+              : null,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: done ? AppConfig.correctColor : Colors.grey[300],
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                  Text(
+                    '$current/$total',
+                    style: TextStyle(
+                      color: done ? AppConfig.correctColor : Colors.grey[500],
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress.toDouble(),
+                  minHeight: 5,
+                  backgroundColor: Colors.white.withValues(alpha: 0.07),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    done ? AppConfig.correctColor : const Color(0xFFFFD700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MissionCheckRow extends StatelessWidget {
+  final String label;
+  final bool done;
+
+  const _MissionCheckRow({required this.label, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: done
+                ? AppConfig.correctColor.withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: done
+                  ? AppConfig.correctColor
+                  : Colors.white.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+          ),
+          child: done
+              ? const Icon(Icons.check, color: AppConfig.correctColor, size: 13)
+              : null,
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: TextStyle(
+            color: done ? AppConfig.correctColor : Colors.grey[300],
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.1,
+          ),
+        ),
+      ],
     );
   }
 }

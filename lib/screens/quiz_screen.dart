@@ -18,6 +18,7 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   final TextEditingController _answerController = TextEditingController();
   bool _showExplanation = false;
+  int _sessionCorrect = 0;
 
   @override
   void dispose() {
@@ -33,6 +34,11 @@ class _QuizScreenState extends State<QuizScreen> {
 
     if (!mounted) return;
     if (!provider.isAnswered) return;
+
+    // 세션 카운터 업데이트
+    setState(() {
+      if (provider.isCorrect) _sessionCorrect++;
+    });
 
     // 정답/오답 햅틱 피드백
     if (provider.isCorrect) {
@@ -174,6 +180,42 @@ class _QuizScreenState extends State<QuizScreen> {
                   backgroundColor: AppConfig.primaryColor,
                 ),
                 child: const Text('홈으로'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final total = provider.questionList.length;
+                  final correct = _sessionCorrect;
+                  final percent = total > 0
+                      ? (correct / total * 100).toStringAsFixed(0)
+                      : '0';
+                  final daysLeft =
+                      AppConfig.examDate.difference(DateTime.now()).inDays;
+                  final text = '🔥 기사패스마스터 학습 결과\n'
+                      '📝 ${total}문제 중 ${correct}문제 정답!\n'
+                      '🎯 정답률: $percent%\n'
+                      '🏆 최대 콤보: ${provider.maxCombo}연속\n'
+                      '📅 시험까지 D-$daysLeft\n\n'
+                      '#정보처리기사 #기사패스마스터';
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('결과가 복사되었습니다! 붙여넣기로 공유하세요'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.share),
+                label: const Text('결과 공유하기'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConfig.cardColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
             ],
           ),
