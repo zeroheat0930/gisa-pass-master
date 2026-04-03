@@ -110,7 +110,17 @@ class _StatsDashboard extends StatelessWidget {
           _WeaknessCard(stats: stats),
           const SizedBox(height: 20),
 
-          // 7. 학습 추이
+          // 7. 오답 모아보기
+          _SectionHeader(
+            icon: Icons.replay_rounded,
+            label: '오답 모아보기',
+            color: AppConfig.warningColor,
+          ),
+          const SizedBox(height: 8),
+          const _WrongAnswerCard(),
+          const SizedBox(height: 20),
+
+          // 8. 학습 추이
           _SectionHeader(icon: Icons.timeline, label: '학습 추이 (최근 7일)'),
           const SizedBox(height: 8),
           _LearningTrendCard(stats: stats),
@@ -988,7 +998,125 @@ class _WeaknessItem extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// Section 7: 학습 추이
+// Section 7: 오답 모아보기
+// ─────────────────────────────────────────────
+
+class _WrongAnswerCard extends StatelessWidget {
+  const _WrongAnswerCard();
+
+  Future<void> _startWrongAnswerStudy(BuildContext context) async {
+    final provider = Provider.of<StudyProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppConfig.warningColor),
+      ),
+    );
+
+    try {
+      await provider.loadWrongAnswerQuestions();
+    } finally {
+      if (context.mounted) Navigator.pop(context);
+    }
+
+    if (!context.mounted) return;
+
+    if (provider.questionList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('틀린 문제가 없습니다!')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuizScreen(mode: StudyMode.wrongAnswer),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppConfig.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppConfig.warningColor.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_stories,
+                  color: AppConfig.warningColor, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                '스파르타 오답노트',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '틀린 문제들을 다시 풀어보세요',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '반복 학습으로 약점을 완전히 극복하세요',
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _startWrongAnswerStudy(context),
+              icon: const Icon(Icons.replay_rounded, size: 18),
+              label: const Text('틀린 문제 다시 풀기'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConfig.warningColor.withValues(alpha: 0.2),
+                foregroundColor: AppConfig.warningColor,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                elevation: 0,
+                side: BorderSide(
+                  color: AppConfig.warningColor.withValues(alpha: 0.5),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Section 8: 학습 추이
 // ─────────────────────────────────────────────
 
 class _LearningTrendCard extends StatelessWidget {
