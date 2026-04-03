@@ -164,7 +164,7 @@ class _YearSelectorScreenState extends State<_YearSelectorScreen> {
         backgroundColor: AppConfig.backgroundColor,
         foregroundColor: Colors.white,
         title: const Text(
-          '기출문제',
+          'AI 문제은행',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
@@ -176,11 +176,23 @@ class _YearSelectorScreenState extends State<_YearSelectorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // AI description banner
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  '최근 3개년 출제 트렌드를 AI가 분석하여 출제 확률이 높은 문제를 예측했습니다',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                  ),
+                ),
+              ),
               // Global random button
               _GlobalRandomButton(
                 onTap: () => _startRandom20(
                   widget.allQuestions,
-                  '전체 랜덤 20문제',
+                  'AI 예측 랜덤 20문제',
                 ),
               ),
               const SizedBox(height: 24),
@@ -270,7 +282,7 @@ class _GlobalRandomButton extends StatelessWidget {
             Icon(Icons.shuffle, color: Colors.white, size: 20),
             SizedBox(width: 10),
             Text(
-              '전체 랜덤 20문제',
+              'AI 예측 랜덤 20문제',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -424,7 +436,7 @@ class _RoundsPanel extends StatelessWidget {
                 questionCount: questions.length,
                 onRandom20: () => onRandom20(questions, '$title 랜덤 20문제'),
                 onAll: () => onAll(questions, '$title 전체'),
-                onReview: () => onReview(questions, '$title 풀이 보기'),
+                onReview: () => onReview(questions, '$title 해설 보기'),
               ),
             );
           }),
@@ -503,7 +515,7 @@ class _RoundRow extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _ActionButton(
-                  label: '풀이 보기',
+                  label: '해설 보기',
                   icon: Icons.menu_book_outlined,
                   color: const Color(0xFF2E7D32),
                   onTap: onReview,

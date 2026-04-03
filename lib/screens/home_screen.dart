@@ -840,7 +840,7 @@ class _AiPredictionButtonState extends State<_AiPredictionButton>
                                 ),
                                 SizedBox(height: 4),
                                 Text(
-                                  'AI가 기출 패턴을 분석하여 실시간 출제',
+                                  'AI가 출제 패턴을 분석하여 실시간 출제',
                                   style: TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,

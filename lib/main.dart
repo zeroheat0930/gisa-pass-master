@@ -179,9 +179,9 @@ class _RootNavigatorState extends State<_RootNavigator> {
             label: '홈',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.history_edu_outlined),
-            selectedIcon: Icon(Icons.history_edu, color: AppConfig.primaryColor),
-            label: '기출문제',
+            icon: const Icon(Icons.library_books_outlined),
+            selectedIcon: Icon(Icons.library_books, color: AppConfig.primaryColor),
+            label: '문제은행',
           ),
           NavigationDestination(
             icon: const Icon(Icons.menu_book_outlined),
