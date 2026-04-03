@@ -45,7 +45,7 @@ class AppConfig {
 
   // === 관리자 모드 (광고 없음 + 프리미엄 전체 해금) ===
   // 앱스토어 배포 시 false로 변경, 본인 기기 빌드 시 true
-  static const bool adminMode = true;
+  static const bool adminMode = false;
 
   // === 광고 설정 ===
   static const int adIntervalQuestions = 5; // N문제마다 전면광고
