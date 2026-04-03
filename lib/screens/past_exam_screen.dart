@@ -86,7 +86,7 @@ class _YearSelectorScreen extends StatefulWidget {
 }
 
 class _YearSelectorScreenState extends State<_YearSelectorScreen> {
-  static const List<int> _years = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+  late final List<int> _years;
   static const List<int> _rounds = [1, 2, 3];
 
   int? _expandedYear;
@@ -105,6 +105,9 @@ class _YearSelectorScreenState extends State<_YearSelectorScreen> {
       _cache.putIfAbsent(key, () => []).add(q);
       _yearCounts[q.year] = (_yearCounts[q.year] ?? 0) + 1;
     }
+    // Compute years that actually have questions
+    _years = _yearCounts.keys.where((y) => (_yearCounts[y] ?? 0) > 0).toList()..sort();
+    if (_years.isEmpty) _years = [2020, 2021, 2022, 2023, 2024, 2025];
   }
 
   List<Question> _forYearRound(int year, int round) =>

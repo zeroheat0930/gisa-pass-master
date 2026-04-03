@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
 import '../providers/stats_provider.dart';
+import '../providers/study_provider.dart';
 import '../models/study_stats.dart';
+import 'quiz_screen.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -759,6 +761,7 @@ class _WeaknessCard extends StatelessWidget {
           label: typeLabels[type] ?? type,
           accuracy: acc,
           kind: '유형',
+          typeKey: type,
         ));
       }
     });
@@ -825,8 +828,9 @@ class _WeakArea {
   final String label;
   final double accuracy;
   final String kind;
+  final String? typeKey; // raw type key for loadQuestionsByType (유형 kind only)
 
-  _WeakArea({required this.label, required this.accuracy, required this.kind});
+  _WeakArea({required this.label, required this.accuracy, required this.kind, this.typeKey});
 }
 
 class _WeaknessItem extends StatelessWidget {
@@ -834,6 +838,37 @@ class _WeaknessItem extends StatelessWidget {
   final int rank;
 
   const _WeaknessItem({required this.area, required this.rank});
+
+  void _startFocusStudy(BuildContext context) async {
+    final typeKey = area.typeKey;
+    if (typeKey == null) return;
+    final provider = context.read<StudyProvider>();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppConfig.primaryColor),
+      ),
+    );
+    try {
+      await provider.loadQuestionsByType(typeKey);
+    } finally {
+      if (context.mounted) Navigator.pop(context);
+    }
+    if (!context.mounted) return;
+    if (provider.questionList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('해당 유형의 문제가 없습니다.')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuizScreen(mode: StudyMode.byType),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -848,78 +883,104 @@ class _WeaknessItem extends StatelessWidget {
           color: AppConfig.primaryColor.withValues(alpha: 0.2),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: AppConfig.primaryColor.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '$rank',
-                style: const TextStyle(
-                  color: AppConfig.primaryColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: AppConfig.primaryColor.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '$rank',
+                    style: const TextStyle(
+                      color: AppConfig.primaryColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      area.label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppConfig.borderColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        area.kind,
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 10,
+                    Row(
+                      children: [
+                        Text(
+                          area.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppConfig.borderColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            area.kind,
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '집중 학습 권장 · 현재 정답률 ${clamped.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 11,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '집중 학습 권장 · 현재 정답률 ${clamped.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 11,
+              ),
+              Text(
+                '${clamped.toStringAsFixed(0)}%',
+                style: const TextStyle(
+                  color: AppConfig.primaryColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          if (area.typeKey != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => _startFocusStudy(context),
+                style: TextButton.styleFrom(
+                  backgroundColor: AppConfig.primaryColor.withValues(alpha: 0.15),
+                  foregroundColor: AppConfig.primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              ],
+                child: const Text(
+                  '집중 학습',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
-          ),
-          Text(
-            '${clamped.toStringAsFixed(0)}%',
-            style: const TextStyle(
-              color: AppConfig.primaryColor,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          ],
         ],
       ),
     );

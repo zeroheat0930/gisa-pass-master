@@ -87,6 +87,13 @@ class _HomeScreenState extends State<HomeScreen>
     if (_isNavigating) return;
     _isNavigating = true;
     HapticFeedback.lightImpact();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppConfig.primaryColor),
+      ),
+    );
     final provider = context.read<StudyProvider>();
     Future<void> loader;
     if (mode == StudyMode.wrongAnswer) {
@@ -99,6 +106,7 @@ class _HomeScreenState extends State<HomeScreen>
     loader.then((_) {
       _isNavigating = false;
       if (!context.mounted) return;
+      Navigator.pop(context); // dismiss loading dialog
       Navigator.push(
         context,
         CupertinoPageRoute(
@@ -107,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }).catchError((_) {
       _isNavigating = false;
+      if (context.mounted) Navigator.pop(context);
     });
   }
 
@@ -114,9 +123,20 @@ class _HomeScreenState extends State<HomeScreen>
     if (_isNavigating) return;
     _isNavigating = true;
     HapticFeedback.lightImpact();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppConfig.primaryColor),
+      ),
+    );
     final provider = context.read<StudyProvider>();
-    await provider.loadQuestions();
-    _isNavigating = false;
+    try {
+      await provider.loadQuestions();
+    } finally {
+      _isNavigating = false;
+      if (context.mounted) Navigator.pop(context); // dismiss loading dialog
+    }
     if (!context.mounted) return;
 
     final questions = provider.questionList;

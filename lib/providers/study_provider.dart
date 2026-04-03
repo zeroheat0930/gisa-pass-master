@@ -109,14 +109,15 @@ class StudyProvider extends ChangeNotifier {
     }
   }
 
-  /// 유형별 학습 모드: 특정 문제 유형으로 필터링
+  /// 유형별 학습 모드: 특정 문제 유형으로 필터링 (최대 50문제 셔플)
   Future<void> loadQuestionsByType(String type) async {
     _setLoading(true);
     _studyMode = StudyMode.byType;
 
     try {
       final questions = await _db.getQuestionsByType(type);
-      _questionList = questions;
+      questions.shuffle();
+      _questionList = questions.take(50).toList();
       _questionIndex = 0;
       _resetSession();
     } finally {
