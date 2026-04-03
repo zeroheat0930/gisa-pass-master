@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../config.dart';
 import '../models/question.dart';
 import '../widgets/question_card.dart';
@@ -15,10 +16,90 @@ class PastExamScreen extends StatefulWidget {
   State<PastExamScreen> createState() => _PastExamScreenState();
 }
 
+// ── Screen phase enum ─────────────────────────────────────────────────────────
+
+enum _Phase { loading, error, category, practice, exam, examResult }
+
+enum _Difficulty { beginner, intermediate, advanced }
+
+extension _DifficultyExt on _Difficulty {
+  String get label {
+    switch (this) {
+      case _Difficulty.beginner:
+        return '초급';
+      case _Difficulty.intermediate:
+        return '중급';
+      case _Difficulty.advanced:
+        return '고급';
+    }
+  }
+
+  String get rangeLabel {
+    switch (this) {
+      case _Difficulty.beginner:
+        return '난이도 1-2';
+      case _Difficulty.intermediate:
+        return '난이도 3';
+      case _Difficulty.advanced:
+        return '난이도 4-5';
+    }
+  }
+
+  int get minDiff {
+    switch (this) {
+      case _Difficulty.beginner:
+        return 1;
+      case _Difficulty.intermediate:
+        return 3;
+      case _Difficulty.advanced:
+        return 4;
+    }
+  }
+
+  int get maxDiff {
+    switch (this) {
+      case _Difficulty.beginner:
+        return 2;
+      case _Difficulty.intermediate:
+        return 3;
+      case _Difficulty.advanced:
+        return 5;
+    }
+  }
+
+  Color get accentColor {
+    switch (this) {
+      case _Difficulty.beginner:
+        return const Color(0xFF4CAF50);
+      case _Difficulty.intermediate:
+        return const Color(0xFF2196F3);
+      case _Difficulty.advanced:
+        return const Color(0xFFE53935);
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case _Difficulty.beginner:
+        return Icons.school;
+      case _Difficulty.intermediate:
+        return Icons.trending_up;
+      case _Difficulty.advanced:
+        return Icons.local_fire_department;
+    }
+  }
+}
+
+// ── Root state ────────────────────────────────────────────────────────────────
+
 class _PastExamScreenState extends State<PastExamScreen> {
-  bool _isLoading = true;
-  String? _error;
+  _Phase _phase = _Phase.loading;
+  String? _errorMessage;
   List<Question> _allQuestions = [];
+
+  // Sub-screen params
+  List<Question> _activeQuestions = [];
+  String _modeTitle = '';
 
   @override
   void initState() {
@@ -28,132 +109,218 @@ class _PastExamScreenState extends State<PastExamScreen> {
 
   Future<void> _load() async {
     try {
-      final questions = await widget.loadQuestions();
+      final qs = await widget.loadQuestions();
       if (!mounted) return;
       setState(() {
-        _allQuestions = questions;
-        _isLoading = false;
+        _allQuestions = qs;
+        _phase = _Phase.category;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _isLoading = false;
+        _errorMessage = e.toString();
+        _phase = _Phase.error;
       });
     }
   }
 
+  List<Question> _filterByDifficulty(int min, int max) {
+    final filtered =
+        _allQuestions.where((q) => q.difficulty >= min && q.difficulty <= max).toList();
+    filtered.shuffle();
+    return filtered;
+  }
+
+  void _startPractice(_Difficulty diff) {
+    final qs = _filterByDifficulty(diff.minDiff, diff.maxDiff);
+    if (qs.isEmpty) {
+      _showEmpty();
+      return;
+    }
+    setState(() {
+      _activeQuestions = qs.take(50).toList();
+      _modeTitle = '${diff.label} 연습 모드';
+      _phase = _Phase.practice;
+    });
+  }
+
+  void _startExam(_Difficulty diff) {
+    final qs = _filterByDifficulty(diff.minDiff, diff.maxDiff);
+    if (qs.isEmpty) {
+      _showEmpty();
+      return;
+    }
+    setState(() {
+      _activeQuestions = qs.take(20).toList();
+      _modeTitle = '${diff.label} 실전 모의고사';
+      _phase = _Phase.exam;
+    });
+  }
+
+  void _startFullExam() {
+    final all = List<Question>.from(_allQuestions)..shuffle();
+    if (all.isEmpty) {
+      _showEmpty();
+      return;
+    }
+    setState(() {
+      _activeQuestions = all.take(20).toList();
+      _modeTitle = '실전 모의고사 20문제';
+      _phase = _Phase.exam;
+    });
+  }
+
+  void _showEmpty() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('해당 난이도의 문제가 없습니다.')),
+    );
+  }
+
+  void _backToCategory() {
+    setState(() => _phase = _Phase.category);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppConfig.backgroundColor,
-        body: Center(
-          child: CircularProgressIndicator(color: AppConfig.primaryColor),
-        ),
-      );
+    switch (_phase) {
+      case _Phase.loading:
+        return _LoadingScreen();
+      case _Phase.error:
+        return _ErrorScreen(message: _errorMessage ?? '오류가 발생했습니다.', onRetry: _load);
+      case _Phase.category:
+        return _CategoryScreen(
+          allQuestions: _allQuestions,
+          onPractice: _startPractice,
+          onExam: _startExam,
+          onFullExam: _startFullExam,
+        );
+      case _Phase.practice:
+        return _PracticeScreen(
+          questions: _activeQuestions,
+          title: _modeTitle,
+          onBack: _backToCategory,
+        );
+      case _Phase.exam:
+        return _ExamScreen(
+          questions: _activeQuestions,
+          title: _modeTitle,
+          onBack: _backToCategory,
+        );
+      case _Phase.examResult:
+        // examResult is handled inside _ExamScreen
+        return _LoadingScreen();
     }
-    if (_error != null) {
-      return Scaffold(
-        backgroundColor: AppConfig.backgroundColor,
-        appBar: AppBar(
-          backgroundColor: AppConfig.backgroundColor,
-          leading: const BackButton(color: Colors.white70),
-          elevation: 0,
+  }
+}
+
+// ── Loading screen ────────────────────────────────────────────────────────────
+
+class _LoadingScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppConfig.backgroundColor,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: CircularProgressIndicator(
+                color: AppConfig.primaryColor,
+                strokeWidth: 3,
+              ),
+            ),
+            SizedBox(height: 24),
+            Text(
+              'AI 문제은행',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '문제를 불러오는 중...',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
         ),
-        body: Center(
-          child: Text(
-            '문제를 불러오지 못했습니다.\n$_error',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70),
+      ),
+    );
+  }
+}
+
+// ── Error screen ──────────────────────────────────────────────────────────────
+
+class _ErrorScreen extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorScreen({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppConfig.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: AppConfig.backgroundColor,
+        foregroundColor: Colors.white,
+        title: const Text('AI 문제은행'),
+        elevation: 0,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: AppConfig.wrongColor, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                style: const TextStyle(color: Colors.grey, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('다시 시도'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConfig.primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
           ),
         ),
-      );
-    }
-    return _YearSelectorScreen(allQuestions: _allQuestions);
+      ),
+    );
   }
 }
 
-// ── Phase 1: Year / Round Selector ───────────────────────────────────────────
+// ── Category screen ───────────────────────────────────────────────────────────
 
-class _YearSelectorScreen extends StatefulWidget {
+class _CategoryScreen extends StatelessWidget {
   final List<Question> allQuestions;
+  final void Function(_Difficulty) onPractice;
+  final void Function(_Difficulty) onExam;
+  final VoidCallback onFullExam;
 
-  const _YearSelectorScreen({required this.allQuestions});
+  const _CategoryScreen({
+    required this.allQuestions,
+    required this.onPractice,
+    required this.onExam,
+    required this.onFullExam,
+  });
 
-  @override
-  State<_YearSelectorScreen> createState() => _YearSelectorScreenState();
-}
-
-class _YearSelectorScreenState extends State<_YearSelectorScreen> {
-  late final List<int> _years;
-  static const List<int> _rounds = [1, 2, 3];
-
-  int? _expandedYear;
-
-  // 캐싱: 한번만 계산
-  late final Map<String, List<Question>> _cache;
-  late final Map<int, int> _yearCounts;
-
-  @override
-  void initState() {
-    super.initState();
-    _cache = {};
-    _yearCounts = {};
-    for (final q in widget.allQuestions) {
-      final key = '${q.year}_${q.round}';
-      _cache.putIfAbsent(key, () => []).add(q);
-      _yearCounts[q.year] = (_yearCounts[q.year] ?? 0) + 1;
-    }
-    // Compute years that actually have questions
-    _years = _yearCounts.keys.where((y) => (_yearCounts[y] ?? 0) > 0).toList()..sort();
-    if (_years.isEmpty) _years = [2020, 2021, 2022, 2023, 2024, 2025];
-  }
-
-  List<Question> _forYearRound(int year, int round) =>
-      _cache['${year}_$round'] ?? [];
-
-  List<Question> _forYear(int year) =>
-      widget.allQuestions.where((q) => q.year == year).toList();
-
-  void _startQuiz(List<Question> questions, String title) {
-    if (questions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('해당 회차에 문제가 없습니다.'),
-          backgroundColor: AppConfig.cardColor,
-        ),
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _QuizScreen(questions: questions, title: title),
-      ),
-    );
-  }
-
-  void _startRandom20(List<Question> pool, String title) {
-    final shuffled = List<Question>.from(pool)..shuffle();
-    final questions = shuffled.take(20).toList();
-    _startQuiz(questions, title);
-  }
-
-  void _openReview(List<Question> questions, String title) {
-    if (questions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('해당 회차에 문제가 없습니다.'),
-          backgroundColor: AppConfig.cardColor,
-        ),
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _ReviewScreen(questions: questions, title: title),
-      ),
-    );
+  int _countForDifficulty(_Difficulty diff) {
+    return allQuestions
+        .where((q) => q.difficulty >= diff.minDiff && q.difficulty <= diff.maxDiff)
+        .length;
   }
 
   @override
@@ -165,408 +332,250 @@ class _YearSelectorScreenState extends State<_YearSelectorScreen> {
         foregroundColor: Colors.white,
         title: const Text(
           'AI 문제은행',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
         elevation: 0,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // AI description banner
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  '최근 3개년 출제 트렌드를 AI가 분석하여 출제 확률이 높은 문제를 예측했습니다',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                  ),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppConfig.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: AppConfig.primaryColor.withValues(alpha: 0.3), width: 1),
                 ),
-              ),
-              // Global random button
-              _GlobalRandomButton(
-                onTap: () => _startRandom20(
-                  widget.allQuestions,
-                  'AI 예측 랜덤 20문제',
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Year cards grid
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.35,
-                ),
-                itemCount: _years.length,
-                itemBuilder: (context, index) {
-                  final year = _years[index];
-                  final isExpanded = _expandedYear == year;
-                  final count = _forYear(year).length;
-                  return _YearCard(
-                    year: year,
-                    questionCount: count,
-                    isExpanded: isExpanded,
-                    onTap: () {
-                      setState(() {
-                        _expandedYear = isExpanded ? null : year;
-                      });
-                    },
-                  );
-                },
-              ),
-
-              // Expanded year rounds panel
-              if (_expandedYear != null) ...[
-                const SizedBox(height: 16),
-                _RoundsPanel(
-                  year: _expandedYear!,
-                  rounds: _rounds,
-                  questionsFor: _forYearRound,
-                  onRandom20: (q, t) => _startRandom20(q, t),
-                  onAll: (q, t) => _startQuiz(q, t),
-                  onReview: (q, t) => _openReview(q, t),
-                ),
-              ],
-
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Global random button ──────────────────────────────────────────────────────
-
-class _GlobalRandomButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _GlobalRandomButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppConfig.primaryColor.withValues(alpha: 0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shuffle, color: Colors.white, size: 20),
-            SizedBox(width: 10),
-            Text(
-              'AI 예측 랜덤 20문제',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Year card ─────────────────────────────────────────────────────────────────
-
-class _YearCard extends StatelessWidget {
-  final int year;
-  final int questionCount;
-  final bool isExpanded;
-  final VoidCallback onTap;
-
-  const _YearCard({
-    required this.year,
-    required this.questionCount,
-    required this.isExpanded,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: isExpanded
-              ? AppConfig.primaryColor.withValues(alpha: 0.15)
-              : AppConfig.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isExpanded
-                ? AppConfig.primaryColor
-                : AppConfig.borderColor,
-            width: isExpanded ? 2 : 1,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    size: 16,
-                    color: isExpanded
-                        ? AppConfig.primaryColor
-                        : Colors.grey[500],
-                  ),
-                  const Spacer(),
-                  if (isExpanded)
-                    const Icon(
-                      Icons.expand_less,
-                      size: 18,
-                      color: AppConfig.primaryColor,
-                    )
-                  else
-                    Icon(
-                      Icons.expand_more,
-                      size: 18,
-                      color: Colors.grey[600],
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.auto_awesome,
+                        color: AppConfig.primaryColor, size: 20),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        '최근 3개년 출제 트렌드를 AI가 분석하여 출제 확률이 높은 문제를 예측했습니다',
+                        style: TextStyle(
+                          color: Color(0xFFFFCDD2),
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '$year년',
-                style: TextStyle(
-                  color: isExpanded ? AppConfig.primaryColor : Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
+                  ],
                 ),
               ),
-              Text(
-                questionCount > 0
-                    ? '$questionCount문제'
-                    : '준비중',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 12,
+              const SizedBox(height: 20),
+
+              // Full exam button
+              GestureDetector(
+                onTap: onFullExam,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppConfig.primaryColor.withValues(alpha: 0.9),
+                        const Color(0xFFB71C1C),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppConfig.primaryColor.withValues(alpha: 0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bolt, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '실전 모의고사 20문제',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              '전체 난이도 · 무작위 20문제 · 시험 종료 후 채점',
+                              style: TextStyle(
+                                color: Color(0xFFFFCDD2),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios,
+                          color: Colors.white70, size: 16),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+              const SizedBox(height: 28),
 
-// ── Rounds panel ──────────────────────────────────────────────────────────────
-
-class _RoundsPanel extends StatelessWidget {
-  final int year;
-  final List<int> rounds;
-  final List<Question> Function(int year, int round) questionsFor;
-  final void Function(List<Question>, String) onRandom20;
-  final void Function(List<Question>, String) onAll;
-  final void Function(List<Question>, String) onReview;
-
-  const _RoundsPanel({
-    required this.year,
-    required this.rounds,
-    required this.questionsFor,
-    required this.onRandom20,
-    required this.onAll,
-    required this.onReview,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppConfig.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConfig.borderColor),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$year년 회차 선택',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...rounds.map((round) {
-            final questions = questionsFor(year, round);
-            final title = '$year년 $round회';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _RoundRow(
-                title: title,
-                questionCount: questions.length,
-                onRandom20: () => onRandom20(questions, '$title 랜덤 20문제'),
-                onAll: () => onAll(questions, '$title 전체'),
-                onReview: () => onReview(questions, '$title 해설 보기'),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Round row ─────────────────────────────────────────────────────────────────
-
-class _RoundRow extends StatelessWidget {
-  final String title;
-  final int questionCount;
-  final VoidCallback onRandom20;
-  final VoidCallback onAll;
-  final VoidCallback onReview;
-
-  const _RoundRow({
-    required this.title,
-    required this.questionCount,
-    required this.onRandom20,
-    required this.onAll,
-    required this.onReview,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppConfig.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConfig.borderColor),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
+              const Text(
+                '난이도별 학습',
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                questionCount > 0 ? '$questionCount문제' : '준비중',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
-              ),
+              const SizedBox(height: 14),
+
+              // Difficulty cards
+              ..._Difficulty.values.map((diff) {
+                final count = _countForDifficulty(diff);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: _DifficultyCard(
+                    difficulty: diff,
+                    questionCount: count,
+                    onPractice: () => onPractice(diff),
+                    onExam: () => onExam(diff),
+                  ),
+                );
+              }),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionButton(
-                  label: '랜덤 20문제',
-                  icon: Icons.shuffle,
-                  color: AppConfig.primaryColor,
-                  onTap: onRandom20,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionButton(
-                  label: '전체 풀기',
-                  icon: Icons.play_arrow,
-                  color: const Color(0xFF1565C0),
-                  onTap: onAll,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionButton(
-                  label: '해설 보기',
-                  icon: Icons.menu_book_outlined,
-                  color: const Color(0xFF2E7D32),
-                  onTap: onReview,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ── Small action button ───────────────────────────────────────────────────────
+// ── Difficulty card ───────────────────────────────────────────────────────────
 
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
+class _DifficultyCard extends StatelessWidget {
+  final _Difficulty difficulty;
+  final int questionCount;
+  final VoidCallback onPractice;
+  final VoidCallback onExam;
 
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
+  const _DifficultyCard({
+    required this.difficulty,
+    required this.questionCount,
+    required this.onPractice,
+    required this.onExam,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
+    final color = difficulty.accentColor;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppConfig.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(difficulty.icon, color: color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      difficulty.label,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      difficulty.rangeLabel,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$questionCount문제',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPractice,
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('연습 모드'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: AppConfig.borderColor),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: onExam,
+                    icon: const Icon(Icons.assignment_outlined, size: 16),
+                    label: const Text('실전 모의고사'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color.withValues(alpha: 0.85),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      textStyle: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -575,26 +584,32 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// ── Phase 2: Quiz screen ──────────────────────────────────────────────────────
+// ── Practice screen ───────────────────────────────────────────────────────────
 
-class _QuizScreen extends StatefulWidget {
+class _PracticeScreen extends StatefulWidget {
   final List<Question> questions;
   final String title;
+  final VoidCallback onBack;
 
-  const _QuizScreen({required this.questions, required this.title});
+  const _PracticeScreen({
+    required this.questions,
+    required this.title,
+    required this.onBack,
+  });
 
   @override
-  State<_QuizScreen> createState() => _QuizScreenState();
+  State<_PracticeScreen> createState() => _PracticeScreenState();
 }
 
-class _QuizScreenState extends State<_QuizScreen> {
-  bool _isFinished = false;
+class _PracticeScreenState extends State<_PracticeScreen> {
   int _currentIndex = 0;
-  final TextEditingController _answerController = TextEditingController();
+  final TextEditingController _controller = TextEditingController();
   bool _showExplanation = false;
 
   final List<String> _userAnswers = [];
   final List<bool> _isCorrectList = [];
+
+  bool _isFinished = false;
 
   late final Stopwatch _stopwatch;
   Timer? _timerTick;
@@ -606,36 +621,49 @@ class _QuizScreenState extends State<_QuizScreen> {
     _stopwatch = Stopwatch()..start();
     _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      final elapsed = _stopwatch.elapsed;
-      final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+      final e = _stopwatch.elapsed;
+      final mm = e.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final ss = e.inSeconds.remainder(60).toString().padLeft(2, '0');
       setState(() => _elapsedDisplay = '$mm:$ss');
     });
   }
 
   @override
   void dispose() {
-    _answerController.dispose();
+    _controller.dispose();
     _timerTick?.cancel();
     _stopwatch.stop();
     super.dispose();
   }
 
+  static bool _isCorrectAnswer(String user, String correct) {
+    String normalize(String s) => s
+        .trim()
+        .replaceAll('\n', ', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
+    final u = normalize(user);
+    final c = normalize(correct);
+    if (u == c) return true;
+    if (u.replaceAll(' ', '') == c.replaceAll(' ', '')) return true;
+    Set<String> tokens(String s) =>
+        s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
+    return tokens(u) == tokens(c);
+  }
+
   void _submit() {
-    final answer = _answerController.text.trim();
+    final answer = _controller.text.trim();
     if (answer.isEmpty) return;
-    final question = widget.questions[_currentIndex];
-    final correct =
-        answer.toLowerCase().trim() == question.answer.toLowerCase().trim();
+    final q = widget.questions[_currentIndex];
     setState(() {
       _userAnswers.add(answer);
-      _isCorrectList.add(correct);
+      _isCorrectList.add(_isCorrectAnswer(answer, q.answer));
       _showExplanation = true;
     });
   }
 
   void _next() {
-    _answerController.clear();
+    _controller.clear();
     setState(() => _showExplanation = false);
     if (_currentIndex + 1 >= widget.questions.length) {
       _timerTick?.cancel();
@@ -648,16 +676,16 @@ class _QuizScreenState extends State<_QuizScreen> {
 
   void _retry() {
     _timerTick?.cancel();
-    _answerController.clear();
+    _controller.clear();
     _userAnswers.clear();
     _isCorrectList.clear();
     _stopwatch.reset();
     _stopwatch.start();
     _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      final elapsed = _stopwatch.elapsed;
-      final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+      final e = _stopwatch.elapsed;
+      final mm = e.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final ss = e.inSeconds.remainder(60).toString().padLeft(2, '0');
       setState(() => _elapsedDisplay = '$mm:$ss');
     });
     setState(() {
@@ -670,168 +698,72 @@ class _QuizScreenState extends State<_QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isFinished) return _buildResultsScreen();
-    return _buildQuizScreen();
+    if (_isFinished) return _buildResults();
+    return _buildQuiz();
   }
 
-  Widget _buildQuizScreen() {
-    final question = widget.questions[_currentIndex];
+  Widget _buildQuiz() {
+    if (widget.questions.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppConfig.backgroundColor,
+        appBar: _appBar(),
+        body: const Center(
+          child: Text('문제가 없습니다.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+        ),
+      );
+    }
+
+    final q = widget.questions[_currentIndex];
     final total = widget.questions.length;
     final current = _currentIndex + 1;
 
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: AppConfig.backgroundColor,
-        foregroundColor: Colors.white,
-        title: Text(
-          widget.title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        centerTitle: true,
-        elevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Row(
-              children: [
-                const Icon(Icons.timer_outlined, size: 18, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  _elapsedDisplay,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      appBar: _appBar(),
       body: SafeArea(
         child: Column(
           children: [
-            // Progress bar
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  Text(
-                    '$current / $total',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: current / total,
-                        backgroundColor: AppConfig.borderColor,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppConfig.primaryColor,
-                        ),
-                        minHeight: 6,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
+            _ProgressBar(current: current, total: total),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    QuestionCard(question: question),
+                    QuestionCard(question: q),
                     const SizedBox(height: 20),
 
                     if (!_showExplanation) ...[
-                      TextField(
-                        controller: _answerController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: '정답을 입력하세요',
-                          hintStyle: TextStyle(color: Colors.grey[600]),
-                          filled: true,
-                          fillColor: AppConfig.cardColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppConfig.borderColor),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppConfig.primaryColor, width: 2),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppConfig.borderColor),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                        ),
+                      _AnswerTextField(
+                        controller: _controller,
                         onSubmitted: (_) => _submit(),
                       ),
                       const SizedBox(height: 14),
-                      ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConfig.primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        child: const Text('제출'),
-                      ),
+                      _PrimaryButton(label: '제출', onPressed: _submit),
                     ],
 
                     if (_showExplanation) ...[
                       const SizedBox(height: 16),
                       _ExplanationCard(
                         isCorrect: _isCorrectList.last,
-                        correctAnswer: question.answer,
+                        correctAnswer: q.answer,
                         userAnswer: _userAnswers.last,
-                        explanation: question.explanation,
+                        explanation: q.explanation,
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         onPressed: _next,
-                        icon: Icon(
-                          _currentIndex + 1 >= widget.questions.length
-                              ? Icons.bar_chart
-                              : Icons.arrow_forward,
-                        ),
-                        label: Text(
-                          _currentIndex + 1 >= widget.questions.length
-                              ? '결과 보기'
-                              : '다음 문제',
-                        ),
+                        icon: Icon(current >= total
+                            ? Icons.bar_chart
+                            : Icons.arrow_forward),
+                        label: Text(current >= total ? '결과 보기' : '다음 문제'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppConfig.cardColor,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: const BorderSide(
-                              color: AppConfig.borderColor),
+                          side: const BorderSide(color: AppConfig.borderColor),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
                           textStyle: const TextStyle(fontSize: 15),
                         ),
                       ),
@@ -846,10 +778,14 @@ class _QuizScreenState extends State<_QuizScreen> {
     );
   }
 
-  Widget _buildResultsScreen() {
+  Widget _buildResults() {
     final total = widget.questions.length;
     final correct = _isCorrectList.where((v) => v).length;
     final passed = correct >= (total * 0.6).ceil();
+    final elapsed = _stopwatch.elapsed;
+    final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final timeTaken = '$mm:$ss';
 
     final Map<String, int> typeTotal = {};
     final Map<String, int> typeCorrect = {};
@@ -861,20 +797,12 @@ class _QuizScreenState extends State<_QuizScreen> {
       }
     }
 
-    final elapsed = _stopwatch.elapsed;
-    final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
-    final timeTaken = '$mm:$ss';
-
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppConfig.backgroundColor,
         foregroundColor: Colors.white,
-        title: const Text(
-          '결과',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: const Text('연습 결과', style: TextStyle(fontWeight: FontWeight.w700)),
         centerTitle: true,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -885,94 +813,302 @@ class _QuizScreenState extends State<_QuizScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Pass/fail badge
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: (passed
-                            ? AppConfig.correctColor
-                            : AppConfig.wrongColor)
-                        .withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: passed
-                          ? AppConfig.correctColor
-                          : AppConfig.wrongColor,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Text(
-                    passed ? '합격' : '불합격',
-                    style: TextStyle(
-                      color: passed
-                          ? AppConfig.correctColor
-                          : AppConfig.wrongColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
+              _PassFailBadge(passed: passed),
               const SizedBox(height: 24),
+              _ScoreCard(
+                  correct: correct,
+                  total: total,
+                  timeTaken: timeTaken,
+                  passed: passed),
+              const SizedBox(height: 24),
+              _TypeBreakdown(
+                  typeTotal: typeTotal, typeCorrect: typeCorrect),
+              const SizedBox(height: 32),
+              _PrimaryButton(label: '다시 풀기', onPressed: _retry,
+                  icon: Icons.refresh),
+              const SizedBox(height: 12),
+              _SecondaryButton(
+                label: '홈으로',
+                icon: Icons.home_outlined,
+                onPressed: widget.onBack,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-              // Score card
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppConfig.cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppConfig.borderColor),
-                ),
+  PreferredSizeWidget _appBar() {
+    return AppBar(
+      backgroundColor: AppConfig.backgroundColor,
+      foregroundColor: Colors.white,
+      title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      centerTitle: true,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: widget.onBack,
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: Row(
+            children: [
+              const Icon(Icons.timer_outlined, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                _elapsedDisplay,
+                style: const TextStyle(
+                    color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Exam screen ───────────────────────────────────────────────────────────────
+
+class _ExamScreen extends StatefulWidget {
+  final List<Question> questions;
+  final String title;
+  final VoidCallback onBack;
+
+  const _ExamScreen({
+    required this.questions,
+    required this.title,
+    required this.onBack,
+  });
+
+  @override
+  State<_ExamScreen> createState() => _ExamScreenState();
+}
+
+class _ExamScreenState extends State<_ExamScreen> {
+  int _currentIndex = 0;
+  final TextEditingController _controller = TextEditingController();
+  final List<String> _userAnswers = [];
+
+  bool _isFinished = false;
+
+  late final Stopwatch _stopwatch;
+  Timer? _timerTick;
+  String _elapsedDisplay = '00:00';
+
+  @override
+  void initState() {
+    super.initState();
+    _stopwatch = Stopwatch()..start();
+    _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final e = _stopwatch.elapsed;
+      final mm = e.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final ss = e.inSeconds.remainder(60).toString().padLeft(2, '0');
+      setState(() => _elapsedDisplay = '$mm:$ss');
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _timerTick?.cancel();
+    _stopwatch.stop();
+    super.dispose();
+  }
+
+  static bool _isCorrectAnswer(String user, String correct) {
+    String normalize(String s) => s
+        .trim()
+        .replaceAll('\n', ', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
+    final u = normalize(user);
+    final c = normalize(correct);
+    if (u == c) return true;
+    if (u.replaceAll(' ', '') == c.replaceAll(' ', '')) return true;
+    Set<String> tokens(String s) =>
+        s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
+    return tokens(u) == tokens(c);
+  }
+
+  void _next() {
+    final answer = _controller.text.trim();
+    // Record answer (empty string if skipped)
+    setState(() {
+      _userAnswers.add(answer);
+    });
+    _controller.clear();
+
+    if (_currentIndex + 1 >= widget.questions.length) {
+      _timerTick?.cancel();
+      _stopwatch.stop();
+      setState(() => _isFinished = true);
+    } else {
+      setState(() => _currentIndex++);
+    }
+  }
+
+  void _retry() {
+    _timerTick?.cancel();
+    _controller.clear();
+    _userAnswers.clear();
+    _stopwatch.reset();
+    _stopwatch.start();
+    _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final e = _stopwatch.elapsed;
+      final mm = e.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final ss = e.inSeconds.remainder(60).toString().padLeft(2, '0');
+      setState(() => _elapsedDisplay = '$mm:$ss');
+    });
+    setState(() {
+      _currentIndex = 0;
+      _isFinished = false;
+      _elapsedDisplay = '00:00';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isFinished) return _buildResults();
+    return _buildExam();
+  }
+
+  Widget _buildExam() {
+    if (widget.questions.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppConfig.backgroundColor,
+        appBar: _appBar(),
+        body: const Center(
+          child: Text('문제가 없습니다.',
+              style: TextStyle(color: Colors.grey, fontSize: 16)),
+        ),
+      );
+    }
+
+    final q = widget.questions[_currentIndex];
+    final total = widget.questions.length;
+    final current = _currentIndex + 1;
+    final isLast = current >= total;
+
+    return Scaffold(
+      backgroundColor: AppConfig.backgroundColor,
+      appBar: _appBar(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _ProgressBar(current: current, total: total),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      '$correct / $total',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 52,
-                        fontWeight: FontWeight.w900,
+                    // Exam mode notice
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppConfig.warningColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: AppConfig.warningColor.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_outline,
+                              color: AppConfig.warningColor, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            '실전 모드 — 모든 문제 완료 후 채점됩니다',
+                            style: TextStyle(
+                              color: Colors.orange[200],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${(correct / total * 100).toStringAsFixed(0)}점',
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 18,
-                      ),
+
+                    QuestionCard(question: q),
+                    const SizedBox(height: 20),
+
+                    _AnswerTextField(
+                      controller: _controller,
+                      onSubmitted: (_) => _next(),
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.timer_outlined,
-                            size: 16, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(
-                          '소요 시간: $timeTaken',
-                          style: TextStyle(
-                              color: Colors.grey[400], fontSize: 14),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      passed
-                          ? '합격 기준(60%)을 통과했습니다!'
-                          : '합격 기준(60% = ${(total * 0.6).ceil()}문제)에 미달했습니다.',
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 13,
+                    const SizedBox(height: 14),
+
+                    ElevatedButton.icon(
+                      onPressed: _next,
+                      icon: Icon(isLast ? Icons.bar_chart : Icons.arrow_forward),
+                      label: Text(isLast ? '제출 및 채점' : '다음'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConfig.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        textStyle: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResults() {
+    final total = widget.questions.length;
+    final List<bool> isCorrectList = List.generate(
+      total,
+      (i) => i < _userAnswers.length
+          ? _isCorrectAnswer(_userAnswers[i], widget.questions[i].answer)
+          : false,
+    );
+    final correct = isCorrectList.where((v) => v).length;
+    final passed = correct >= (total * 0.6).ceil();
+    final elapsed = _stopwatch.elapsed;
+    final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final timeTaken = '$mm:$ss';
+
+    return Scaffold(
+      backgroundColor: AppConfig.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: AppConfig.backgroundColor,
+        foregroundColor: Colors.white,
+        title: const Text('모의고사 결과',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        centerTitle: true,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _PassFailBadge(passed: passed),
+              const SizedBox(height: 24),
+              _ScoreCard(
+                  correct: correct,
+                  total: total,
+                  timeTaken: timeTaken,
+                  passed: passed),
               const SizedBox(height: 24),
 
-              // Breakdown by type
+              // Question review list
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -984,7 +1120,7 @@ class _QuizScreenState extends State<_QuizScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      '유형별 결과',
+                      '문제별 결과',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 15,
@@ -992,56 +1128,17 @@ class _QuizScreenState extends State<_QuizScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ...typeTotal.entries.map((entry) {
-                      final type = entry.key;
-                      final tTotal = entry.value;
-                      final tCorrect = typeCorrect[type] ?? 0;
-                      final label =
-                          AppConfig.questionTypeLabels[type] ?? type;
-                      final icon = AppConfig.questionTypeIcons[type] ??
-                          Icons.help_outline;
-                      final ratio = tTotal > 0 ? tCorrect / tTotal : 0.0;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(icon,
-                                    size: 16, color: Colors.grey[400]),
-                                const SizedBox(width: 6),
-                                Text(
-                                  label,
-                                  style: TextStyle(
-                                      color: Colors.grey[300],
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  '$tCorrect / $tTotal',
-                                  style: const TextStyle(
-                                      color: Colors.white70, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: ratio,
-                                backgroundColor: AppConfig.borderColor,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  ratio >= 0.6
-                                      ? AppConfig.correctColor
-                                      : AppConfig.wrongColor,
-                                ),
-                                minHeight: 5,
-                              ),
-                            ),
-                          ],
-                        ),
+                    ...List.generate(total, (i) {
+                      final q = widget.questions[i];
+                      final userAns = i < _userAnswers.length
+                          ? _userAnswers[i]
+                          : '';
+                      final ok = isCorrectList[i];
+                      return _ExamResultItem(
+                        index: i + 1,
+                        question: q,
+                        userAnswer: userAns,
+                        isCorrect: ok,
                       );
                     }),
                   ],
@@ -1049,39 +1146,45 @@ class _QuizScreenState extends State<_QuizScreen> {
               ),
               const SizedBox(height: 32),
 
+              // Share button
               ElevatedButton.icon(
-                onPressed: _retry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('다시 풀기'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConfig.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () =>
-                    Navigator.of(context).popUntil((route) => route.isFirst),
-                icon: const Icon(Icons.home_outlined),
-                label: const Text('홈으로'),
+                onPressed: () async {
+                  final percent =
+                      (correct / total * 100).toStringAsFixed(0);
+                  final daysLeft =
+                      AppConfig.examDate.difference(DateTime.now()).inDays;
+                  final text = '📝 기사패스마스터 실전 모의고사\n'
+                      '${widget.title}\n'
+                      '${total}문제 중 ${correct}문제 정답!\n'
+                      '정답률: $percent% ${passed ? '✅ 합격' : '❌ 불합격'}\n'
+                      '소요 시간: $timeTaken\n'
+                      '📅 시험까지 D-$daysLeft\n\n'
+                      '#정보처리기사 #기사패스마스터';
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('결과가 복사되었습니다! 붙여넣기로 공유하세요')),
+                  );
+                },
+                icon: const Icon(Icons.share),
+                label: const Text('결과 공유하기'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppConfig.cardColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   side: const BorderSide(color: AppConfig.borderColor),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(12)),
                   textStyle: const TextStyle(fontSize: 16),
                 ),
+              ),
+              const SizedBox(height: 12),
+              _PrimaryButton(label: '다시 풀기', onPressed: _retry, icon: Icons.refresh),
+              const SizedBox(height: 12),
+              _SecondaryButton(
+                label: '홈으로',
+                icon: Icons.home_outlined,
+                onPressed: widget.onBack,
               ),
             ],
           ),
@@ -1089,271 +1192,499 @@ class _QuizScreenState extends State<_QuizScreen> {
       ),
     );
   }
-}
 
-// ── Phase 3: Review screen ────────────────────────────────────────────────────
-
-class _ReviewScreen extends StatefulWidget {
-  final List<Question> questions;
-  final String title;
-
-  const _ReviewScreen({required this.questions, required this.title});
-
-  @override
-  State<_ReviewScreen> createState() => _ReviewScreenState();
-}
-
-class _ReviewScreenState extends State<_ReviewScreen> {
-  late final List<bool> _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = List.filled(widget.questions.length, false);
+  PreferredSizeWidget _appBar() {
+    return AppBar(
+      backgroundColor: AppConfig.backgroundColor,
+      foregroundColor: Colors.white,
+      title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      centerTitle: true,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: widget.onBack,
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: Row(
+            children: [
+              const Icon(Icons.timer_outlined, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                _elapsedDisplay,
+                style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
+}
+
+// ── Exam result item (expandable) ─────────────────────────────────────────────
+
+class _ExamResultItem extends StatefulWidget {
+  final int index;
+  final Question question;
+  final String userAnswer;
+  final bool isCorrect;
+
+  const _ExamResultItem({
+    required this.index,
+    required this.question,
+    required this.userAnswer,
+    required this.isCorrect,
+  });
+
+  @override
+  State<_ExamResultItem> createState() => _ExamResultItemState();
+}
+
+class _ExamResultItemState extends State<_ExamResultItem> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppConfig.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: AppConfig.backgroundColor,
-        foregroundColor: Colors.white,
-        title: Text(
-          widget.title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+    final accentColor =
+        widget.isCorrect ? AppConfig.correctColor : AppConfig.wrongColor;
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${widget.index}',
+                      style: TextStyle(
+                        color: accentColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.question.questionText.length > 40
+                        ? '${widget.question.questionText.substring(0, 40)}...'
+                        : widget.question.questionText,
+                    style: const TextStyle(
+                        color: Color(0xFFD4D4D4), fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  widget.isCorrect ? Icons.check_circle : Icons.cancel,
+                  color: accentColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.grey,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
         ),
-        centerTitle: true,
-        elevation: 0,
-        actions: [
-          TextButton(
-            onPressed: () {
-              final allExpanded = _expanded.every((v) => v);
-              setState(() {
-                for (int i = 0; i < _expanded.length; i++) {
-                  _expanded[i] = !allExpanded;
-                }
-              });
-            },
-            child: Text(
-              _expanded.every((v) => v) ? '모두 접기' : '모두 펼치기',
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+        if (_expanded) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.only(left: 8, right: 8),
+            decoration: BoxDecoration(
+              color: AppConfig.cardColor,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppConfig.borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(
+                  label: '내 답',
+                  value: widget.userAnswer.isEmpty ? '(미입력)' : widget.userAnswer,
+                  color: widget.isCorrect ? AppConfig.correctColor : AppConfig.wrongColor,
+                ),
+                const SizedBox(height: 6),
+                _InfoRow(
+                  label: '정답',
+                  value: widget.question.answer,
+                  color: AppConfig.correctColor,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '해설',
+                  style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.question.explanation,
+                  style: const TextStyle(
+                    color: Color(0xFFD4D4D4),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+// ── Shared widgets ────────────────────────────────────────────────────────────
+
+class _ProgressBar extends StatelessWidget {
+  final int current;
+  final int total;
+
+  const _ProgressBar({required this.current, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        children: [
+          Text(
+            '$current / $total',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: total > 0 ? current / total : 0,
+                backgroundColor: AppConfig.borderColor,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppConfig.primaryColor),
+                minHeight: 6,
+              ),
             ),
           ),
         ],
       ),
-      body: SafeArea(
-        child: ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: widget.questions.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final question = widget.questions[index];
-            final isExpanded = _expanded[index];
-            return _ReviewCard(
-              index: index,
-              question: question,
-              isExpanded: isExpanded,
-              onToggle: () {
-                setState(() => _expanded[index] = !_expanded[index]);
-              },
-            );
-          },
-        ),
-      ),
     );
   }
 }
 
-class _ReviewCard extends StatelessWidget {
-  final int index;
-  final Question question;
-  final bool isExpanded;
-  final VoidCallback onToggle;
+class _AnswerTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final void Function(String) onSubmitted;
 
-  const _ReviewCard({
-    required this.index,
-    required this.question,
-    required this.isExpanded,
-    required this.onToggle,
-  });
+  const _AnswerTextField(
+      {required this.controller, required this.onSubmitted});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onToggle,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: AppConfig.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isExpanded
-                ? AppConfig.primaryColor.withValues(alpha: 0.5)
-                : AppConfig.borderColor,
-          ),
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: '정답을 입력하세요',
+        hintStyle: TextStyle(color: Colors.grey[600]),
+        filled: true,
+        fillColor: AppConfig.cardColor,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppConfig.borderColor),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Collapsed header always visible
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppConfig.primaryColor.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                        color: AppConfig.primaryColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      question.questionText,
-                      style: const TextStyle(
-                        color: Color(0xFFE0E0E0),
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                      maxLines: isExpanded ? null : 2,
-                      overflow: isExpanded
-                          ? TextOverflow.visible
-                          : TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: Colors.grey[500],
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: AppConfig.primaryColor, width: 2),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppConfig.borderColor),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      onSubmitted: onSubmitted,
+    );
+  }
+}
 
-            // Expanded content
-            if (isExpanded) ...[
-              Divider(
-                  color: AppConfig.borderColor,
-                  height: 1,
-                  thickness: 1),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    QuestionCard(question: question),
-                    const SizedBox(height: 16),
-                    // Answer section
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppConfig.correctColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppConfig.correctColor.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.check_circle,
-                              color: AppConfig.correctColor, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '정답',
-                                  style: TextStyle(
-                                    color: AppConfig.correctColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  question.answer,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Explanation section
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppConfig.surfaceColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border:
-                            Border.all(color: AppConfig.borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.lightbulb_outline,
-                                  color: Colors.amber[400], size: 16),
-                              const SizedBox(width: 6),
-                              Text(
-                                '해설',
-                                style: TextStyle(
-                                  color: Colors.amber[400],
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            question.explanation,
-                            style: const TextStyle(
-                              color: Color(0xFFD4D4D4),
-                              fontSize: 14,
-                              height: 1.6,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
+class _PrimaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final IconData? icon;
+
+  const _PrimaryButton(
+      {required this.label, required this.onPressed, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    if (icon != null) {
+      return ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppConfig.primaryColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle:
+              const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppConfig.primaryColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle:
+            const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      child: Text(label),
+    );
+  }
+}
+
+class _SecondaryButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _SecondaryButton(
+      {required this.label, required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppConfig.cardColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        side: const BorderSide(color: AppConfig.borderColor),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(fontSize: 16),
+      ),
+    );
+  }
+}
+
+class _PassFailBadge extends StatelessWidget {
+  final bool passed;
+
+  const _PassFailBadge({required this.passed});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = passed ? AppConfig.correctColor : AppConfig.wrongColor;
+    return Center(
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: color, width: 1.5),
+        ),
+        child: Text(
+          passed ? '합격' : '불합격',
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Shared supporting widgets ─────────────────────────────────────────────────
+class _ScoreCard extends StatelessWidget {
+  final int correct;
+  final int total;
+  final String timeTaken;
+  final bool passed;
+
+  const _ScoreCard(
+      {required this.correct,
+      required this.total,
+      required this.timeTaken,
+      required this.passed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppConfig.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppConfig.borderColor),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$correct / $total',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 52,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${(correct / total * 100).toStringAsFixed(0)}점',
+            style: TextStyle(color: Colors.grey[400], fontSize: 18),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.timer_outlined, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                '소요 시간: $timeTaken',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            passed
+                ? '합격 기준(60%)을 통과했습니다!'
+                : '합격 기준(60% = ${(total * 0.6).ceil()}문제)에 미달했습니다.',
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TypeBreakdown extends StatelessWidget {
+  final Map<String, int> typeTotal;
+  final Map<String, int> typeCorrect;
+
+  const _TypeBreakdown(
+      {required this.typeTotal, required this.typeCorrect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppConfig.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppConfig.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '유형별 결과',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...typeTotal.entries.map((entry) {
+            final type = entry.key;
+            final tTotal = entry.value;
+            final tCorrect = typeCorrect[type] ?? 0;
+            final label = AppConfig.questionTypeLabels[type] ?? type;
+            final icon =
+                AppConfig.questionTypeIcons[type] ?? Icons.help_outline;
+            final ratio = tTotal > 0 ? tCorrect / tTotal : 0.0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(icon, size: 16, color: Colors.grey[400]),
+                      const SizedBox(width: 6),
+                      Text(
+                        label,
+                        style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '$tCorrect / $tTotal',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: ratio,
+                      backgroundColor: AppConfig.borderColor,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        ratio >= 0.6
+                            ? AppConfig.correctColor
+                            : AppConfig.wrongColor,
+                      ),
+                      minHeight: 5,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
 
 class _ExplanationCard extends StatelessWidget {
   final bool isCorrect;
@@ -1372,7 +1703,6 @@ class _ExplanationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accentColor =
         isCorrect ? AppConfig.correctColor : AppConfig.wrongColor;
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1404,8 +1734,7 @@ class _ExplanationCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (!isCorrect) ...[
-            _InfoRow(
-                label: '내 답', value: userAnswer, color: Colors.grey),
+            _InfoRow(label: '내 답', value: userAnswer, color: Colors.grey),
             const SizedBox(height: 6),
             _InfoRow(
                 label: '정답',
