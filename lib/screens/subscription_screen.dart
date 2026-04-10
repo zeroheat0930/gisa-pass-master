@@ -7,7 +7,7 @@ import '../services/purchase_service.dart';
 class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
 
-  void _onSubscribe(BuildContext context) {
+  void _onSubscribe(BuildContext context) async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -20,18 +20,23 @@ class SubscriptionScreen extends StatelessWidget {
       return;
     }
     final purchaseService = context.read<PurchaseService>();
-    if (purchaseService.available && purchaseService.products.isNotEmpty) {
-      purchaseService.buyPremium();
-    } else {
+
+    // 상품이 아직 로딩 안 됐으면 재시도
+    if (purchaseService.products.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('스토어 연결 중입니다. 잠시 후 다시 시도해주세요.'),
+          content: const Text('스토어 연결 중... 잠시만 기다려주세요'),
           backgroundColor: AppConfig.cardColor,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 1),
         ),
       );
+      await purchaseService.reloadProducts();
     }
+
+    // buyPremium 내부에서도 재로딩을 시도함
+    purchaseService.buyPremium();
   }
 
   void _onRestore(BuildContext context) {

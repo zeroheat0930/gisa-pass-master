@@ -14,67 +14,108 @@ class PurchaseService extends ChangeNotifier {
   bool _isPremium = false;
   List<ProductDetails> _products = [];
   bool _loading = false;
+  String? _error;
 
   bool get isPremium => _isPremium;
   bool get available => _available;
   List<ProductDetails> get products => _products;
   bool get loading => _loading;
+  String? get error => _error;
 
-  /// AdService 연결 (프리미엄 구매 시 광고 끄기용)
   void setAdService(AdService adService) {
     _adService = adService;
   }
 
-  /// 초기화 (웹에서는 비활성)
   Future<void> initialize() async {
     if (kIsWeb) return;
 
-    _available = await _iap.isAvailable();
-    if (!_available) return;
+    try {
+      _available = await _iap.isAvailable();
+      debugPrint('IAP available: $_available');
+      if (!_available) {
+        _error = '스토어를 사용할 수 없습니다';
+        notifyListeners();
+        return;
+      }
 
-    // 구매 스트림 구독
-    _subscription = _iap.purchaseStream.listen(
-      _onPurchaseUpdate,
-      onDone: () => _subscription?.cancel(),
-      onError: (error) => debugPrint('구매 에러: $error'),
-    );
+      _subscription = _iap.purchaseStream.listen(
+        _onPurchaseUpdate,
+        onDone: () => _subscription?.cancel(),
+        onError: (error) => debugPrint('구매 에러: $error'),
+      );
 
-    // 상품 정보 로드
-    await _loadProducts();
+      await _loadProducts();
+    } catch (e) {
+      debugPrint('IAP 초기화 실패: $e');
+      _error = '스토어 초기화 실패';
+      notifyListeners();
+    }
   }
 
   Future<void> _loadProducts() async {
     _loading = true;
+    _error = null;
     notifyListeners();
 
-    final response = await _iap.queryProductDetails({premiumMonthlyId});
-    if (response.notFoundIDs.isNotEmpty) {
-      debugPrint('상품을 찾을 수 없음: ${response.notFoundIDs}');
+    try {
+      final response = await _iap.queryProductDetails({premiumMonthlyId});
+      debugPrint('상품 조회 결과: found=${response.productDetails.length}, notFound=${response.notFoundIDs}');
+
+      if (response.notFoundIDs.isNotEmpty) {
+        debugPrint('상품을 찾을 수 없음: ${response.notFoundIDs}');
+        _error = '상품 정보를 불러올 수 없습니다';
+      }
+      if (response.error != null) {
+        debugPrint('상품 조회 에러: ${response.error}');
+        _error = '스토어 연결 오류';
+      }
+      _products = response.productDetails;
+    } catch (e) {
+      debugPrint('상품 로드 실패: $e');
+      _error = '상품 정보 로드 실패';
     }
-    _products = response.productDetails;
 
     _loading = false;
     notifyListeners();
   }
 
-  /// 프리미엄 구매
+  /// 상품 재로딩
+  Future<void> reloadProducts() async {
+    if (!_available) {
+      _available = await _iap.isAvailable();
+      if (!_available) return;
+    }
+    await _loadProducts();
+  }
+
   Future<void> buyPremium() async {
     try {
-      if (!_available || _products.isEmpty) return;
+      // 상품이 없으면 재로딩 시도
+      if (_products.isEmpty) {
+        await reloadProducts();
+      }
+
+      if (!_available || _products.isEmpty) {
+        _error = '구매할 수 있는 상품이 없습니다. 잠시 후 다시 시도해주세요.';
+        notifyListeners();
+        return;
+      }
 
       final product = _products.firstWhere(
         (p) => p.id == premiumMonthlyId,
         orElse: () => _products.first,
       );
 
+      debugPrint('구매 시작: ${product.id} - ${product.price}');
       final purchaseParam = PurchaseParam(productDetails: product);
       await _iap.buyNonConsumable(purchaseParam: purchaseParam);
     } catch (e) {
       debugPrint('구매 실패: $e');
+      _error = '구매 처리 중 오류가 발생했습니다';
+      notifyListeners();
     }
   }
 
-  /// 구매 복원
   Future<void> restorePurchases() async {
     try {
       if (!_available) return;
@@ -86,18 +127,24 @@ class PurchaseService extends ChangeNotifier {
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
     for (final purchase in purchaseDetailsList) {
+      debugPrint('구매 상태: ${purchase.status} - ${purchase.productID}');
+
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
         _isPremium = true;
+        _error = null;
         _adService?.setPremium(true);
         notifyListeners();
 
-        // 구매 완료 처리
         if (purchase.pendingCompletePurchase) {
           _iap.completePurchase(purchase);
         }
       } else if (purchase.status == PurchaseStatus.error) {
         debugPrint('구매 실패: ${purchase.error?.message}');
+        _error = purchase.error?.message ?? '구매에 실패했습니다';
+        notifyListeners();
+      } else if (purchase.status == PurchaseStatus.canceled) {
+        debugPrint('구매 취소됨');
       }
     }
   }
