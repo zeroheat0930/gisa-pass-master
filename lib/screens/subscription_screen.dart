@@ -36,7 +36,18 @@ class SubscriptionScreen extends StatelessWidget {
     }
 
     // buyPremium 내부에서도 재로딩을 시도함
-    purchaseService.buyPremium();
+    await purchaseService.buyPremium();
+
+    if (purchaseService.error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(purchaseService.error!),
+          backgroundColor: AppConfig.cardColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   void _onRestore(BuildContext context) {
