@@ -73,6 +73,11 @@ class CodeViewer extends StatelessWidget {
     }
   }
 
+  static final _digitRegex = RegExp(r'[0-9]');
+  static final _digitDotRegex = RegExp(r'[0-9.]');
+  static final _wordStartRegex = RegExp(r'[a-zA-Z_#@]');
+  static final _wordRegex = RegExp(r'[a-zA-Z0-9_]');
+
   List<TextSpan> _tokenize(String source) {
     final spans = <TextSpan>[];
     final keywords = _keywords;
@@ -81,8 +86,10 @@ class CodeViewer extends StatelessWidget {
 
     int i = 0;
     while (i < source.length) {
+      final ch = source[i];
+
       // Python comment #
-      if (isPython && source[i] == '#') {
+      if (isPython && ch == '#') {
         final end = source.indexOf('\n', i);
         final commentEnd = end == -1 ? source.length : end;
         spans.add(TextSpan(
@@ -94,7 +101,7 @@ class CodeViewer extends StatelessWidget {
       }
 
       // Line comment //
-      if (!isSql && !isPython && i + 1 < source.length && source[i] == '/' && source[i + 1] == '/') {
+      if (!isSql && !isPython && i + 1 < source.length && ch == '/' && source[i + 1] == '/') {
         final end = source.indexOf('\n', i);
         final commentEnd = end == -1 ? source.length : end;
         spans.add(TextSpan(
@@ -106,7 +113,7 @@ class CodeViewer extends StatelessWidget {
       }
 
       // SQL comment --
-      if (isSql && i + 1 < source.length && source[i] == '-' && source[i + 1] == '-') {
+      if (isSql && i + 1 < source.length && ch == '-' && source[i + 1] == '-') {
         final end = source.indexOf('\n', i);
         final commentEnd = end == -1 ? source.length : end;
         spans.add(TextSpan(
@@ -118,14 +125,14 @@ class CodeViewer extends StatelessWidget {
       }
 
       // String literal " or '
-      if (source[i] == '"' || source[i] == "'") {
-        final quote = source[i];
+      if (ch == '"' || ch == "'") {
+        final quote = ch;
         int j = i + 1;
-        while (j < source.length && source[j] != quote) {
-          if (source[j] == '\\') j++;
+        while (j < source.length) {
+          if (source[j] == quote) { j++; break; }
+          if (source[j] == '\\' && j + 1 < source.length) j++;
           j++;
         }
-        j = j < source.length ? j + 1 : source.length;
         spans.add(TextSpan(
           text: source.substring(i, j),
           style: const TextStyle(color: _stringColor),
@@ -135,9 +142,9 @@ class CodeViewer extends StatelessWidget {
       }
 
       // Number
-      if (source[i].contains(RegExp(r'[0-9]'))) {
+      if (_digitRegex.hasMatch(ch)) {
         int j = i;
-        while (j < source.length && source[j].contains(RegExp(r'[0-9.]'))) {
+        while (j < source.length && _digitDotRegex.hasMatch(source[j])) {
           j++;
         }
         spans.add(TextSpan(
@@ -149,9 +156,9 @@ class CodeViewer extends StatelessWidget {
       }
 
       // Word (keyword or identifier)
-      if (source[i].contains(RegExp(r'[a-zA-Z_#@]'))) {
+      if (_wordStartRegex.hasMatch(ch)) {
         int j = i;
-        while (j < source.length && source[j].contains(RegExp(r'[a-zA-Z0-9_]'))) {
+        while (j < source.length && _wordRegex.hasMatch(source[j])) {
           j++;
         }
         final word = source.substring(i, j);
@@ -170,7 +177,7 @@ class CodeViewer extends StatelessWidget {
 
       // Everything else
       spans.add(TextSpan(
-        text: source[i],
+        text: ch,
         style: const TextStyle(color: _defaultText),
       ));
       i++;
