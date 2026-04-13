@@ -2,38 +2,95 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../config.dart';
 import '../models/question.dart';
+import '../services/database_service.dart';
 import '../widgets/question_card.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 class PastExamScreen extends StatefulWidget {
-  final Future<List<Question>> Function() loadQuestions;
+  final DatabaseService db;
 
-  const PastExamScreen({super.key, required this.loadQuestions});
+  const PastExamScreen({super.key, required this.db});
 
   @override
   State<PastExamScreen> createState() => _PastExamScreenState();
 }
 
 class _PastExamScreenState extends State<PastExamScreen> {
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _error;
-  List<Question> _allQuestions = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
+  // 난이도 필터: null = 전체
+  static const List<_DifficultyOption> _difficultyOptions = [
+    _DifficultyOption(label: '전체', minDiff: null, maxDiff: null),
+    _DifficultyOption(label: '쉬움', minDiff: 1, maxDiff: 2),
+    _DifficultyOption(label: '보통', minDiff: 3, maxDiff: 3),
+    _DifficultyOption(label: '어려움', minDiff: 4, maxDiff: 5),
+  ];
 
-  Future<void> _load() async {
+  int _selectedDifficulty = 0; // index into _difficultyOptions
+
+  static const List<_CategoryInfo> _categories = [
+    _CategoryInfo(
+      title: '코드 분석',
+      subtitle: 'C / Java / Python',
+      icon: Icons.code,
+      color: AppConfig.primaryColor,
+      type: 'code_reading',
+    ),
+    _CategoryInfo(
+      title: 'SQL',
+      subtitle: '데이터베이스 쿼리',
+      icon: Icons.storage,
+      color: Color(0xFF26A69A),
+      type: 'sql',
+    ),
+    _CategoryInfo(
+      title: '단답형',
+      subtitle: '개념 / 용어',
+      icon: Icons.edit_note,
+      color: Color(0xFFFFB74D),
+      type: 'short_answer',
+    ),
+    _CategoryInfo(
+      title: '전체 혼합',
+      subtitle: '모든 유형 랜덤',
+      icon: Icons.shuffle,
+      color: Color(0xFFE53935),
+      type: null, // null = 전체
+    ),
+  ];
+
+  Future<void> _loadAndStart({String? type, required String title}) async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
-      final questions = await widget.loadQuestions();
+      final diff = _difficultyOptions[_selectedDifficulty];
+      final questions = await widget.db.getQuestionsByTypeAndDifficulty(
+        type,
+        minDifficulty: diff.minDiff,
+        maxDifficulty: diff.maxDiff,
+        limit: 20,
+      );
       if (!mounted) return;
-      setState(() {
-        _allQuestions = questions;
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
+      if (questions.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('해당 조건에 맞는 문제가 없습니다.'),
+            backgroundColor: AppConfig.cardColor,
+          ),
+        );
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _QuizScreen(questions: questions, title: title),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -45,200 +102,168 @@ class _PastExamScreenState extends State<PastExamScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppConfig.backgroundColor,
-        body: Center(
-          child: CircularProgressIndicator(color: AppConfig.primaryColor),
-        ),
-      );
-    }
-    if (_error != null) {
-      return Scaffold(
-        backgroundColor: AppConfig.backgroundColor,
-        appBar: AppBar(
-          backgroundColor: AppConfig.backgroundColor,
-          leading: const BackButton(color: Colors.white70),
-          elevation: 0,
-        ),
-        body: Center(
-          child: Text(
-            '문제를 불러오지 못했습니다.\n$_error',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70),
-          ),
-        ),
-      );
-    }
-    return _YearSelectorScreen(allQuestions: _allQuestions);
-  }
-}
-
-// ── Phase 1: Year / Round Selector ───────────────────────────────────────────
-
-class _YearSelectorScreen extends StatefulWidget {
-  final List<Question> allQuestions;
-
-  const _YearSelectorScreen({required this.allQuestions});
-
-  @override
-  State<_YearSelectorScreen> createState() => _YearSelectorScreenState();
-}
-
-class _YearSelectorScreenState extends State<_YearSelectorScreen> {
-  static const List<int> _years = [2020, 2021, 2022, 2023, 2024];
-  static const List<int> _rounds = [1, 2, 3];
-
-  int? _expandedYear;
-
-  // 캐싱: 한번만 계산
-  late final Map<String, List<Question>> _cache;
-  late final Map<int, int> _yearCounts;
-
-  @override
-  void initState() {
-    super.initState();
-    _cache = {};
-    _yearCounts = {};
-    for (final q in widget.allQuestions) {
-      final key = '${q.year}_${q.round}';
-      _cache.putIfAbsent(key, () => []).add(q);
-      _yearCounts[q.year] = (_yearCounts[q.year] ?? 0) + 1;
-    }
-  }
-
-  List<Question> _forYearRound(int year, int round) =>
-      _cache['${year}_$round'] ?? [];
-
-  List<Question> _forYear(int year) =>
-      widget.allQuestions.where((q) => q.year == year).toList();
-
-  void _startQuiz(List<Question> questions, String title) {
-    if (questions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('해당 회차에 문제가 없습니다.'),
-          backgroundColor: AppConfig.cardColor,
-        ),
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _QuizScreen(questions: questions, title: title),
-      ),
-    );
-  }
-
-  void _startRandom20(List<Question> pool, String title) {
-    if (pool.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('해당 회차에 문제가 없습니다.'),
-          backgroundColor: AppConfig.cardColor,
-        ),
-      );
-      return;
-    }
-    final shuffled = List<Question>.from(pool)..shuffle();
-    final questions = shuffled.take(20).toList();
-    _startQuiz(questions, title);
-  }
-
-  void _openReview(List<Question> questions, String title) {
-    if (questions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('해당 회차에 문제가 없습니다.'),
-          backgroundColor: AppConfig.cardColor,
-        ),
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _ReviewScreen(questions: questions, title: title),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppConfig.backgroundColor,
         foregroundColor: Colors.white,
         title: const Text(
-          '기출문제',
+          'AI 문제은행',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
         elevation: 0,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Global random button
-              _GlobalRandomButton(
-                onTap: () => _startRandom20(
-                  widget.allQuestions,
-                  '전체 랜덤 20문제',
-                ),
-              ),
-              const SizedBox(height: 24),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 전체 랜덤 20문제 버튼
+                  _GlobalRandomButton(
+                    onTap: () => _loadAndStart(
+                      type: null,
+                      title: '전체 랜덤 20문제',
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
-              // Year cards grid
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.35,
-                ),
-                itemCount: _years.length,
-                itemBuilder: (context, index) {
-                  final year = _years[index];
-                  final isExpanded = _expandedYear == year;
-                  final count = _forYear(year).length;
-                  return _YearCard(
-                    year: year,
-                    questionCount: count,
-                    isExpanded: isExpanded,
-                    onTap: () {
-                      setState(() {
-                        _expandedYear = isExpanded ? null : year;
-                      });
+                  // 난이도 필터
+                  const Text(
+                    '난이도',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: List.generate(_difficultyOptions.length, (i) {
+                      final opt = _difficultyOptions[i];
+                      final selected = _selectedDifficulty == i;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(opt.label),
+                          selected: selected,
+                          onSelected: (_) =>
+                              setState(() => _selectedDifficulty = i),
+                          selectedColor:
+                              AppConfig.primaryColor.withValues(alpha: 0.25),
+                          backgroundColor: AppConfig.cardColor,
+                          side: BorderSide(
+                            color: selected
+                                ? AppConfig.primaryColor
+                                : AppConfig.borderColor,
+                          ),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? AppConfig.primaryColor
+                                : Colors.grey[400],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // 유형별 카드
+                  const Text(
+                    '유형별 문제',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.25,
+                    ),
+                    itemCount: _categories.length,
+                    itemBuilder: (context, index) {
+                      final cat = _categories[index];
+                      return _CategoryCard(
+                        info: cat,
+                        onTap: () => _loadAndStart(
+                          type: cat.type,
+                          title: '${cat.title} 20문제',
+                        ),
+                      );
                     },
-                  );
-                },
+                  ),
+
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      '오류: $_error',
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+
+                  const SizedBox(height: 20),
+                ],
               ),
-
-              // Expanded year rounds panel
-              if (_expandedYear != null) ...[
-                const SizedBox(height: 16),
-                _RoundsPanel(
-                  year: _expandedYear!,
-                  rounds: _rounds,
-                  questionsFor: _forYearRound,
-                  onRandom20: (q, t) => _startRandom20(q, t),
-                  onAll: (q, t) => _startQuiz(q, t),
-                  onReview: (q, t) => _openReview(q, t),
-                ),
-              ],
-
-              const SizedBox(height: 20),
-            ],
+            ),
           ),
-        ),
+          if (_isLoading)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: CircularProgressIndicator(color: AppConfig.primaryColor),
+              ),
+            ),
+        ],
       ),
     );
   }
+}
+
+// ── Data classes ──────────────────────────────────────────────────────────────
+
+class _DifficultyOption {
+  final String label;
+  final int? minDiff;
+  final int? maxDiff;
+
+  const _DifficultyOption({
+    required this.label,
+    required this.minDiff,
+    required this.maxDiff,
+  });
+}
+
+class _CategoryInfo {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final String? type; // null = 전체
+
+  const _CategoryInfo({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.type,
+  });
 }
 
 // ── Global random button ──────────────────────────────────────────────────────
@@ -291,275 +316,51 @@ class _GlobalRandomButton extends StatelessWidget {
   }
 }
 
-// ── Year card ─────────────────────────────────────────────────────────────────
+// ── Category card ─────────────────────────────────────────────────────────────
 
-class _YearCard extends StatelessWidget {
-  final int year;
-  final int questionCount;
-  final bool isExpanded;
+class _CategoryCard extends StatelessWidget {
+  final _CategoryInfo info;
   final VoidCallback onTap;
 
-  const _YearCard({
-    required this.year,
-    required this.questionCount,
-    required this.isExpanded,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: isExpanded
-              ? AppConfig.primaryColor.withValues(alpha: 0.15)
-              : AppConfig.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isExpanded
-                ? AppConfig.primaryColor
-                : AppConfig.borderColor,
-            width: isExpanded ? 2 : 1,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    size: 16,
-                    color: isExpanded
-                        ? AppConfig.primaryColor
-                        : Colors.grey[500],
-                  ),
-                  const Spacer(),
-                  if (isExpanded)
-                    const Icon(
-                      Icons.expand_less,
-                      size: 18,
-                      color: AppConfig.primaryColor,
-                    )
-                  else
-                    Icon(
-                      Icons.expand_more,
-                      size: 18,
-                      color: Colors.grey[600],
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '$year년',
-                style: TextStyle(
-                  color: isExpanded ? AppConfig.primaryColor : Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                questionCount > 0
-                    ? '$questionCount문제'
-                    : '준비중',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Rounds panel ──────────────────────────────────────────────────────────────
-
-class _RoundsPanel extends StatelessWidget {
-  final int year;
-  final List<int> rounds;
-  final List<Question> Function(int year, int round) questionsFor;
-  final void Function(List<Question>, String) onRandom20;
-  final void Function(List<Question>, String) onAll;
-  final void Function(List<Question>, String) onReview;
-
-  const _RoundsPanel({
-    required this.year,
-    required this.rounds,
-    required this.questionsFor,
-    required this.onRandom20,
-    required this.onAll,
-    required this.onReview,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppConfig.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConfig.borderColor),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$year년 회차 선택',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...rounds.map((round) {
-            final questions = questionsFor(year, round);
-            final title = '$year년 $round회';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _RoundRow(
-                title: title,
-                questionCount: questions.length,
-                onRandom20: () => onRandom20(questions, '$title 랜덤 20문제'),
-                onAll: () => onAll(questions, '$title 전체'),
-                onReview: () => onReview(questions, '$title 풀이 보기'),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Round row ─────────────────────────────────────────────────────────────────
-
-class _RoundRow extends StatelessWidget {
-  final String title;
-  final int questionCount;
-  final VoidCallback onRandom20;
-  final VoidCallback onAll;
-  final VoidCallback onReview;
-
-  const _RoundRow({
-    required this.title,
-    required this.questionCount,
-    required this.onRandom20,
-    required this.onAll,
-    required this.onReview,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppConfig.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConfig.borderColor),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                questionCount > 0 ? '$questionCount문제' : '준비중',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionButton(
-                  label: '랜덤 20문제',
-                  icon: Icons.shuffle,
-                  color: AppConfig.primaryColor,
-                  onTap: onRandom20,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionButton(
-                  label: '전체 풀기',
-                  icon: Icons.play_arrow,
-                  color: const Color(0xFF1565C0),
-                  onTap: onAll,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionButton(
-                  label: '풀이 보기',
-                  icon: Icons.menu_book_outlined,
-                  color: const Color(0xFF2E7D32),
-                  onTap: onReview,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Small action button ───────────────────────────────────────────────────────
-
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
+  const _CategoryCard({required this.info, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
+          color: AppConfig.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppConfig.borderColor),
         ),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: info.color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(info.icon, color: info.color, size: 24),
+            ),
+            const SizedBox(height: 12),
             Text(
-              label,
-              textAlign: TextAlign.center,
+              info.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              info.subtitle,
               style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+                color: Colors.grey[500],
+                fontSize: 12,
               ),
             ),
           ],

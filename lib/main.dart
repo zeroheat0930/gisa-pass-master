@@ -153,7 +153,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
     return _cachedTabs.putIfAbsent(index, () {
       switch (index) {
         case 0: return const HomeScreen();
-        case 1: return PastExamScreen(loadQuestions: () => widget.db.getAllQuestions());
+        case 1: return PastExamScreen(db: widget.db);
         case 2: return const CheatSheetScreen();
         case 3: return const StatsScreen();
         default: return const SizedBox.shrink();
@@ -185,9 +185,9 @@ class _RootNavigatorState extends State<_RootNavigator> {
             label: '홈',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.history_edu_outlined),
-            selectedIcon: Icon(Icons.history_edu, color: AppConfig.primaryColor),
-            label: '기출문제',
+            icon: const Icon(Icons.quiz_outlined),
+            selectedIcon: Icon(Icons.quiz, color: AppConfig.primaryColor),
+            label: '문제은행',
           ),
           NavigationDestination(
             icon: const Icon(Icons.menu_book_outlined),

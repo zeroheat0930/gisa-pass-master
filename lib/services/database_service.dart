@@ -292,6 +292,52 @@ class DatabaseService {
     return maps.map((m) => Question.fromMap(m)).toList();
   }
 
+  /// 유형 + 난이도 필터링 (난이도 범위: minDiff~maxDiff)
+  Future<List<Question>> getQuestionsByTypeAndDifficulty(
+    String? type, {
+    int? minDifficulty,
+    int? maxDifficulty,
+    int limit = 20,
+  }) async {
+    if (kIsWeb) {
+      var all = await _loadFromJson();
+      if (type != null) {
+        all = all.where((q) => q.questionType == type).toList();
+      }
+      if (minDifficulty != null) {
+        all = all.where((q) => q.difficulty >= minDifficulty).toList();
+      }
+      if (maxDifficulty != null) {
+        all = all.where((q) => q.difficulty <= maxDifficulty).toList();
+      }
+      all.shuffle();
+      return all.take(limit).toList();
+    }
+    final db = await database;
+    final whereParts = <String>[];
+    final whereArgs = <dynamic>[];
+    if (type != null) {
+      whereParts.add('question_type = ?');
+      whereArgs.add(type);
+    }
+    if (minDifficulty != null) {
+      whereParts.add('difficulty >= ?');
+      whereArgs.add(minDifficulty);
+    }
+    if (maxDifficulty != null) {
+      whereParts.add('difficulty <= ?');
+      whereArgs.add(maxDifficulty);
+    }
+    final maps = await db.query(
+      'questions',
+      where: whereParts.isEmpty ? null : whereParts.join(' AND '),
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'RANDOM()',
+      limit: limit,
+    );
+    return maps.map((m) => Question.fromMap(m)).toList();
+  }
+
   Future<Question?> getQuestionById(int id) async {
     final db = await database;
     final maps = await db.query('questions', where: 'id = ?', whereArgs: [id]);
