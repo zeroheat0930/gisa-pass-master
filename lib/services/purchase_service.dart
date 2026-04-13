@@ -1,10 +1,16 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'ad_service.dart';
 
 class PurchaseService extends ChangeNotifier {
   static const String premiumMonthlyId = 'gisa_pass_premium_monthly';
+
+  // 관리자 기기: 자동 프리미엄 (결제 불필요)
+  static const Set<String> _adminDeviceIds = {
+    '00008110-001C158E1EE1401E', // 정동준의 iPhone
+  };
 
   final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
@@ -28,6 +34,23 @@ class PurchaseService extends ChangeNotifier {
 
   Future<void> initialize() async {
     if (kIsWeb) return;
+
+    // 관리자 기기 체크
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      final iosInfo = await deviceInfo.iosInfo;
+      final deviceId = iosInfo.identifierForVendor ?? '';
+      debugPrint('Device ID: $deviceId');
+      if (_adminDeviceIds.contains(deviceId)) {
+        debugPrint('관리자 기기 감지 — 자동 프리미엄 활성화');
+        _isPremium = true;
+        _adService?.setPremium(true);
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('기기 정보 확인 실패: $e');
+    }
 
     try {
       _available = await _iap.isAvailable();
