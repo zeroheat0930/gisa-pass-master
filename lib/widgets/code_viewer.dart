@@ -197,10 +197,33 @@ class CodeViewer extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFF3C3C3C), width: 1),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6, right: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3C3C3C),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  language.toUpperCase(),
+                  style: const TextStyle(
+                    color: Color(0xFF9CDCFE),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 60, 12),
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
             child: RichText(
               softWrap: true,
               text: TextSpan(
@@ -211,26 +234,6 @@ class CodeViewer extends StatelessWidget {
                   color: _defaultText,
                 ),
                 children: spans,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 6,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3C3C3C),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                language.toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFF9CDCFE),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
               ),
             ),
           ),
