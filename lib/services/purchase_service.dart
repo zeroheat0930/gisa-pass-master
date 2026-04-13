@@ -9,7 +9,7 @@ class PurchaseService extends ChangeNotifier {
 
   // 관리자 기기: 자동 프리미엄 (결제 불필요)
   static const Set<String> _adminDeviceIds = {
-    '00008110-001C158E1EE1401E', // 정동준의 iPhone
+    '91ED9D8E-7430-4194-B9D0-D0099A772E02', // 정동준의 iPhone
   };
 
   final InAppPurchase _iap = InAppPurchase.instance;

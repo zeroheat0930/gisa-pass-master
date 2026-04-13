@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import '../config.dart';
 import '../models/study_stats.dart';
 import '../providers/study_provider.dart';
@@ -66,41 +65,7 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<StatsProvider>().loadStats();
       _staggerController.forward();
-      _showDeviceId();
     });
-  }
-
-  Future<void> _showDeviceId() async {
-    try {
-      final deviceInfo = DeviceInfoPlugin();
-      final iosInfo = await deviceInfo.iosInfo;
-      final deviceId = iosInfo.identifierForVendor ?? 'unknown';
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppConfig.cardColor,
-          title: const Text('Device ID', style: TextStyle(color: Colors.white)),
-          content: SelectableText(
-            deviceId,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: deviceId));
-                Navigator.pop(ctx);
-              },
-              child: const Text('복사', style: TextStyle(color: AppConfig.primaryColor)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('닫기', style: TextStyle(color: Colors.grey[400])),
-            ),
-          ],
-        ),
-      );
-    } catch (_) {}
   }
 
   @override
