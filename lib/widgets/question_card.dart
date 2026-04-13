@@ -62,7 +62,7 @@ class QuestionCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${question.year}년 ${question.round}회',
+                  'AI 예측',
                   style: TextStyle(
                     color: Colors.grey[500],
                     fontSize: 12,

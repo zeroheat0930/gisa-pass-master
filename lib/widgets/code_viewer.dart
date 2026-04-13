@@ -194,18 +194,16 @@ class CodeViewer extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 60, 12),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    height: 1.5,
-                    color: _defaultText,
-                  ),
-                  children: spans,
+            child: RichText(
+              softWrap: true,
+              text: TextSpan(
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  height: 1.5,
+                  color: _defaultText,
                 ),
+                children: spans,
               ),
             ),
           ),

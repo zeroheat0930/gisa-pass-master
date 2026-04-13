@@ -27,7 +27,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -41,6 +41,9 @@ class DatabaseService {
         }
         if (oldVersion < 4) {
           await _createBookmarkTable(db);
+        }
+        if (oldVersion < 5) {
+          await _addPlanTypeColumn(db);
         }
       },
     );
@@ -182,12 +185,18 @@ class DatabaseService {
     return _firstInt(await db.rawQuery('SELECT COUNT(*) FROM bookmarks'));
   }
 
+  static Future<void> _addPlanTypeColumn(Database db) async {
+    await db.execute(
+        "ALTER TABLE study_plan ADD COLUMN plan_type TEXT DEFAULT '14day'");
+  }
+
   static Future<void> _createStudyPlanTables(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS study_plan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         started_at TEXT NOT NULL,
-        current_day INTEGER DEFAULT 1
+        current_day INTEGER DEFAULT 1,
+        plan_type TEXT DEFAULT '14day'
       )
     ''');
     await db.execute('''
@@ -265,16 +274,20 @@ class DatabaseService {
     return List.from(all);
   }
 
-  Future<List<Question>> getQuestionsByType(String type) async {
+  Future<List<Question>> getQuestionsByType(String type, {int limit = 50}) async {
     if (kIsWeb) {
       final all = await _loadFromJson();
-      return all.where((q) => q.questionType == type).toList();
+      final filtered = all.where((q) => q.questionType == type).toList();
+      filtered.shuffle();
+      return filtered.take(limit).toList();
     }
     final db = await database;
     final maps = await db.query(
       'questions',
       where: 'question_type = ?',
       whereArgs: [type],
+      orderBy: 'RANDOM()',
+      limit: limit,
     );
     return maps.map((m) => Question.fromMap(m)).toList();
   }

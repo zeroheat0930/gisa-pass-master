@@ -136,6 +136,173 @@ class StudyPlanService extends ChangeNotifier {
     ),
   ];
 
+  /// 7일 미션 정의
+  static const List<DailyMission> _7dayMissions = [
+    DailyMission(
+      dayNumber: 1,
+      title: 'C/Java/Python 코드 분석 기초',
+      description: '코드 읽기 기본기를 빠르게 다집니다',
+      icon: 'code',
+      queryType: 'type',
+      filterValue: 'code_reading',
+      questionCount: 30,
+    ),
+    DailyMission(
+      dayNumber: 2,
+      title: 'SQL 기초+심화',
+      description: 'SQL 전 범위를 한번에 정복합니다',
+      icon: 'storage',
+      queryType: 'type',
+      filterValue: 'sql',
+      questionCount: 30,
+    ),
+    DailyMission(
+      dayNumber: 3,
+      title: '단답형 핵심 개념',
+      description: '자주 출제되는 핵심 용어를 집중 암기합니다',
+      icon: 'edit_note',
+      queryType: 'type',
+      filterValue: 'short_answer',
+      questionCount: 30,
+    ),
+    DailyMission(
+      dayNumber: 4,
+      title: '약점 집중 공략 + 오답 복습',
+      description: '오답률 높은 문제를 집중 공략합니다',
+      icon: 'local_fire_department',
+      queryType: 'weakness',
+      questionCount: 30,
+    ),
+    DailyMission(
+      dayNumber: 5,
+      title: '혼합 실전 연습',
+      description: '모든 유형을 섞어서 실전처럼 풀어봅니다',
+      icon: 'shuffle',
+      queryType: 'random',
+      questionCount: 30,
+    ),
+    DailyMission(
+      dayNumber: 6,
+      title: '실전 모의고사',
+      description: 'D-1! 실전 환경으로 모의시험을 봅니다',
+      icon: 'psychology',
+      queryType: 'prediction',
+      questionCount: 20,
+    ),
+    DailyMission(
+      dayNumber: 7,
+      title: '최종 오답 정리 + 가벼운 복습',
+      description: '마지막 오답 정리 후 가볍게 마무리합니다',
+      icon: 'emoji_events',
+      queryType: 'all_wrong',
+      questionCount: 20,
+    ),
+  ];
+
+  /// 5일 미션 정의
+  static const List<DailyMission> _5dayMissions = [
+    DailyMission(
+      dayNumber: 1,
+      title: '코드 분석(C/Java/Python) 총정리',
+      description: '코드 읽기 전 범위를 압축 정리합니다',
+      icon: 'code',
+      queryType: 'type',
+      filterValue: 'code_reading',
+      questionCount: 40,
+    ),
+    DailyMission(
+      dayNumber: 2,
+      title: 'SQL 총정리',
+      description: 'SQL 전 범위를 압축 정리합니다',
+      icon: 'storage',
+      queryType: 'type',
+      filterValue: 'sql',
+      questionCount: 40,
+    ),
+    DailyMission(
+      dayNumber: 3,
+      title: '단답형 + 약점 공략',
+      description: '단답형 암기와 약점을 동시에 잡습니다',
+      icon: 'edit_note',
+      queryType: 'type',
+      filterValue: 'short_answer',
+      questionCount: 40,
+    ),
+    DailyMission(
+      dayNumber: 4,
+      title: '실전 모의고사 + 오답 정리',
+      description: '실전 모의고사 후 오답을 바로 정리합니다',
+      icon: 'psychology',
+      queryType: 'prediction',
+      questionCount: 30,
+    ),
+    DailyMission(
+      dayNumber: 5,
+      title: '최종 복습 + 가벼운 워밍업',
+      description: '마지막 복습으로 가볍게 마무리합니다',
+      icon: 'emoji_events',
+      queryType: 'review',
+      questionCount: 20,
+    ),
+  ];
+
+  /// 3일 미션 정의 (48시간 전사 모드)
+  static const List<DailyMission> _3dayMissions = [
+    DailyMission(
+      dayNumber: 1,
+      title: '코드+SQL 핵심만 압축',
+      description: '코드와 SQL 핵심만 빠르게 훑습니다',
+      icon: 'code',
+      queryType: 'random',
+      questionCount: 50,
+    ),
+    DailyMission(
+      dayNumber: 2,
+      title: '단답형 암기 + 실전 모의고사',
+      description: '단답형 암기와 실전 감각을 동시에 잡습니다',
+      icon: 'psychology',
+      queryType: 'prediction',
+      questionCount: 50,
+    ),
+    DailyMission(
+      dayNumber: 3,
+      title: '오답 총복습 + 최종 정리',
+      description: '마지막 오답 정리로 완벽 마무리합니다',
+      icon: 'emoji_events',
+      queryType: 'all_wrong',
+      questionCount: 30,
+    ),
+  ];
+
+  /// 1일 미션 정의 (당일치기 전사 모드)
+  static const List<DailyMission> _1dayMissions = [
+    DailyMission(
+      dayNumber: 1,
+      title: '빈출 유형 총집합 + 족보 핵심',
+      description: '빈출 문제와 족보 핵심만 총정리합니다',
+      icon: 'whatshot',
+      queryType: 'frequent',
+      questionCount: 60,
+    ),
+  ];
+
+  /// planType에 맞는 미션 목록 반환
+  static List<DailyMission> getMissionsForPlanType(String planType) {
+    switch (planType) {
+      case '1day':
+        return _1dayMissions;
+      case '3day':
+        return _3dayMissions;
+      case '5day':
+        return _5dayMissions;
+      case '7day':
+        return _7dayMissions;
+      case '14day':
+      default:
+        return missions;
+    }
+  }
+
   StudyPlanService(this._db);
 
   /// 현재 진행 중인 플랜 로드
@@ -176,18 +343,20 @@ class StudyPlanService extends ChangeNotifier {
     };
   }
 
-  /// 새 14일 플랜 시작
-  Future<void> startNewPlan() async {
+  /// 새 플랜 시작
+  Future<void> startNewPlan({String planType = '14day'}) async {
     if (kIsWeb) return;
     final db = await _db.database;
     final id = await db.insert('study_plan', {
       'started_at': DateTime.now().toIso8601String(),
       'current_day': 1,
+      'plan_type': planType,
     });
     _currentPlan = StudyPlan(
       id: id,
       startedAt: DateTime.now(),
       currentDay: 1,
+      planType: planType,
     );
     _progressMap = {};
     notifyListeners();
@@ -248,7 +417,9 @@ class StudyPlanService extends ChangeNotifier {
 
   /// Day별 문제 로드
   Future<List<Question>> getQuestionsForDay(int dayNumber) async {
-    final mission = missions.firstWhere((m) => m.dayNumber == dayNumber);
+    final planType = _currentPlan?.planType ?? '14day';
+    final missionList = getMissionsForPlanType(planType);
+    final mission = missionList.firstWhere((m) => m.dayNumber == dayNumber);
     final db = await _db.database;
 
     switch (mission.queryType) {
@@ -340,7 +511,10 @@ class StudyPlanService extends ChangeNotifier {
   int get completedDays =>
       _progressMap.values.where((p) => p.completed).length;
 
-  double get overallProgress => completedDays / 14 * 100;
+  double get overallProgress {
+    final total = _currentPlan?.totalDays ?? 14;
+    return completedDays / total * 100;
+  }
 
   /// 플랜 리셋
   Future<void> resetPlan() async {

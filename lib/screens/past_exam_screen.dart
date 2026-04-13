@@ -86,7 +86,7 @@ class _YearSelectorScreen extends StatefulWidget {
 }
 
 class _YearSelectorScreenState extends State<_YearSelectorScreen> {
-  static const List<int> _years = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+  static const List<int> _years = [2020, 2021, 2022, 2023, 2024];
   static const List<int> _rounds = [1, 2, 3];
 
   int? _expandedYear;
@@ -131,6 +131,15 @@ class _YearSelectorScreenState extends State<_YearSelectorScreen> {
   }
 
   void _startRandom20(List<Question> pool, String title) {
+    if (pool.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('해당 회차에 문제가 없습니다.'),
+          backgroundColor: AppConfig.cardColor,
+        ),
+      );
+      return;
+    }
     final shuffled = List<Question>.from(pool)..shuffle();
     final questions = shuffled.take(20).toList();
     _startQuiz(questions, title);

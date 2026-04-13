@@ -28,16 +28,18 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     });
   }
 
-  Future<void> _startNewPlan() async {
+  Future<void> _startNewPlan({String planType = '14day'}) async {
+    final info = _planInfo(planType);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppConfig.cardColor,
-        title: const Text('14일 합격 플랜 시작',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        content: const Text(
-          '오늘부터 14일간의 체계적인 학습 플랜을 시작합니다.\n매일 주어진 미션을 완료하면 합격에 한 걸음 더 가까워집니다!',
-          style: TextStyle(color: Colors.white70, height: 1.5),
+        title: Text('${info['title']} 시작',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700)),
+        content: Text(
+          '${info['confirmDesc']}',
+          style: const TextStyle(color: Colors.white70, height: 1.5),
         ),
         actions: [
           TextButton(
@@ -46,15 +48,62 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('시작하기!',
+            child: Text('시작하기!',
                 style: TextStyle(
-                    color: AppConfig.primaryColor, fontWeight: FontWeight.w700)),
+                    color: info['color'] as Color,
+                    fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
     if (confirmed == true && mounted) {
-      await context.read<StudyPlanService>().startNewPlan();
+      await context.read<StudyPlanService>().startNewPlan(planType: planType);
+    }
+  }
+
+  static Map<String, dynamic> _planInfo(String planType) {
+    switch (planType) {
+      case '1day':
+        return {
+          'title': '당일치기 전사',
+          'subtitle': '시험 당일, 최후의 발악!',
+          'days': '1일',
+          'color': AppConfig.wrongColor,
+          'confirmDesc': '오늘 하루, 빈출 유형과 족보 핵심만 총정리합니다.\n최후의 전사 모드 시작!',
+        };
+      case '3day':
+        return {
+          'title': '48시간 전사',
+          'subtitle': 'D-3, 핵심만 압축!',
+          'days': '3일',
+          'color': AppConfig.warningColor,
+          'confirmDesc': '3일간 핵심만 압축해서 학습합니다.\n48시간 전사 모드 시작!',
+        };
+      case '5day':
+        return {
+          'title': '5일 압축',
+          'subtitle': '빠르고 효율적인 총정리',
+          'days': '5일',
+          'color': const Color(0xFFFFC107),
+          'confirmDesc': '5일간 압축된 커리큘럼으로 학습합니다.\n효율적인 총정리 시작!',
+        };
+      case '7day':
+        return {
+          'title': '7일 완성',
+          'subtitle': '1주일 체계적 완성',
+          'days': '7일',
+          'color': const Color(0xFF42A5F5),
+          'confirmDesc': '7일간 체계적으로 학습합니다.\n1주일 완성 플랜 시작!',
+        };
+      case '14day':
+      default:
+        return {
+          'title': '14일 합격 플랜',
+          'subtitle': '가장 체계적인 합격 로드맵',
+          'days': '14일',
+          'color': AppConfig.correctColor,
+          'confirmDesc': '오늘부터 14일간의 체계적인 학습 플랜을 시작합니다.\n매일 주어진 미션을 완료하면 합격에 한 걸음 더 가까워집니다!',
+        };
     }
   }
 
@@ -62,8 +111,10 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     final planService = context.read<StudyPlanService>();
     final purchaseService = context.read<PurchaseService>();
 
-    // 프리미엄 체크: Day 4부터 프리미엄 필요
-    if (dayNumber > 3 && !purchaseService.isPremium) {
+    // 프리미엄 체크: 1일/3일은 전체 무료, 5일은 Day 4부터, 7일/14일은 Day 4부터
+    final planType = planService.currentPlan?.planType ?? '14day';
+    final needsPremium = _needsPremiumForDay(planType, dayNumber);
+    if (needsPremium && !purchaseService.isPremium) {
       if (!mounted) return;
       Navigator.push(
         context,
@@ -113,6 +164,19 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     }
   }
 
+  static bool _needsPremiumForDay(String planType, int dayNumber) {
+    switch (planType) {
+      case '1day':
+      case '3day':
+        return false; // 전체 무료
+      case '5day':
+      case '7day':
+      case '14day':
+      default:
+        return dayNumber > 3;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final planService = context.watch<StudyPlanService>();
@@ -127,9 +191,11 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          '14일 합격 플랜',
-          style: TextStyle(
+        title: Text(
+          plan != null
+              ? (_planInfo(plan.planType)['title'] as String)
+              : '학습 플랜',
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -174,7 +240,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: AppConfig.primaryColor))
           : plan == null
-              ? _NoPlanView(onStart: _startNewPlan)
+              ? _NoPlanView(onSelectPlan: (planType) => _startNewPlan(planType: planType))
               : _PlanTimelineView(
                   plan: plan,
                   progressMap: planService.progressMap,
@@ -185,76 +251,193 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
   }
 }
 
-// ─── No Plan View ───────────────────────────────────────────────────────────
+// ─── No Plan View (플랜 선택 화면) ──────────────────────────────────────────
 
 class _NoPlanView extends StatelessWidget {
-  final VoidCallback onStart;
+  final ValueChanged<String> onSelectPlan;
 
-  const _NoPlanView({required this.onStart});
+  const _NoPlanView({required this.onSelectPlan});
+
+  static const _planOptions = [
+    {
+      'type': '1day',
+      'title': '당일치기 전사',
+      'subtitle': '시험 당일, 최후의 발악!',
+      'days': '1일',
+      'color': AppConfig.wrongColor,
+      'icon': Icons.whatshot,
+    },
+    {
+      'type': '3day',
+      'title': '48시간 전사',
+      'subtitle': 'D-3, 핵심만 압축!',
+      'days': '3일',
+      'color': AppConfig.warningColor,
+      'icon': Icons.local_fire_department,
+    },
+    {
+      'type': '5day',
+      'title': '5일 압축',
+      'subtitle': '빠르고 효율적인 총정리',
+      'days': '5일',
+      'color': Color(0xFFFFC107),
+      'icon': Icons.flash_on,
+    },
+    {
+      'type': '7day',
+      'title': '7일 완성',
+      'subtitle': '1주일 체계적 완성',
+      'days': '7일',
+      'color': Color(0xFF42A5F5),
+      'icon': Icons.calendar_today,
+    },
+    {
+      'type': '14day',
+      'title': '14일 합격 플랜',
+      'subtitle': '가장 체계적인 합격 로드맵',
+      'days': '14일',
+      'color': AppConfig.correctColor,
+      'icon': Icons.calendar_month,
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        const SizedBox(height: 8),
+        const Text(
+          '학습 플랜 선택',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '시험까지 남은 시간에 맞는 플랜을 선택하세요',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.grey[400],
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 24),
+        ..._planOptions.map((opt) => _PlanOptionCard(
+              planType: opt['type'] as String,
+              title: opt['title'] as String,
+              subtitle: opt['subtitle'] as String,
+              days: opt['days'] as String,
+              color: opt['color'] as Color,
+              icon: opt['icon'] as IconData,
+              onTap: () => onSelectPlan(opt['type'] as String),
+            )),
+      ],
+    );
+  }
+}
+
+class _PlanOptionCard extends StatelessWidget {
+  final String planType;
+  final String title;
+  final String subtitle;
+  final String days;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _PlanOptionCard({
+    required this.planType,
+    required this.title,
+    required this.subtitle,
+    required this.days,
+    required this.color,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: AppConfig.primaryColor.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
-                Icons.calendar_month,
-                color: AppConfig.primaryColor,
-                size: 40,
-              ),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              '14일 합격 플랜',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '시험까지 14일!\n매일 체계적인 미션을 따라가면\n합격이 보입니다.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 14,
-                height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: Material(
-                color: AppConfig.primaryColor,
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  onTap: onStart,
-                  borderRadius: BorderRadius.circular(14),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
-                      '오늘부터 시작하기',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          days,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
                     ),
                   ),
-                ),
+                ],
               ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: color.withValues(alpha: 0.6),
+              size: 14,
             ),
           ],
         ),
@@ -280,8 +463,11 @@ class _PlanTimelineView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final todayDay = plan.todayDay.clamp(1, 14);
+    final totalDays = plan.totalDays;
+    final todayDay = plan.todayDay;
     final isPremium = context.watch<PurchaseService>().isPremium;
+    final missionList =
+        StudyPlanService.getMissionsForPlanType(plan.planType);
 
     return Column(
       children: [
@@ -289,19 +475,22 @@ class _PlanTimelineView extends StatelessWidget {
         _ProgressHeader(
           completedDays: completedDays,
           todayDay: todayDay,
+          totalDays: totalDays,
         ),
         // 타임라인
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            itemCount: 14,
+            itemCount: totalDays,
             itemBuilder: (context, index) {
               final dayNumber = index + 1;
-              final mission = StudyPlanService.missions[index];
+              final mission = missionList[index];
               final progress = progressMap[dayNumber];
               final isCompleted = progress?.completed ?? false;
               final isToday = dayNumber == todayDay;
-              final isLocked = dayNumber > 3 && !isPremium;
+              final isLocked = _StudyPlanScreenState._needsPremiumForDay(
+                      plan.planType, dayNumber) &&
+                  !isPremium;
               final isPast = dayNumber < todayDay;
 
               return _DayCard(
@@ -311,7 +500,7 @@ class _PlanTimelineView extends StatelessWidget {
                 isToday: isToday,
                 isLocked: isLocked,
                 isPast: isPast,
-                isLast: index == 13,
+                isLast: index == totalDays - 1,
                 onTap: () => onDayTap(dayNumber),
               );
             },
@@ -327,15 +516,17 @@ class _PlanTimelineView extends StatelessWidget {
 class _ProgressHeader extends StatelessWidget {
   final int completedDays;
   final int todayDay;
+  final int totalDays;
 
   const _ProgressHeader({
     required this.completedDays,
     required this.todayDay,
+    required this.totalDays,
   });
 
   @override
   Widget build(BuildContext context) {
-    final progress = completedDays / 14;
+    final progress = completedDays / totalDays;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
@@ -354,7 +545,7 @@ class _ProgressHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Day $todayDay / 14',
+                'Day $todayDay / $totalDays',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,

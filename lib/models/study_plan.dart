@@ -2,19 +2,48 @@ class StudyPlan {
   final int id;
   final DateTime startedAt;
   final int currentDay;
+  final String planType; // '14day', '7day', '5day', '3day', '1day'
 
   StudyPlan({
     required this.id,
     required this.startedAt,
     required this.currentDay,
+    this.planType = '14day',
   });
+
+  /// planType에 따른 총 일수
+  int get totalDays {
+    switch (planType) {
+      case '1day':
+        return 1;
+      case '3day':
+        return 3;
+      case '5day':
+        return 5;
+      case '7day':
+        return 7;
+      case '14day':
+      default:
+        return 14;
+    }
+  }
 
   factory StudyPlan.fromMap(Map<String, dynamic> map) {
     return StudyPlan(
       id: map['id'] as int,
       startedAt: DateTime.parse(map['started_at'] as String),
       currentDay: (map['current_day'] as int?) ?? 1,
+      planType: (map['plan_type'] as String?) ?? '14day',
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'started_at': startedAt.toIso8601String(),
+      'current_day': currentDay,
+      'plan_type': planType,
+    };
   }
 
   /// 오늘이 플랜 시작일 기준 며칠째인지 계산
@@ -22,7 +51,7 @@ class StudyPlan {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final start = DateTime(startedAt.year, startedAt.month, startedAt.day);
-    return today.difference(start).inDays + 1;
+    return (today.difference(start).inDays + 1).clamp(1, totalDays);
   }
 }
 
