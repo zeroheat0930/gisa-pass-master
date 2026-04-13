@@ -175,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 24),
 
-              // 2 — 14일 합격 플랜 버튼
+              // 2 — 학습 플랜 버튼
               _staggered(
                 2,
                 _StudyPlanButton(
@@ -568,7 +568,7 @@ class _StudyPlanButtonState extends State<_StudyPlanButton>
                                 Row(
                                   children: [
                                     Text(
-                                      '14일 합격 플랜',
+                                      '학습 플랜',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 18,
@@ -582,7 +582,7 @@ class _StudyPlanButtonState extends State<_StudyPlanButton>
                                 ),
                                 SizedBox(height: 4),
                                 Text(
-                                  '14일 체계적 미션으로 합격을 향해!',
+                                  '당일치기부터 14일까지, 나만의 플랜 선택!',
                                   style: TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
