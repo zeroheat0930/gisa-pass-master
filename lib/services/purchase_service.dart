@@ -101,10 +101,7 @@ class PurchaseService extends ChangeNotifier {
         return;
       }
 
-      final product = _products.firstWhere(
-        (p) => p.id == premiumMonthlyId,
-        orElse: () => _products.first,
-      );
+      final product = _products.first;
 
       debugPrint('구매 시작: ${product.id} - ${product.price}');
       final purchaseParam = PurchaseParam(productDetails: product);
