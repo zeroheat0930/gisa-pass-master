@@ -419,7 +419,9 @@ class StudyPlanService extends ChangeNotifier {
   Future<List<Question>> getQuestionsForDay(int dayNumber) async {
     final planType = _currentPlan?.planType ?? '14day';
     final missionList = getMissionsForPlanType(planType);
-    final mission = missionList.firstWhere((m) => m.dayNumber == dayNumber);
+    final idx = missionList.indexWhere((m) => m.dayNumber == dayNumber);
+    if (idx == -1) return await _db.getRandomQuestions(20);
+    final mission = missionList[idx];
     final db = await _db.database;
 
     switch (mission.queryType) {

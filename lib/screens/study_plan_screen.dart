@@ -125,9 +125,8 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
 
     setState(() => _loading = true);
     final questions = await planService.getQuestionsForDay(dayNumber);
-    setState(() => _loading = false);
-
     if (!mounted) return;
+    setState(() => _loading = false);
     if (questions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
