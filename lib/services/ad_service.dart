@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+AdService? _globalAdService;
+void setGlobalAdService(AdService s) => _globalAdService = s;
+AdService? get globalAdService => _globalAdService;
+
 /// AdMob 광고 서비스
 class AdService {
   InterstitialAd? _interstitialAd;
@@ -120,6 +124,26 @@ class AdService {
     } catch (e) {
       debugPrint('광고 표시 실패: $e');
     }
+  }
+
+  /// 배너광고 생성 (shouldShowAds=false면 null 반환)
+  BannerAd? createBannerAd({VoidCallback? onLoad, VoidCallback? onError}) {
+    if (!shouldShowAds) return null;
+    final adUnitId = bannerAdUnitId;
+    if (adUnitId.isEmpty) return null;
+    return BannerAd(
+      adUnitId: adUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) => onLoad?.call(),
+        onAdFailedToLoad: (ad, err) {
+          debugPrint('배너광고 로드 실패: ${err.message}');
+          ad.dispose();
+          onError?.call();
+        },
+      ),
+    )..load();
   }
 
   /// 리소스 해제

@@ -35,6 +35,7 @@ void main() async {
   final predictionEngine = PredictionEngine();
   final spacedRepetitionService = SpacedRepetitionService(db);
   final adService = AdService()..loadInterstitialAd();
+  setGlobalAdService(adService);
   final purchaseService = PurchaseService()..setAdService(adService);
   final studyPlanService = StudyPlanService(db);
 

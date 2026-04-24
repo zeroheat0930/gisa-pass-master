@@ -44,7 +44,7 @@ class AppConfig {
   static const String dbName = 'gisa_pass_master.db';
 
   // === 광고 설정 ===
-  static const int adIntervalQuestions = 5; // N문제마다 전면광고
+  static const int adIntervalQuestions = 3; // 3문제마다 전면광고
 
   // === 문제 유형 라벨 (한글) ===
   static const Map<String, String> questionTypeLabels = {

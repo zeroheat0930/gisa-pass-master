@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
 import '../providers/study_provider.dart';
+import '../services/ad_service.dart';
 import '../widgets/question_card.dart';
 import '../widgets/answer_effect.dart';
 
@@ -19,9 +21,25 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   final TextEditingController _answerController = TextEditingController();
   bool _showExplanation = false;
+  BannerAd? _bannerAd;
+  bool _bannerLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bannerAd = globalAdService?.createBannerAd(
+      onLoad: () {
+        if (mounted) setState(() => _bannerLoaded = true);
+      },
+      onError: () {
+        if (mounted) setState(() => _bannerLoaded = false);
+      },
+    );
+  }
 
   @override
   void dispose() {
+    _bannerAd?.dispose();
     _answerController.dispose();
     super.dispose();
   }
@@ -201,6 +219,15 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
       appBar: _buildAppBar(context),
+      bottomNavigationBar: _bannerLoaded && _bannerAd != null
+          ? SafeArea(
+              child: SizedBox(
+                height: _bannerAd!.size.height.toDouble(),
+                width: _bannerAd!.size.width.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [

@@ -45,3 +45,8 @@ app.*.map.json
 /android/app/release
 .omc/
 ipa_output/
+
+# Android signing
+/android/key.properties
+**/*.jks
+**/*.keystore
