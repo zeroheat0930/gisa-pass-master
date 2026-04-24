@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +24,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
+  }
+
+  // iOS ATT 권한 요청 — IDFA 접근 동의 (광고 송출 fill rate 정상화용)
+  if (!kIsWeb && Platform.isIOS) {
+    try {
+      final status = await AppTrackingTransparency.trackingAuthorizationStatus;
+      if (status == TrackingStatus.notDetermined) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        await AppTrackingTransparency.requestTrackingAuthorization();
+      }
+    } catch (_) {}
   }
 
   // 광고 초기화 (실패해도 앱 실행 가능)

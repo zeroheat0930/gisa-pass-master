@@ -35,18 +35,18 @@ class PurchaseService extends ChangeNotifier {
   Future<void> initialize() async {
     if (kIsWeb) return;
 
-    // 관리자 기기 체크
+    // 관리자 기기 체크 (iOS 만 해당 — Android 는 AD_ID 권한 정책상 식별자 제한)
     try {
-      final deviceInfo = DeviceInfoPlugin();
-      final iosInfo = await deviceInfo.iosInfo;
-      final deviceId = iosInfo.identifierForVendor ?? '';
-      debugPrint('Device ID: $deviceId');
-      if (_adminDeviceIds.contains(deviceId)) {
-        debugPrint('관리자 기기 감지 — 자동 프리미엄 활성화');
-        _isPremium = true;
-        _adService?.setPremium(true);
-        notifyListeners();
-        return;
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final deviceInfo = DeviceInfoPlugin();
+        final iosInfo = await deviceInfo.iosInfo;
+        final deviceId = iosInfo.identifierForVendor ?? '';
+        if (_adminDeviceIds.contains(deviceId)) {
+          _isPremium = true;
+          _adService?.setPremium(true);
+          notifyListeners();
+          return;
+        }
       }
     } catch (e) {
       debugPrint('기기 정보 확인 실패: $e');
