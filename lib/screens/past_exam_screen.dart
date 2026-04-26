@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../config.dart';
 import '../models/question.dart';
+import '../services/ad_service.dart';
 import '../services/database_service.dart';
 import '../widgets/question_card.dart';
 
@@ -395,6 +397,10 @@ class _QuizScreenState extends State<_QuizScreen> {
   Timer? _timerTick;
   String _elapsedDisplay = '00:00';
 
+  BannerAd? _bannerAd;
+  bool _bannerLoaded = false;
+  int _adCounter = 0;
+
   @override
   void initState() {
     super.initState();
@@ -406,10 +412,19 @@ class _QuizScreenState extends State<_QuizScreen> {
       final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
       setState(() => _elapsedDisplay = '$mm:$ss');
     });
+    _bannerAd = globalAdService?.createBannerAd(
+      onLoad: () {
+        if (mounted) setState(() => _bannerLoaded = true);
+      },
+      onError: () {
+        if (mounted) setState(() => _bannerLoaded = false);
+      },
+    );
   }
 
   @override
   void dispose() {
+    _bannerAd?.dispose();
     _answerController.dispose();
     _timerTick?.cancel();
     _stopwatch.stop();
@@ -427,6 +442,11 @@ class _QuizScreenState extends State<_QuizScreen> {
       _isCorrectList.add(correct);
       _showExplanation = true;
     });
+    _adCounter++;
+    if (_adCounter >= AppConfig.adIntervalQuestions) {
+      _adCounter = 0;
+      globalAdService?.showInterstitialAd();
+    }
   }
 
   void _next() {
@@ -505,6 +525,15 @@ class _QuizScreenState extends State<_QuizScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: _bannerLoaded && _bannerAd != null
+          ? SafeArea(
+              child: SizedBox(
+                height: _bannerAd!.size.height.toDouble(),
+                width: _bannerAd!.size.width.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [

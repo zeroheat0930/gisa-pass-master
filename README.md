@@ -184,6 +184,14 @@ class AppConfig {
 - 디자인 패턴 (팩토리 메서드)
 - 소프트웨어 테스트 기법 (경계값 분석)
 
+## 변경 이력
+
+### v1.5.3+22 (2026-04-26)
+- 광고 누락 진입점 fix: `past_exam_screen.dart`의 `_QuizScreen`, `ai_prediction_screen.dart`에 배너+전면 광고 코드 추가
+  - v1.5.0+20 배너광고 도입 시 두 화면이 누락되어 문제은행/AI 예측 진입 사용자에게 광고 0회 노출
+  - 갤럭시탭(R54MA030SMD) 실기기 logcat으로 전 경로 광고 송출 검증 완료
+- AdMob W-8BEN 세금 정보 제출 (서비스 0% 원천징수, 만료 2029-12-31) — 진단 중 발견한 fill rate 저하 부수 원인
+
 ## 라이선스
 
 MIT License

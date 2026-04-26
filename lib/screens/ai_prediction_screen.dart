@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../config.dart';
 import '../models/question.dart';
+import '../services/ad_service.dart';
 import '../widgets/question_card.dart';
 
 class AiPredictionScreen extends StatefulWidget {
@@ -32,15 +34,29 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
   Timer? _timerTick;
   String _elapsedDisplay = '00:00';
 
+  // Ads
+  BannerAd? _bannerAd;
+  bool _bannerLoaded = false;
+  int _adCounter = 0;
+
   @override
   void initState() {
     super.initState();
     _stopwatch = Stopwatch();
     _startLoadingPhase();
+    _bannerAd = globalAdService?.createBannerAd(
+      onLoad: () {
+        if (mounted) setState(() => _bannerLoaded = true);
+      },
+      onError: () {
+        if (mounted) setState(() => _bannerLoaded = false);
+      },
+    );
   }
 
   @override
   void dispose() {
+    _bannerAd?.dispose();
     _answerController.dispose();
     _timerTick?.cancel();
     _stopwatch.stop();
@@ -105,6 +121,12 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
       _isCorrectList.add(correct);
       _showExplanation = true;
     });
+
+    _adCounter++;
+    if (_adCounter >= AppConfig.adIntervalQuestions) {
+      _adCounter = 0;
+      globalAdService?.showInterstitialAd();
+    }
   }
 
   void _next() {
@@ -232,6 +254,15 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: _bannerLoaded && _bannerAd != null
+          ? SafeArea(
+              child: SizedBox(
+                height: _bannerAd!.size.height.toDouble(),
+                width: _bannerAd!.size.width.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
