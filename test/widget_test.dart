@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:gisa_pass_master/widgets/answer_effect.dart';
 import 'package:gisa_pass_master/widgets/answer_input_field.dart';
 
 /// v1.5.4 회귀 방지 — 스토어 리뷰로 접수된 "엔터 누르면 답이 제대로 안 된다".
@@ -83,6 +84,60 @@ void main() {
       await tester.pump();
 
       expect(controller.text, '3\n1');
+    });
+  });
+
+  // v1.5.4 QA 회귀 — Positioned 는 ParentDataWidget 이라 Overlay 의 Stack
+  // 직계 자식이어야 한다. IgnorePointer 로 바깥을 감쌌더니 답을 제출할 때마다
+  // "Incorrect use of ParentDataWidget" 예외가 나서 학습 화면이 깨졌다.
+  group('정답 이펙트 오버레이', () {
+    testWidgets('오버레이를 띄워도 예외가 나지 않는다', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(builder: (c) {
+            ctx = c;
+            return const SizedBox.shrink();
+          }),
+        ),
+      ));
+
+      AnswerEffectOverlay.show(ctx, isCorrect: true);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull,
+          reason: 'Positioned 가 Overlay 의 Stack 직계 자식이 아니면 예외가 난다');
+
+      AnswerEffectOverlay.dismiss();
+      await tester.pump();
+    });
+
+    testWidgets('오버레이가 터치를 막지 않는다', (tester) async {
+      late BuildContext ctx;
+      var tapped = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(builder: (c) {
+            ctx = c;
+            return Center(
+              child: ElevatedButton(
+                onPressed: () => tapped++,
+                child: const Text('다음'),
+              ),
+            );
+          }),
+        ),
+      ));
+
+      AnswerEffectOverlay.show(ctx, isCorrect: true);
+      await tester.pump();
+
+      await tester.tap(find.text('다음'));
+      await tester.pump();
+      expect(tapped, 1, reason: '이펙트가 떠 있어도 버튼은 눌려야 한다');
+
+      AnswerEffectOverlay.dismiss();
+      await tester.pump();
     });
   });
 }

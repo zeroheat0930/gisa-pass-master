@@ -52,12 +52,38 @@ class AnswerChecker {
       if (_stripSpaces(normUser) == _stripSpaces(variant)) return true;
     }
 
-    // 4) 나열 순서 무관 비교 — 지문이 순서를 묻지 않을 때만 허용
+    // 4) SQL 결과 행 비교 — ORDER BY 가 없으면 행 순서는 보장되지 않는다.
+    //    행(개행) 단위 다중집합으로 본다. 쉼표로 쪼개면 한 행 안의 컬럼 순서까지
+    //    무너져서 "개발, 6000" 과 "6000, 개발" 이 같아져버린다.
+    if (questionType == 'sql' && !_hasOrderBy(codeSnippet)) {
+      if (_sameMultiset(
+        _rows(userAnswer, caseSensitive: caseSensitive),
+        _rows(correctAnswer, caseSensitive: caseSensitive),
+      )) {
+        return true;
+      }
+    }
+
+    // 5) 나열 순서 무관 비교 — 지문이 순서를 묻지 않을 때만 허용
     if (_allowsUnorderedList(questionType, questionText)) {
       if (_sameMultiset(_tokens(normUser), _tokens(normCorrect))) return true;
     }
 
     return false;
+  }
+
+  static bool _hasOrderBy(String? codeSnippet) =>
+      (codeSnippet ?? '').toUpperCase().contains('ORDER BY');
+
+  /// 답안을 '행' 단위로 쪼갠다. 행 안의 컬럼 순서는 그대로 보존한다.
+  static List<String> _rows(String s, {bool caseSensitive = false}) {
+    final t = s.trim().replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    return t
+        .split('\n')
+        .map((r) => r.replaceAll(RegExp(r'\s+'), ' ').trim())
+        .map((r) => caseSensitive ? r : r.toLowerCase())
+        .where((r) => r.isNotEmpty)
+        .toList();
   }
 
   /// 괄호가 있는 정답에서 인정 가능한 표기들을 만든다.
@@ -156,6 +182,12 @@ class AnswerChecker {
     for (final m in unorderedMarkers) {
       if (text.contains(m)) return true;
     }
+
+    // "N가지를 쓰시오" 는 나열형의 가장 흔한 표현이다. 순서를 묻는 게 아니다.
+    // (예: "동시성 문제 3가지", "SCM 주요 활동 4가지")
+    // 반면 "각각 쓰시오"(HTTP와 HTTPS 포트를 각각)는 지문의 순서와 짝이 맞아야
+    // 하므로 여기 포함하지 않는다.
+    if (RegExp(r'\d+\s*가지').hasMatch(text)) return true;
 
     return false;
   }

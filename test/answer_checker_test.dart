@@ -78,11 +78,18 @@ void main() {
       expect(AnswerChecker.isCorrectFor(ordered, 'ACK, SYN, SYN+ACK'), isFalse);
     });
 
-    test('SQL 결과 행도 순서를 지킨다', () {
-      final sql = q(
-        type: 'sql',
-        text: '부서별 급여 합계를 내림차순으로 조회한 결과를 쓰시오.',
+    test('ORDER BY 가 있는 SQL 은 행 순서를 지킨다', () {
+      // 순서 판정은 지문 문구가 아니라 실제 쿼리(codeSnippet)의 ORDER BY 로 한다.
+      final sql = Question(
+        year: 2026,
+        round: 3,
+        subject: '테스트',
+        questionType: 'sql',
+        questionText: '부서별 급여 합계를 내림차순으로 조회한 결과를 쓰시오.',
+        codeSnippet:
+            'SELECT 부서, SUM(급여) FROM 사원 GROUP BY 부서 ORDER BY SUM(급여) DESC;',
         answer: '개발, 6000\n영업, 4500',
+        explanation: '',
       );
       expect(AnswerChecker.isCorrectFor(sql, '개발, 6000\n영업, 4500'), isTrue);
       expect(AnswerChecker.isCorrectFor(sql, '영업, 4500\n개발, 6000'), isFalse);
@@ -157,6 +164,66 @@ void main() {
 
     test('엉뚱한 답은 여전히 오답', () {
       expect(AnswerChecker.isCorrectFor(paren('스택(stack)'), '큐'), isFalse);
+    });
+  });
+
+  // v1.5.4 QA 회귀 — 순서를 엄격하게 바꾸면서 실제로는 순서가 무관한 문항까지
+  // 오답 처리하게 됐다. 데이터 실측: SQL 33문항(ORDER BY 없음) + 단답형 13문항("N가지").
+  group('SQL 결과 행 순서', () {
+    test('ORDER BY 가 없으면 행 순서가 달라도 정답', () {
+      final target = Question(
+        year: 2026, round: 3, subject: '테스트', questionType: 'sql',
+        questionText: '다음 SQL의 실행 결과를 쓰시오.',
+        codeSnippet: 'SELECT 부서, SUM(급여) FROM 사원 GROUP BY 부서;',
+        answer: '개발, 6000\n영업, 4500', explanation: '',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '개발, 6000\n영업, 4500'), isTrue);
+      expect(AnswerChecker.isCorrectFor(target, '영업, 4500\n개발, 6000'), isTrue,
+          reason: 'ORDER BY 가 없으면 행 순서는 보장되지 않는다');
+    });
+
+    test('행 안의 컬럼 순서까지 흐트러지면 오답', () {
+      final target = Question(
+        year: 2026, round: 3, subject: '테스트', questionType: 'sql',
+        questionText: '다음 SQL의 실행 결과를 쓰시오.',
+        codeSnippet: 'SELECT 부서, SUM(급여) FROM 사원 GROUP BY 부서;',
+        answer: '개발, 6000\n영업, 4500', explanation: '',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '6000, 개발\n4500, 영업'), isFalse,
+          reason: '한 행 안의 컬럼 순서는 지켜야 한다');
+    });
+
+    test('ORDER BY 가 있으면 행 순서를 지켜야 한다', () {
+      final target = Question(
+        year: 2026, round: 3, subject: '테스트', questionType: 'sql',
+        questionText: '다음 SQL의 실행 결과를 쓰시오.',
+        codeSnippet: 'SELECT 고객, SUM(금액) FROM 주문 GROUP BY 고객 ORDER BY 2 DESC;',
+        answer: '이, 6000\n박, 5000', explanation: '',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '이, 6000\n박, 5000'), isTrue);
+      expect(AnswerChecker.isCorrectFor(target, '박, 5000\n이, 6000'), isFalse);
+    });
+  });
+
+  group('"N가지를 쓰시오" 문항', () {
+    test('순서가 달라도 정답', () {
+      final target = q(
+        type: 'short_answer',
+        text: '위험 관리에서 위험 대응 전략 4가지를 쓰시오.',
+        answer: '회피, 전이, 완화, 수용',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '수용, 완화, 전이, 회피'), isTrue);
+    });
+
+    test('"각각 쓰시오" 는 여전히 순서를 지켜야 한다', () {
+      final target = q(
+        type: 'short_answer',
+        text: 'HTTP의 기본 포트 번호와 HTTPS의 기본 포트 번호를 각각 쓰시오.',
+        answer: '80, 443',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '80, 443'), isTrue);
+      expect(AnswerChecker.isCorrectFor(target, '443, 80'), isFalse,
+          reason: '지문의 순서와 짝이 맞아야 한다');
     });
   });
 }

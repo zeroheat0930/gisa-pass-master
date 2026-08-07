@@ -111,10 +111,14 @@ class PurchaseService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool(_prefsKeyAutoRestored) ?? false) return;
-      await prefs.setBool(_prefsKeyAutoRestored, true);
+
+      // 복원을 **성공한 뒤에** 플래그를 쓴다.
+      // 먼저 쓰면 오프라인·스토어 일시 장애 한 번으로 1회뿐인 자동 복원 티켓이
+      // 헛되이 소진되어, 기기를 바꾼 결제 유저가 영영 자동 복원을 못 받는다.
       await _iap.restorePurchases();
+      await prefs.setBool(_prefsKeyAutoRestored, true);
     } catch (e) {
-      debugPrint('자동 복원 실패: $e');
+      debugPrint('자동 복원 실패 (다음 실행에 다시 시도): $e');
     }
   }
 

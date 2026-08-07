@@ -173,10 +173,14 @@ class AnswerEffectOverlay {
   }) {
     _entry?.remove();
     _entry = OverlayEntry(
-      // 순수 시각 효과다. IgnorePointer 로 감싸지 않으면 애니메이션이 끝날 때까지
-      // (최대 1.2초) 화면 전체의 터치를 먹어, 유저가 '다음'을 눌러도 반응하지 않는다.
-      builder: (ctx) => IgnorePointer(
-        child: Positioned.fill(
+      // Positioned 는 ParentDataWidget 이라 Overlay 의 Stack 직계 자식이어야 한다.
+      // IgnorePointer 로 바깥을 감싸면 "Incorrect use of ParentDataWidget" 예외가 나서
+      // 답을 제출할 때마다 학습 화면이 깨진다. 반드시 Positioned 가 바깥이어야 한다.
+      //
+      // IgnorePointer 자체는 필요하다. 없으면 애니메이션이 끝날 때까지(최대 1.2초)
+      // 화면 전체의 터치를 먹어 유저가 '다음'을 눌러도 반응하지 않는다.
+      builder: (ctx) => Positioned.fill(
+        child: IgnorePointer(
           child: Material(
             color: Colors.black45,
             child: Center(

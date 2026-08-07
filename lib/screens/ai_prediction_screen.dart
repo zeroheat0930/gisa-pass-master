@@ -7,6 +7,8 @@ import '../utils/duration_format.dart';
 import '../models/question.dart';
 import '../providers/study_provider.dart';
 import '../services/ad_service.dart';
+import '../services/ai_exam_quota.dart';
+import '../services/purchase_service.dart';
 import '../services/answer_checker.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
@@ -85,6 +87,11 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       _startTimer();
+
+      // 시험이 실제로 시작되는 이 시점에 무료 응시 1회를 소모한다.
+      // 진입 시점에 깎으면 로딩 중 이탈만으로 1회가 날아간다.
+      final isPremium = context.read<PurchaseService>().isPremium;
+      unawaited(AiExamQuota.consume(isPremium: isPremium));
     });
   }
 
@@ -161,7 +168,35 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
     }
   }
 
-  void _retry() {
+  Future<void> _retry() async {
+    // '다시 풀기'도 응시 1회다. 여기를 막지 않으면 결과 화면에서 무한 재응시가
+    // 가능해 무료 하루 1회 게이트가 통째로 무력해진다.
+    final isPremium = context.read<PurchaseService>().isPremium;
+    if (!await AiExamQuota.canStart(isPremium: isPremium)) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppConfig.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('오늘의 무료 모의고사 완료',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          content: Text(
+            '무료로는 하루 ${AiExamQuota.freeAttemptsPerDay}회 응시할 수 있어요.\n'
+            '내일 다시 열리고, 프리미엄이면 지금 바로 무제한으로 볼 수 있습니다.',
+            style: TextStyle(color: Colors.grey[300], fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('닫기', style: TextStyle(color: Colors.grey[400])),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     _timerTick?.cancel();
     _timerTick = null;
     _answerController.clear();

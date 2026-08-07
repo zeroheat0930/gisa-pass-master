@@ -171,7 +171,9 @@ class _HomeScreenState extends State<HomeScreen>
     HapticFeedback.lightImpact();
     final provider = context.read<StudyProvider>();
     await provider.loadQuestions();
-    await AiExamQuota.consume(isPremium: isPremium);
+    // 쿼터는 여기서 깎지 않는다. 로딩 중에 뒤로가기로 빠져나가면 시험을 보지도
+    // 않고 무료 1회가 증발한다. 소모는 시험이 실제로 시작되는 시점
+    // (AiPredictionScreen 의 로딩 완료)에서 한다.
     _isNavigating = false;
     if (!context.mounted) return;
 

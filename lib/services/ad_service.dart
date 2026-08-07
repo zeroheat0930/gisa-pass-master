@@ -124,7 +124,11 @@ class AdService {
       );
     } catch (e) {
       debugPrint('전면광고 로드 중 오류: $e');
-      _isAdLoaded = false;
+      // 로딩 플래그를 반드시 내린다. 여기서 빠뜨리면 loadInterstitialAd 의
+      // 중복 로드 가드에 영구히 걸려 전면광고가 세션 내내 다시 로드되지 않는다
+      // (= 전면광고 수익 중단이 다른 형태로 재발한다).
+      _isLoadingInterstitial = false;
+      _isAdLoaded = _interstitialAd != null;
     }
   }
 
