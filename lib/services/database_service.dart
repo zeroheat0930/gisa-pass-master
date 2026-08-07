@@ -269,12 +269,32 @@ class DatabaseService {
 
   Future<List<Question>> getBookmarkedQuestions() async {
     final db = await database;
+
+    // 웹은 questions 테이블을 시딩하지 않는다(_onCreate 가 !kIsWeb 조건).
+    // 그래서 JOIN 하면 북마크가 있어도 항상 0건이 나온다.
+    // id 는 _loadFromJson 이 삽입 순서와 동일하게 매기므로 그것으로 이어붙인다.
+    if (kIsWeb) {
+      final rows = await db.query('bookmarks',
+          columns: ['question_id'], orderBy: 'created_at DESC');
+      final byId = await _questionsById();
+      return rows
+          .map((r) => byId[r['question_id'] as int?])
+          .whereType<Question>()
+          .toList();
+    }
+
     final maps = await db.rawQuery('''
       SELECT q.* FROM questions q
       INNER JOIN bookmarks b ON q.id = b.question_id
       ORDER BY b.created_at DESC
     ''');
     return maps.map((m) => Question.fromMap(m)).toList();
+  }
+
+  /// 웹 전용 보조: JSON 문제를 id 로 찾을 수 있게 색인한다.
+  Future<Map<int?, Question>> _questionsById() async {
+    final all = await _loadFromJson();
+    return {for (final q in all) q.id: q};
   }
 
   Future<int> getBookmarkCount() async {
@@ -354,16 +374,10 @@ class DatabaseService {
   static List<Question>? _jsonCache;
   Future<List<Question>> _loadFromJson() async {
     if (_jsonCache != null) return List.from(_jsonCache!);
-    final files = [
-      'assets/questions/c_questions.json',
-      'assets/questions/java_questions.json',
-      'assets/questions/python_questions.json',
-      'assets/questions/sql_questions.json',
-      'assets/questions/short_answer_questions.json',
-    ];
     final all = <Question>[];
     int id = 1;
-    for (final file in files) {
+    // 모바일 시딩(_onCreate)과 반드시 같은 순서여야 id 가 일치한다.
+    for (final file in _questionAssetFiles) {
       try {
         final jsonStr = await rootBundle.loadString(file);
         final List<dynamic> items = json.decode(jsonStr);
@@ -695,6 +709,29 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> getDueReviews() async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
+
+    // 웹은 questions 테이블이 비어 있어 JOIN 이 항상 0건이다 (오답노트가 늘 빈 상태).
+    if (kIsWeb) {
+      final rows = await db.query('spaced_repetition',
+          where: 'next_review_at <= ?',
+          whereArgs: [now],
+          orderBy: 'next_review_at ASC');
+      final byId = await _questionsById();
+      final out = <Map<String, dynamic>>[];
+      for (final r in rows) {
+        final q = byId[r['question_id'] as int?];
+        if (q == null) continue;
+        out.add({
+          ...q.toMap(),
+          'stage': r['stage'],
+          'next_review_at': r['next_review_at'],
+          'consecutive_correct': r['consecutive_correct'],
+          'last_reviewed_at': r['last_reviewed_at'],
+        });
+      }
+      return out;
+    }
+
     return await db.rawQuery('''
       SELECT q.id, q.year, q.round, q.subject, q.question_type,
              q.question_text, q.code_snippet, q.code_language,

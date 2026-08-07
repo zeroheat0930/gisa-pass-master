@@ -45,12 +45,39 @@ class AnswerChecker {
     //    "35"(한 값)가 서로 정답 처리되는 오탐이 생긴다.
     if (_stripSpaces(normUser) == _stripSpaces(normCorrect)) return true;
 
-    // 3) 나열 순서 무관 비교 — 지문이 순서를 묻지 않을 때만 허용
+    // 3) 괄호 안 대체표기·부연설명 허용.
+    //    정답이 "스택(Stack)" 일 때 "스택" 이나 "Stack" 만 써도 맞는 답이다.
+    for (final variant in _parenVariants(normCorrect)) {
+      if (normUser == variant) return true;
+      if (_stripSpaces(normUser) == _stripSpaces(variant)) return true;
+    }
+
+    // 4) 나열 순서 무관 비교 — 지문이 순서를 묻지 않을 때만 허용
     if (_allowsUnorderedList(questionType, questionText)) {
       if (_sameMultiset(_tokens(normUser), _tokens(normCorrect))) return true;
     }
 
     return false;
+  }
+
+  /// 괄호가 있는 정답에서 인정 가능한 표기들을 만든다.
+  /// "스택(stack)" -> ["스택", "stack"]
+  static List<String> _parenVariants(String normalized) {
+    if (!normalized.contains('(')) return const [];
+
+    final withoutParens =
+        normalized.replaceAll(RegExp(r'\([^)]*\)'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    final inside = RegExp(r'\(([^)]*)\)')
+        .allMatches(normalized)
+        .map((m) => m.group(1)?.trim() ?? '')
+        .where((v) => v.isNotEmpty)
+        .toList();
+
+    return [
+      if (withoutParens.isNotEmpty) withoutParens,
+      ...inside,
+    ];
   }
 
   /// 줄바꿈을 쉼표로 바꿔 여러 줄 정답과 한 줄 나열 답안을 같은 형태로 만든다.

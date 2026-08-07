@@ -764,9 +764,15 @@ class _WeaknessCard extends StatelessWidget {
       }
     });
 
+    // 정답률 100%인 영역까지 '집중 학습 권장'으로 띄우면 조언이 아니라 소음이 된다.
+    areas.removeWhere((a) => a.accuracy >= 100);
+
     areas.sort((a, b) => a.accuracy.compareTo(b.accuracy));
     return areas.take(3).toList();
   }
+
+  /// 푼 문제는 있는데 약점이 없는 경우와, 아직 데이터가 없는 경우를 구분한다.
+  bool get _hasAnyData => stats.totalSolved > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -779,8 +785,11 @@ class _WeaknessCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              '아직 분석할 데이터가 없습니다',
+              _hasAnyData
+                  ? '약한 영역이 보이지 않습니다. 지금 페이스를 유지하세요!'
+                  : '아직 분석할 데이터가 없습니다',
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              textAlign: TextAlign.center,
             ),
           ),
         ),

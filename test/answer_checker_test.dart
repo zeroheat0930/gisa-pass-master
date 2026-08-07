@@ -135,4 +135,28 @@ void main() {
       expect(AnswerChecker.isCorrectFor(t, '큐'), isFalse);
     });
   });
+
+  group('괄호 안 대체표기', () {
+    Question paren(String answer) => q(
+          type: 'short_answer',
+          text: '용어를 쓰시오.',
+          answer: answer,
+        );
+
+    test('괄호를 뺀 표기도 정답', () {
+      expect(AnswerChecker.isCorrectFor(paren('스택(stack)'), '스택'), isTrue);
+    });
+
+    test('괄호 안 표기만 써도 정답', () {
+      expect(AnswerChecker.isCorrectFor(paren('스택(stack)'), 'stack'), isTrue);
+    });
+
+    test('원문 그대로도 정답', () {
+      expect(AnswerChecker.isCorrectFor(paren('스택(stack)'), '스택(stack)'), isTrue);
+    });
+
+    test('엉뚱한 답은 여전히 오답', () {
+      expect(AnswerChecker.isCorrectFor(paren('스택(stack)'), '큐'), isFalse);
+    });
+  });
 }
