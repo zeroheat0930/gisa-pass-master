@@ -22,15 +22,8 @@ class _CheatSheetScreenState extends State<CheatSheetScreen> {
   Widget build(BuildContext context) {
     final sections = _buildSections();
     final query = _searchQuery.toLowerCase();
-    final filtered = query.isEmpty
-        ? sections
-        : sections
-            .where((s) =>
-                s.title.toLowerCase().contains(query) ||
-                s.content.any((item) =>
-                    item.term.toLowerCase().contains(query) ||
-                    item.definition.toLowerCase().contains(query)))
-            .toList();
+    final filtered =
+        query.isEmpty ? sections : sections.where((s) => s.matches(query)).toList();
 
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
@@ -527,6 +520,27 @@ class _Item {
 }
 
 class _Section {
+  /// 검색어 일치 여부. **표 내용도 반드시 포함해야 한다.**
+  /// 예전에는 title / term / definition 만 봐서, OSI 7계층처럼 표로만 이루어진
+  /// 섹션은 무엇을 검색해도 '검색 결과 없음'이 떴다.
+  bool matches(String lowerQuery) {
+    if (title.toLowerCase().contains(lowerQuery)) return true;
+
+    for (final item in content) {
+      if (item.term.toLowerCase().contains(lowerQuery)) return true;
+      if (item.definition.toLowerCase().contains(lowerQuery)) return true;
+    }
+    for (final header in tableHeaders) {
+      if (header.toLowerCase().contains(lowerQuery)) return true;
+    }
+    for (final row in tableRows) {
+      for (final cell in row) {
+        if (cell.toLowerCase().contains(lowerQuery)) return true;
+      }
+    }
+    return false;
+  }
+
   final String title;
   final IconData icon;
   final Color iconColor;

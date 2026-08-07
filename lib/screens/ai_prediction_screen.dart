@@ -116,14 +116,19 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
       _showExplanation = true;
     });
 
+    // 광고는 여기서 띄우지 않는다. 채점 직후에 띄우면 정답/오답 결과와 해설을
+    // 광고가 덮어버려, 유저가 결과를 보지 못한 채 광고를 맞는다.
+    // 카운트만 올리고 실제 표시는 _next() 에서 한다.
     _adCounter++;
+  }
+
+  void _next() {
+    // 해설을 다 본 뒤에 광고를 띄운다.
     if (_adCounter >= AppConfig.adIntervalQuestions) {
       _adCounter = 0;
       globalAdService?.showInterstitialAd();
     }
-  }
 
-  void _next() {
     _answerController.clear();
     setState(() => _showExplanation = false);
 

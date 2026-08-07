@@ -28,6 +28,18 @@ class AppConfig {
   }
 
   static DateTime get examDate => nextExam.date;
+
+  /// 시험까지 남은 일수 (달력 기준, 단일 정본).
+  ///
+  /// `examDate.difference(now).inDays` 를 쓰면 남은 시간을 24로 나눈 값이라
+  /// 시험 전날 밤에 이미 0이 되어 D-Day 가 하루씩 적게 표시된다.
+  static int get daysUntilExam {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final exam = DateTime(examDate.year, examDate.month, examDate.day);
+    final diff = exam.difference(today).inDays;
+    return diff < 0 ? 0 : diff;
+  }
   static String get examRoundLabel => '${nextExam.year}년 ${nextExam.round}회';
 
   // === 테마 컬러 ===

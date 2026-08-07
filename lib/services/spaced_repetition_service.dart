@@ -45,7 +45,11 @@ class SpacedRepetitionService {
       currentStage = (currentStage + 1).clamp(0, _maxStage);
       consecutiveCorrect += 1;
     } else {
-      currentStage = (currentStage - 2).clamp(0, _maxStage);
+      // 틀렸으면 처음으로 되돌린다.
+      // 2단계만 강등하면 stage 7(14일)에서 틀린 문제가 stage 5(3일) 로만 내려가,
+      // 방금 틀린 문제를 사흘 뒤에나 다시 보게 된다. 망각곡선의 취지는
+      // "틀린 건 곧바로 다시"이므로 stage 0(1분)으로 리셋한다.
+      currentStage = 0;
       consecutiveCorrect = 0;
     }
 

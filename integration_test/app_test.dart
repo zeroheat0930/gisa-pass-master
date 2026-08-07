@@ -86,14 +86,13 @@ void main() {
     for (int i = 0; i < 5; i++) {
       if (provider.currentQuestion == null) break;
       await provider.submitAnswer('test_answer_$i');
-      if (provider.shouldShowAd) {
-        adTriggered++;
-        provider.clearAdFlag();
-      }
+      // 광고 표시는 nextQuestion() 내부에서 일어난다(채점 직후에 띄우면
+      // 정답/오답 이펙트를 덮으므로). 플래그는 그 전에 확인한다.
+      if (provider.shouldShowAd) adTriggered++;
       provider.nextQuestion();
     }
 
-    // 5문제마다 광고 트리거 (adIntervalQuestions = 5)
+    // adIntervalQuestions 문제마다 광고 트리거
     expect(adTriggered, greaterThanOrEqualTo(1));
   });
 
@@ -130,16 +129,19 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
-    // NavigationBar의 탭들을 찾기
-    final tabs = ['홈', '기출문제', '족보', '통계'];
+    // NavigationBar 의 실제 라벨과 일치해야 한다.
+    // 예전에는 '기출문제'로 되어 있었는데 실제 라벨은 '문제은행'이라 탭을 못 찾았고,
+    // isNotEmpty 가드 때문에 아무 탭도 누르지 않은 채 테스트가 통과했다.
+    final tabs = ['홈', '문제은행', '족보', '통계'];
+
+    for (final label in tabs) {
+      expect(find.text(label), findsWidgets, reason: '탭 라벨 "$label" 을 찾지 못했다');
+    }
 
     for (int round = 0; round < 50; round++) {
       final tabIndex = round % 4;
-      final tabFinder = find.text(tabs[tabIndex]);
-      if (tabFinder.evaluate().isNotEmpty) {
-        await tester.tap(tabFinder.last);
-        await tester.pump(const Duration(milliseconds: 50));
-      }
+      await tester.tap(find.text(tabs[tabIndex]).last);
+      await tester.pump(const Duration(milliseconds: 50));
     }
     await tester.pumpAndSettle(const Duration(seconds: 1));
 

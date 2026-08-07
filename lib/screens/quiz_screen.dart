@@ -61,11 +61,6 @@ class _QuizScreenState extends State<QuizScreen> {
       HapticFeedback.heavyImpact();
     }
 
-    // 광고 표시 (5문제마다)
-    if (provider.shouldShowAd) {
-      provider.clearAdFlag();
-    }
-
     AnswerEffectOverlay.show(
       context,
       isCorrect: provider.isCorrect,
@@ -127,7 +122,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
     final question = provider.currentQuestion;
     if (question == null) {
-      final daysLeft = AppConfig.examDate.difference(DateTime.now()).inDays;
+      final daysLeft = AppConfig.daysUntilExam;
       return Scaffold(
         backgroundColor: AppConfig.backgroundColor,
         appBar: _buildAppBar(context),

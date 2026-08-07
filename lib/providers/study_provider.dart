@@ -72,11 +72,6 @@ class StudyProvider extends ChangeNotifier {
     _comboCount = 0;
   }
 
-  /// 광고 표시 플래그 리셋 (UI에서 광고 표시 후 호출)
-  void clearAdFlag() {
-    _shouldShowAd = false;
-  }
-
   /// 현재 문제 (목록이 비어있으면 null)
   Question? get currentQuestion =>
       _questionList.isNotEmpty && _questionIndex < _questionList.length
@@ -197,20 +192,28 @@ class StudyProvider extends ChangeNotifier {
       _comboCount = 0;
     }
 
-    // 연속 풀이 카운트 → 전면광고 트리거
+    // 연속 풀이 카운트 → 전면광고 예약.
+    // 여기서 바로 띄우면 정답/오답 이펙트와 해설 위로 광고가 덮인다.
+    // 유저가 채점 결과를 못 보고 광고를 맞으니 이탈로 이어진다.
+    // 실제 표시는 '다음 문제'로 넘어갈 때(nextQuestion) 한다.
     _consecutiveAnswers++;
     if (_consecutiveAnswers >= AppConfig.adIntervalQuestions) {
       _consecutiveAnswers = 0;
       _shouldShowAd = true;
-      _adService?.showInterstitialAd();
-      notifyListeners();
     }
+    notifyListeners();
   }
 
   // === 문제 이동 ===
 
   /// 다음 문제로 이동
   void nextQuestion() {
+    // 예약된 전면광고를 여기서 띄운다. 해설을 다 본 뒤라 이펙트를 가리지 않는다.
+    if (_shouldShowAd) {
+      _shouldShowAd = false;
+      _adService?.showInterstitialAd();
+    }
+
     if (_questionIndex < _questionList.length) {
       _questionIndex++;
       _resetAnswerState();

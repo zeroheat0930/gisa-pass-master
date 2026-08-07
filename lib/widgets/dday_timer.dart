@@ -54,15 +54,8 @@ class _DdayTimerState extends State<DdayTimer> {
     });
   }
 
-  /// 화면에 쓰는 D-N 값. 달력 기준 날짜 차이로 계산한다.
-  /// Duration.inDays 는 남은 시간을 24로 나눈 값이라 전날 밤에 0이 되어버린다.
-  int get _daysLeft {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final exam = DateTime(_examDate.year, _examDate.month, _examDate.day);
-    final d = exam.difference(today).inDays;
-    return d < 0 ? 0 : d;
-  }
+  /// 화면에 쓰는 D-N 값 (계산은 AppConfig.daysUntilExam 정본에 있다).
+  int get _daysLeft => AppConfig.daysUntilExam;
 
   @override
   void dispose() {
