@@ -221,6 +221,9 @@ class AppConfig {
 - **DB v1·v2 유저가 업데이트하면 앱이 DB를 영영 열지 못하던 문제** (치명)
   - 원인: `_createStudyPlanTables`가 `plan_type`을 **포함해** 테이블을 만드는데 `_addPlanTypeColumn`이 무조건 `ALTER TABLE ADD COLUMN`을 실행 → `duplicate column` 예외. `onUpgrade`에서 던진 예외는 `openDatabase` 전체를 실패시킨다
   - 조치: `PRAGMA table_info`로 컬럼 존재를 확인해 멱등화
+  - 실기기로는 구버전 빌드를 설치해야 재현되므로 `test/db_migration_test.dart`로 검증.
+    구버전 스키마(v3·v4)와 신버전 스키마(v1·v2 경로)를 모두 재현하고, **구 구현이 실제로
+    예외를 던지는지까지 테스트로 못박아** 테스트가 헛돌지 않음을 보장
 
 #### 테스트 (반복 실패의 근본 원인)
 - 기존 테스트가 채점 로직의 **사본**을 검증하고 있어, 앱이 틀려도 통과했음 → 정본 호출로 교체

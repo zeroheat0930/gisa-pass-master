@@ -47,6 +47,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.3
+  # DB 마이그레이션을 실기기 없이 검증하기 위한 데스크톱용 sqlite 구현
+  sqflite_common_ffi: ^2.3.0
   integration_test:
     sdk: flutter
 

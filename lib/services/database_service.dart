@@ -37,13 +37,13 @@ class DatabaseService {
           await _onCreate(db, newVersion);
         }
         if (oldVersion < 3) {
-          await _createStudyPlanTables(db);
+          await createStudyPlanTables(db);
         }
         if (oldVersion < 4) {
           await _createBookmarkTable(db);
         }
         if (oldVersion < 5) {
-          await _addPlanTypeColumn(db);
+          await ensurePlanTypeColumn(db);
         }
       },
     );
@@ -98,7 +98,7 @@ class DatabaseService {
         'CREATE INDEX idx_spaced_repetition_next ON spaced_repetition(next_review_at)');
 
     // 14일 플랜 테이블
-    await _createStudyPlanTables(db);
+    await createStudyPlanTables(db);
 
     // 북마크 테이블
     await _createBookmarkTable(db);
@@ -187,17 +187,18 @@ class DatabaseService {
 
   /// study_plan 에 plan_type 컬럼을 보장한다. **반드시 멱등이어야 한다.**
   ///
-  /// _createStudyPlanTables 는 이미 plan_type 을 포함한 스키마로 테이블을 만든다.
+  /// createStudyPlanTables 는 이미 plan_type 을 포함한 스키마로 테이블을 만든다.
   /// 그래서 DB v1·v2 유저는 onUpgrade 에서 테이블이 새로 생성된 뒤 이 함수가 호출되어
   /// 무조건 ALTER 를 때리면 "duplicate column name" 예외가 난다. onUpgrade 에서 던진
   /// 예외는 openDatabase 전체를 실패시키므로, 그 유저의 DB 는 영원히 열리지 않는다.
   /// (v1.5.4 이전까지 실제로 그랬다.)
-  static Future<void> _addPlanTypeColumn(Database db) async {
+  @visibleForTesting
+  static Future<void> ensurePlanTypeColumn(Database db) async {
     final columns = await db.rawQuery('PRAGMA table_info(study_plan)');
 
     // 테이블 자체가 없으면 최신 스키마로 만든다 (plan_type 포함).
     if (columns.isEmpty) {
-      await _createStudyPlanTables(db);
+      await createStudyPlanTables(db);
       return;
     }
 
@@ -208,7 +209,8 @@ class DatabaseService {
         "ALTER TABLE study_plan ADD COLUMN plan_type TEXT DEFAULT '14day'");
   }
 
-  static Future<void> _createStudyPlanTables(Database db) async {
+  @visibleForTesting
+  static Future<void> createStudyPlanTables(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS study_plan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
