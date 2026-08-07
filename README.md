@@ -11,19 +11,29 @@
 - 절박함을 시각적으로 전달하는 다크 UI
 
 ### AI 출제 예측 엔진
-- 2023~2025년 기출 빈도 기반 가중치 계산
+- 2020~2026년 문항 빈도 기반 가중치 계산
 - `priority_score = 빈출도(40%) + 최신성(30%) + 유형가중치(20%) + 약점(10%)`
-- 코드 읽기, SQL 문제를 최우선으로 출제
+- 상위 우선순위 풀에서 무작위로 뽑는다. 정렬 결과를 그대로 자르면 점수가
+  결정적이라 매 세션 똑같은 문제만 나오기 때문
 
 ### 스파르타 오답노트
 - 에빙하우스 망각곡선 기반 8단계 간격 반복 (1분 ~ 14일)
-- 정답 시 다음 단계로 승격, 오답 시 2단계 강등
-- 복습 시기가 된 문제를 자동으로 큐에 올림
+- 정답 시 다음 단계로 승격, **오답 시 처음(1분)으로 리셋**
+- 복습 시기가 되면 알림으로 알려줌
+
+### 합격 예측 점수
+- 실기 60점 합격 기준으로 현재 실력을 환산
+- 유형별 배점(코드분석 40% / SQL 30% / 단답형 30%) 가중 평균
+- 표본이 적으면 합격선 쪽으로 축소 보정 — 5문제 맞히고 "합격 확실"이라고
+  말하지 않는다 (20문제 미만은 예측하지 않음)
+
+### 복습 알림
+- 다음 복습 예정 시각에 1건, 시험 D-30 / D-7 / D-1 아침 9시
+- 권한은 첫 실행이 아니라 "틀린 문제가 쌓인" 시점에 제안한다
 
 ### 다크 모드 코드 뷰어
-- VS Code 스타일 Syntax Highlighting
-- C, Java, SQL 키워드별 색상 구분
 - 모노스페이스 폰트로 코드 가독성 극대화
+- 신택스 하이라이팅은 v1.3.0+16 에서 제거됨 (긴 코드에서 성능 문제)
 
 ### 정답/오답 이펙트
 - 정답: 초록색 플래시 + 체크 아이콘 애니메이션
@@ -34,9 +44,12 @@
 - 과목별, 유형별 정답률 분석
 - 연속 학습일 트래킹
 
-### AdMob 전면광고
-- 연속 5문제 풀이 후 인터스티셜 광고 표시
-- Google 테스트 광고 ID 적용 (프로덕션 전환 시 교체)
+### 수익화
+- 배너 + 전면광고(`AppConfig.adIntervalQuestions` 문제마다). 광고는 채점 직후가
+  아니라 **다음 문제로 넘어갈 때** 표시 — 정답/오답 결과를 덮지 않도록
+- 리워드 광고: 모의고사 무료 1회를 다 쓰면 광고를 보고 1회 더 (하루 상한 2회)
+- 프리미엄 4,900원 — **1회성 비소모성(평생 이용)**. 광고 제거 + 무제한
+- ⚠️ 리워드 광고 ID 는 아직 Google 테스트 ID. `ad_service.dart` 참조
 
 ## 기술 스택
 
@@ -53,32 +66,52 @@
 
 ```
 lib/
-├── config.dart                  # 앱 설정 (템플릿 변수)
-├── main.dart                    # 엔트리포인트 + MultiProvider
-├── models/
-│   ├── question.dart            # 문제 모델
-│   ├── answer_record.dart       # 풀이 기록 모델
-│   └── study_stats.dart         # 학습 통계 모델
+├── config.dart                      # 앱 설정 + 시험 일정(자동 회차 전환)
+├── main.dart                        # 엔트리포인트 + MultiProvider + ATT/알림 초기화
+├── models/                          # question / answer_record / study_stats / study_plan
 ├── services/
-│   ├── database_service.dart    # SQLite 스키마 + CRUD
-│   ├── question_seed_data.dart  # 초기 더미 데이터 10문제
-│   ├── prediction_engine.dart   # 출제 예측 엔진
-│   ├── spaced_repetition_service.dart  # 에빙하우스 반복
-│   └── ad_service.dart          # AdMob 전면광고
-├── providers/
-│   ├── study_provider.dart      # 퀴즈 플로우 상태 관리
-│   └── stats_provider.dart      # 통계 상태 관리
-├── screens/
-│   ├── home_screen.dart         # 메인 (D-Day + 모드 선택)
-│   ├── quiz_screen.dart         # 문제 풀이
-│   ├── wrong_answer_screen.dart # 스파르타 오답노트
-│   └── stats_screen.dart        # 학습 통계
+│   ├── database_service.dart        # 스키마 + 마이그레이션(runMigrations) + CRUD
+│   ├── answer_checker.dart          # 채점 로직 **단일 정본** (사본 만들지 말 것)
+│   ├── prediction_engine.dart       # 출제 예측 + 세션 선정(selectForSession)
+│   ├── spaced_repetition_service.dart  # 에빙하우스 반복 + 알림 재예약
+│   ├── pass_predictor.dart          # 합격 예측 점수 (60점 기준)
+│   ├── notification_service.dart    # 복습/D-Day 알림
+│   ├── ai_exam_quota.dart           # 모의고사 무료 쿼터 + 광고 보상
+│   ├── ad_service.dart              # 배너/전면/리워드 광고
+│   ├── purchase_service.dart        # 인앱결제 + 구매 영속화
+│   └── study_plan_service.dart      # 학습 플랜 미션
+├── providers/                       # study_provider / stats_provider
+├── screens/                         # home / quiz / past_exam / ai_prediction /
+│                                    # cheat_sheet / stats / study_plan / subscription
+├── utils/duration_format.dart       # 경과 시간 표기 정본
 └── widgets/
-    ├── dday_timer.dart          # D-Day 카운트다운
-    ├── code_viewer.dart         # 다크 코드 뷰어
-    ├── answer_effect.dart       # 정답/오답 이펙트
-    └── question_card.dart       # 문제 카드
+    ├── answer_checker 계열          # answer_input_field(입력창 정본) / answer_effect
+    ├── pass_score_card.dart         # 합격 예측 카드
+    ├── exam_quota_dialog.dart       # 쿼터 소진 안내 정본
+    ├── notification_opt_in.dart     # 알림 권한 제안
+    └── dday_timer / question_card / code_viewer / smooth_transition
+
+test/
+├── wiring_test.dart                 # **배선 테스트** — 부품이 아니라 연결을 검증
+├── answer_checker_test.dart         # 채점 규칙
+├── db_migration_test.dart           # 마이그레이션 (실기기 없이)
+├── purchase_persistence_test.dart   # 구매 영속화 (쓰기+읽기)
+├── pass_predictor_test.dart         # 합격 예측
+├── ai_exam_quota_test.dart          # 쿼터 + 광고 보상
+├── answer_recording_test.dart       # "채점하면 반드시 기록한다" 불변식
+└── widget_test.dart                 # 입력창 / 정답 이펙트 오버레이
 ```
+
+### 이 코드베이스에서 반복된 실패 패턴
+
+두 가지가 계속 사고를 냈다. 새 코드를 짤 때 반드시 피할 것.
+
+1. **같은 로직을 복붙하고 한쪽만 고친다.** 채점 로직 3벌, 입력창 3벌, 시간 표기
+   5벌, DB 기록 3벌 중 1벌만 구현 — 전부 실제 버그로 이어졌다.
+   정본 파일이 있으면 그것만 쓸 것.
+2. **테스트가 부품만 검증하고 연결을 안 본다.** 핵심 수정 3개를 통째로 되돌려도
+   테스트 77건이 전부 통과한 적이 있다. 테스트를 추가할 때는
+   **"그 버그를 되돌리면 이 테스트가 실제로 실패하는가"** 를 반드시 확인할 것.
 
 ## 시작하기
 
@@ -99,9 +132,21 @@ flutter run
 
 ```bash
 flutter run -d chrome    # 웹
-flutter run -d macos     # macOS (Xcode 필요)
 flutter run               # 연결된 모바일 디바이스
 ```
+
+### 시뮬레이터에서 검증하기
+
+정적 검증(test/analyze/build)이 전부 통과하는데도 릴리즈에서 앱이 깨지는
+버그가 실제로 있었다(Overlay ParentDataWidget). 배포 전 한 번은 띄워볼 것.
+
+```bash
+xcrun simctl boot "iPhone 17 Pro"
+flutter test integration_test/app_test.dart -d <시뮬레이터ID> --dart-define=SKIP_ATT=true
+```
+
+`SKIP_ATT` 는 ATT 시스템 모달이 자동화를 덮는 것을 막는다(시뮬레이터는
+`simctl privacy` 로 이 권한을 미리 설정할 수 없다). 실제 빌드에는 영향이 없다.
 
 ## 템플릿 시스템
 
@@ -170,21 +215,58 @@ class AppConfig {
 | consecutive_correct | INTEGER | 연속 정답 수 |
 | last_reviewed_at | TEXT | 마지막 복습 시각 |
 
-## 시드 데이터
+## 문제 데이터
 
-초기 10문제가 포함되어 있습니다:
-- C 포인터 변수 출력
-- C 배열 반복문 합계
-- Java 상속 오버라이딩
-- Java 추상 클래스 구현
-- SQL SELECT JOIN
-- SQL GROUP BY HAVING
-- SQL 서브쿼리
-- OSI 7계층 순서
-- 디자인 패턴 (팩토리 메서드)
-- 소프트웨어 테스트 기법 (경계값 분석)
+`assets/questions/*.json` 에 **총 1,000문항**.
+
+| 파일 | 문항 수 |
+|------|--------|
+| `c_questions.json` | 150 |
+| `java_questions.json` | 150 |
+| `python_questions.json` | 150 |
+| `sql_questions.json` | 192 |
+| `short_answer_questions.json` | 358 |
+
+이 중 **125문항은 정답이 여러 줄**이다(실행 결과 문제). 채점과 입력 처리에서
+늘 특수 케이스이므로 `AnswerChecker` / `AnswerInputField` 를 고칠 때 반드시 확인할 것.
+
+문제 데이터는 최초 설치 때 DB 에 시딩되고, 이후 수정은 `syncQuestionsFromAssets`
+(DB v6 마이그레이션)로 기존 유저에게 반영된다. **id 를 보존**해야 학습 이력이
+엉뚱한 문제에 붙지 않는다.
 
 ## 변경 이력
+
+### v1.6.0+24 (2026-08-08)
+
+다중 에이전트 감사·QA(총 330여 개 에이전트)로 확정된 결함을 정리하고,
+3회차 시험 대비 기능 3건을 추가했다.
+
+#### 새 기능
+- **복습 알림** — 에빙하우스 반복 엔진은 처음부터 있었지만 알려줄 수단이 없어
+  절반만 돌고 있었다. 복습 시기와 D-30/7/1 을 알림으로 연결.
+  권한은 첫 실행이 아니라 "틀린 문제가 쌓인" 시점에만 제안한다
+- **합격 예측 점수** — 실기 60점 합격 기준으로 환산. 유형별 배점(코드분석 40%,
+  SQL 30%, 단답형 30%)을 가중하고, 표본이 적으면 합격선 쪽으로 축소 보정한다
+- **리워드 광고** — 모의고사 무료 1회를 다 쓰면 광고를 보고 1회 더.
+  새 수익원이자 프리미엄 체험 통로. 하루 보너스 상한 2회
+
+#### 주요 수정 (상세는 docs/AUDIT_TODO.md)
+- 결제: 재시작 시 프리미엄 소실, 스토어 연결 실패 시 결제 미반영, 자동 복원,
+  저장 실패 시 트랜잭션 종결, 백업으로 인한 프리미엄 복제
+- 채점: 여러 줄 정답(125문항), 엔터 줄바꿈, 순서 채점, 대소문자, 괄호 표기
+- 데이터: 정답 오류 6건 + 기존 유저 반영 마이그레이션(DB v6, id 보존)
+- 학습: 문제은행 풀이 DB 미기록, 오답노트 영구 미졸업, 복습 간격 1분 고정
+- 광고: 전면광고 영구 중단, 동시 로드 유실, 채점 결과를 덮는 타이밍, ATT 순서
+- 통계: 자동 갱신 부재, 완료율 중복 집계, 플랜 정답률 100% 고정
+
+#### 검증 체계
+- 테스트 27건 → **109건**. `analyze` 경고 0건
+- **배선 테스트 도입** — 이 앱의 반복 실패 패턴은 "부품은 멀쩡한데 연결이 빠진 것"
+  이었다. 실제로 핵심 수정 3개를 되돌려도 기존 테스트 77건이 전부 통과했다.
+  이제 연결 자체를 검증한다
+- **시뮬레이터 실행 검증 복구** — `SUPPORTED_PLATFORMS = iphoneos` 때문에
+  시뮬레이터 빌드가 아예 불가능했다. 통합 테스트도 D-Day 타이머 때문에
+  `pumpAndSettle` 이 영원히 끝나지 않아 한 번도 실행된 적이 없었다. 둘 다 복구
 
 ### v1.5.4+23 (2026-08-07)
 
