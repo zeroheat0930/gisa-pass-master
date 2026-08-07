@@ -293,7 +293,7 @@
     "questionText": "다음 C 프로그램의 실행 결과를 쓰시오.",
     "codeSnippet": "#include <stdio.h>\nint main() {\n    int x = 3;\n    switch(x) {\n        case 1: printf(\"one\");\n        case 2: printf(\"two\");\n        case 3: printf(\"three\");\n        case 4: printf(\"four\");\n        default: printf(\"other\");\n    }\n    return 0;\n}",
     "codeLanguage": "c",
-    "answer": "threefoureother",
+    "answer": "threefourother",
     "explanation": "break가 없으므로 case 3부터 fall-through하여 three, four, other가 모두 출력된다.",
     "difficulty": 3,
     "frequencyWeight": 0.95

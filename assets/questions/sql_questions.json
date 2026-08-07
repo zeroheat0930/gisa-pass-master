@@ -20,7 +20,7 @@
     "questionText": "[성적] 테이블\n| 학번 | 과목 | 점수 |\n|------|------|------|\n| 1001 | DB | 90 |\n| 1001 | OS | 85 |\n| 1002 | DB | 78 |\n| 1002 | OS | 92 |\n| 1003 | DB | 95 |\n\n다음 SQL의 실행 결과를 쓰시오.",
     "codeSnippet": "SELECT 학번, AVG(점수) AS 평균 FROM 성적 GROUP BY 학번 HAVING AVG(점수) >= 88;",
     "codeLanguage": "sql",
-    "answer": "1001, 87.5\n1003, 95",
+    "answer": "1003, 95",
     "explanation": "학번별 평균: 1001=87.5, 1002=85, 1003=95. 88 이상: 1003만 해당. 단, 87.5는 88 미만이므로 1003만 출력.",
     "difficulty": 3,
     "frequencyWeight": 0.9
@@ -839,7 +839,7 @@
     "questionText": "[성적] 테이블\n| 학번 | 과목 | 점수 |\n|------|------|------|\n| 1 | DB | 90 |\n| 1 | OS | 85 |\n| 2 | DB | 75 |\n| 2 | OS | 80 |\n| 3 | DB | 95 |\n| 3 | OS | 90 |\n\n다음 SQL의 실행 결과를 쓰시오.",
     "codeSnippet": "SELECT 학번, SUM(점수) AS 합계 FROM 성적 GROUP BY 학번 HAVING SUM(점수) >= 180 ORDER BY 합계 DESC;",
     "codeLanguage": "sql",
-    "answer": "3, 185\n1, 175",
+    "answer": "3, 185",
     "explanation": "학번별 합계: 1=175, 2=155, 3=185. 180 이상: 3(185), 1(175). 오답: 1은 175로 180 미만이므로 3만 출력.",
     "difficulty": 3,
     "frequencyWeight": 0.85
@@ -878,7 +878,7 @@
     "questionText": "[상품] 테이블\n| 코드 | 이름 | 카테고리 | 가격 |\n|------|------|----------|------|\n| 1 | 노트북 | 전자 | 1200000 |\n| 2 | 마우스 | 전자 | 25000 |\n| 3 | 책상 | 가구 | 300000 |\n| 4 | 의자 | 가구 | 150000 |\n| 5 | 모니터 | 전자 | 400000 |\n\n다음 SQL의 실행 결과를 쓰시오.",
     "codeSnippet": "SELECT 카테고리, COUNT(*) AS 수량, AVG(가격) AS 평균가 FROM 상품 GROUP BY 카테고리 HAVING AVG(가격) > 200000;",
     "codeLanguage": "sql",
-    "answer": "전자, 3, 541666.67",
+    "answer": "전자, 3, 541666.67\n가구, 2, 225000",
     "explanation": "전자(3개, 평균=(1200000+25000+400000)/3≈541666.67), 가구(2개, 평균=225000). 20만 초과: 전자, 가구 둘 다.",
     "difficulty": 3,
     "frequencyWeight": 0.85
@@ -969,7 +969,7 @@
     "questionText": "[주문] 테이블\n| 주문번호 | 고객 | 상품 | 수량 | 단가 |\n|----------|------|------|------|------|\n| 1 | 김 | A | 2 | 1000 |\n| 2 | 이 | B | 3 | 2000 |\n| 3 | 김 | B | 1 | 2000 |\n| 4 | 박 | A | 5 | 1000 |\n\n다음 SQL의 실행 결과를 쓰시오.",
     "codeSnippet": "SELECT 고객, SUM(수량 * 단가) AS 총구매액 FROM 주문 GROUP BY 고객 ORDER BY 총구매액 DESC;",
     "codeLanguage": "sql",
-    "answer": "박, 5000\n이, 6000\n김, 4000",
+    "answer": "이, 6000\n박, 5000\n김, 4000",
     "explanation": "김: 2*1000+1*2000=4000. 이: 3*2000=6000. 박: 5*1000=5000. 내림차순: 이(6000), 박(5000), 김(4000).",
     "difficulty": 2,
     "frequencyWeight": 0.85

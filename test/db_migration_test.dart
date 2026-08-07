@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -15,6 +18,8 @@ import 'package:gisa_pass_master/services/database_service.dart';
 ///
 /// 실기기로 재현하려면 구버전 빌드를 설치해야 해서 확인이 어렵다. 여기서 대신 잡는다.
 void main() {
+  // rootBundle 로 에셋(문제 JSON)을 읽으려면 바인딩이 필요하다.
+  TestWidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
@@ -124,4 +129,148 @@ void main() {
       expect(rows.first['plan_type'], '14day', reason: '기본값이 채워져야 한다');
     });
   });
+
+  // 문제 데이터는 최초 설치 때 1회만 시딩되어, 정답 오류를 고쳐도 기존 유저에게
+  // 반영되지 않았다(DB v6 마이그레이션으로 해결). 이 동기화는 id 를 반드시 보존해야
+  // 한다. answer_records / bookmarks / spaced_repetition 이 question_id 로 참조하므로,
+  // id 가 바뀌면 유저의 학습 이력이 엉뚱한 문제에 붙는다.
+  group('questions 에셋 동기화 (DB v6)', () {
+    Future<void> createQuestionsTable(Database db) => db.execute('''
+      CREATE TABLE questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        year INTEGER NOT NULL,
+        round INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        question_type TEXT NOT NULL,
+        question_text TEXT NOT NULL,
+        code_snippet TEXT,
+        code_language TEXT,
+        answer TEXT NOT NULL,
+        explanation TEXT NOT NULL,
+        difficulty INTEGER DEFAULT 3,
+        frequency_weight REAL DEFAULT 0.5
+      )
+    ''');
+
+    test('틀린 정답이 갱신되고 id 는 유지된다', () async {
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+
+      // 에셋에서 실제 문항을 가져와, 정답만 틀린 상태로 심어둔다 (구버전 유저 재현)
+      final raw = await rootBundle.loadString('assets/questions/c_questions.json');
+      final target = (json.decode(raw) as List)[22];
+
+      final id = await db.insert('questions', {
+        'year': target['year'],
+        'round': target['round'],
+        'subject': target['subject'],
+        'question_type': target['questionType'],
+        'question_text': target['questionText'],
+        'code_snippet': target['codeSnippet'],
+        'code_language': target['codeLanguage'],
+        'answer': 'WRONG_OLD_ANSWER',
+        'explanation': '옛 해설',
+      });
+
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      final rows =
+          await db.query('questions', where: 'id = ?', whereArgs: [id]);
+      expect(rows.length, 1, reason: '행이 사라지면 안 된다');
+      expect(rows.first['answer'], target['answer'],
+          reason: '에셋의 정답으로 갱신되어야 한다');
+      expect(rows.first['answer'], isNot('WRONG_OLD_ANSWER'));
+      expect(rows.first['id'], id, reason: 'id 가 바뀌면 학습 이력이 어긋난다');
+    });
+
+    test('유저의 학습 이력이 계속 같은 문제를 가리킨다', () async {
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+      await db.execute('''
+        CREATE TABLE answer_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          question_id INTEGER NOT NULL,
+          is_correct INTEGER NOT NULL,
+          user_answer TEXT NOT NULL,
+          answered_at TEXT NOT NULL
+        )
+      ''');
+
+      final raw = await rootBundle.loadString('assets/questions/c_questions.json');
+      final target = (json.decode(raw) as List)[22];
+
+      final qid = await db.insert('questions', {
+        'year': target['year'],
+        'round': target['round'],
+        'subject': target['subject'],
+        'question_type': target['questionType'],
+        'question_text': target['questionText'],
+        'code_snippet': target['codeSnippet'],
+        'code_language': target['codeLanguage'],
+        'answer': 'WRONG_OLD_ANSWER',
+        'explanation': '옛 해설',
+      });
+      await db.insert('answer_records', {
+        'question_id': qid,
+        'is_correct': 0,
+        'user_answer': 'threefourother',
+        'answered_at': '2026-08-01T00:00:00.000',
+      });
+
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      final joined = await db.rawQuery(
+        'SELECT q.question_text FROM answer_records r '
+        'JOIN questions q ON q.id = r.question_id',
+      );
+      expect(joined.length, 1, reason: '풀이 기록이 문제를 잃으면 안 된다');
+      expect(joined.first['question_text'], target['questionText']);
+    });
+
+    test('DB 에 없던 문항은 새로 추가된다', () async {
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      final count = _firstInt(
+          await db.rawQuery('SELECT COUNT(*) FROM questions'));
+      expect(count, 1000, reason: '에셋의 전체 문항이 들어와야 한다');
+    });
+
+    test('두 번 실행해도 문항이 중복되지 않는다 (멱등)', () async {
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+
+      await DatabaseService.syncQuestionsFromAssets(db);
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      final count = _firstInt(
+          await db.rawQuery('SELECT COUNT(*) FROM questions'));
+      expect(count, 1000, reason: '재실행이 문항을 복제하면 안 된다');
+    });
+
+    test('감사에서 확정된 정답 오류가 실제로 고쳐져 있다', () async {
+      Future<Map<String, dynamic>> item(String file, int i) async {
+        final raw = await rootBundle.loadString('assets/questions/$file');
+        return (json.decode(raw) as List)[i] as Map<String, dynamic>;
+      }
+
+      expect((await item('c_questions.json', 22))['answer'], 'threefourother');
+      expect((await item('java_questions.json', 55))['answer'], '-80');
+      expect((await item('sql_questions.json', 1))['answer'], '1003, 95');
+      expect((await item('sql_questions.json', 64))['answer'], '3, 185');
+      expect((await item('sql_questions.json', 67))['answer'],
+          '전자, 3, 541666.67\n가구, 2, 225000');
+      expect((await item('sql_questions.json', 74))['answer'],
+          '이, 6000\n박, 5000\n김, 4000');
+    });
+  });
 }
+
+int? _firstInt(List<Map<String, Object?>> rows) =>
+    rows.isEmpty ? null : rows.first.values.first as int?;

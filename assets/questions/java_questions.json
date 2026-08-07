@@ -722,8 +722,8 @@
     "questionText": "다음 Java 프로그램의 실행 결과를 쓰시오.",
     "codeSnippet": "public class Main {\n    public static void main(String[] args) {\n        int x = 10;\n        x += x -= x *= x;\n        System.out.print(x);\n    }\n}",
     "codeLanguage": "java",
-    "answer": "0",
-    "explanation": "x *= x → x=100. x -= 100 → x=0. x += 0 → x=0.",
+    "answer": "-80",
+    "explanation": "Java의 복합대입 연산자는 좌변의 값을 우변 평가 전에 저장한다. x += x -= x *= x 는 x += (x -= (x *= x)) 로 묶인다. 가장 안쪽 x *= x 는 저장된 10에 10을 곱해 100(x=100). 다음 x -= 100 은 이미 저장해둔 10에서 100을 빼 -90(x=-90). 마지막 x += -90 도 저장해둔 10에 -90을 더해 -80이 된다. 중간에 x가 바뀌어도 저장된 값을 쓰는 것이 핵심이다.",
     "difficulty": 4,
     "frequencyWeight": 0.8
   },
