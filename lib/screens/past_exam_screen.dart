@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:provider/provider.dart';
 import '../config.dart';
 import '../models/question.dart';
+import '../providers/study_provider.dart';
 import '../services/ad_service.dart';
 import '../services/answer_checker.dart';
 import '../services/database_service.dart';
@@ -438,6 +440,15 @@ class _QuizScreenState extends State<_QuizScreen> {
     if (answer.isEmpty) return;
     final question = widget.questions[_currentIndex];
     final correct = AnswerChecker.isCorrectFor(question, answer);
+
+    // 풀이를 DB에 기록한다. 이게 빠져 있어서 문제은행 탭에서 아무리 풀어도
+    // 통계·오답노트·스트릭·AI 예측이 전부 0으로 남았다.
+    unawaited(context.read<StudyProvider>().recordAnswer(
+          question: question,
+          userAnswer: answer,
+          isCorrect: correct,
+        ));
+
     setState(() {
       _userAnswers.add(answer);
       _isCorrectList.add(correct);

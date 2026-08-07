@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:provider/provider.dart';
 import '../config.dart';
 import '../models/question.dart';
+import '../providers/study_provider.dart';
 import '../services/ad_service.dart';
 import '../services/answer_checker.dart';
 import '../widgets/answer_input_field.dart';
@@ -101,6 +103,13 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
 
     final question = widget.questions[_currentIndex];
     final correct = AnswerChecker.isCorrectFor(question, answer);
+
+    // 풀이를 DB에 기록한다 (문제은행 탭과 동일한 누락이 여기에도 있었다).
+    unawaited(context.read<StudyProvider>().recordAnswer(
+          question: question,
+          userAnswer: answer,
+          isCorrect: correct,
+        ));
 
     setState(() {
       _userAnswers.add(answer);

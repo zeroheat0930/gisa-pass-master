@@ -175,19 +175,7 @@ class StudyProvider extends ChangeNotifier {
     _isCorrect = correct;
     notifyListeners();
 
-    // 답안 기록 DB 저장
-    final record = AnswerRecord(
-      questionId: question.id!,
-      isCorrect: correct,
-      userAnswer: trimmedAnswer,
-      answeredAt: DateTime.now(),
-    );
-    await _db.insertAnswerRecord(record);
-
-    // 스파르타 오답노트 스케줄 갱신 — 정답일 때도 반드시 호출한다.
-    // 정답을 걸러내면 stage 승격이 일어나지 않아 오답노트가 영원히 비워지지 않고
-    // 복습 간격도 1분에 고정된다. '오답만 큐에 진입' 규칙은 서비스 내부가 담당한다.
-    await _spacedRepetitionService.processAnswer(question.id!, correct);
+    await _persistAnswer(question.id!, trimmedAnswer, correct);
 
     // 콤보 카운트 갱신
     if (correct) {
@@ -228,6 +216,37 @@ class StudyProvider extends ChangeNotifier {
   }
 
   // === 내부 헬퍼 ===
+
+  /// 문제은행·AI 모의고사처럼 StudyProvider 의 문제 흐름을 쓰지 않는 화면에서
+  /// 풀이 결과를 기록한다.
+  ///
+  /// 이 경로가 없어서 해당 화면들의 풀이가 **DB에 전혀 기록되지 않았고**,
+  /// 통계·오답노트·스트릭·AI 예측이 모두 0으로 남았다. 기록 로직을 화면마다
+  /// 복붙하면 또 한쪽만 고쳐지므로, 반드시 이 진입점을 쓸 것.
+  Future<void> recordAnswer({
+    required Question question,
+    required String userAnswer,
+    required bool isCorrect,
+  }) async {
+    if (question.id == null) return;
+    await _persistAnswer(question.id!, userAnswer.trim(), isCorrect);
+  }
+
+  /// 풀이 기록 + 복습 스케줄 갱신 (단일 정본)
+  Future<void> _persistAnswer(
+      int questionId, String userAnswer, bool isCorrect) async {
+    await _db.insertAnswerRecord(AnswerRecord(
+      questionId: questionId,
+      isCorrect: isCorrect,
+      userAnswer: userAnswer,
+      answeredAt: DateTime.now(),
+    ));
+
+    // 스파르타 오답노트 스케줄 갱신 — 정답일 때도 반드시 호출한다.
+    // 정답을 걸러내면 stage 승격이 일어나지 않아 오답노트가 영원히 비워지지 않고
+    // 복습 간격도 1분에 고정된다. '오답만 큐에 진입' 규칙은 서비스 내부가 담당한다.
+    await _spacedRepetitionService.processAnswer(questionId, isCorrect);
+  }
 
   /// 모든 문제의 오답률 계산 (PredictionEngine 입력용) — 단일 쿼리
   Future<Map<int, double>> _buildErrorRates(List<Question> questions) async {
