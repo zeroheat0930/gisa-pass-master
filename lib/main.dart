@@ -48,7 +48,7 @@ void main() async {
   final db = DatabaseService();
   final predictionEngine = PredictionEngine();
   final spacedRepetitionService = SpacedRepetitionService(db);
-  final adService = AdService()..loadInterstitialAd();
+  final adService = AdService();
   setGlobalAdService(adService);
   final purchaseService = PurchaseService()..setAdService(adService);
   final studyPlanService = StudyPlanService(db);
@@ -59,6 +59,9 @@ void main() async {
   } catch (e) {
     debugPrint('Purchase init failed: $e');
   }
+
+  // 전면광고 프리로드는 프리미엄 여부가 확정된 뒤에 — 결제 유저의 광고 요청 낭비 방지
+  adService.loadInterstitialAd();
 
   // DB 워밍업 — 첫 쿼리 전에 DB 준비 (흰 화면 방지)
   try {

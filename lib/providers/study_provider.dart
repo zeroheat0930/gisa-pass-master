@@ -6,6 +6,7 @@ import '../services/database_service.dart';
 import '../services/prediction_engine.dart';
 import '../services/spaced_repetition_service.dart';
 import '../services/ad_service.dart';
+import '../services/answer_checker.dart';
 
 /// 학습 모드 열거형
 enum StudyMode {
@@ -167,7 +168,7 @@ class StudyProvider extends ChangeNotifier {
     if (question == null || _isAnswered || question.id == null) return;
 
     final trimmedAnswer = answer.trim();
-    final correct = _isCorrectAnswer(trimmedAnswer, question.answer);
+    final correct = AnswerChecker.isCorrectFor(question, trimmedAnswer);
 
     _userAnswer = trimmedAnswer;
     _isAnswered = true;
@@ -183,10 +184,10 @@ class StudyProvider extends ChangeNotifier {
     );
     await _db.insertAnswerRecord(record);
 
-    // 스파르타 오답노트: 틀린 문제만 복습 스케줄에 등록
-    if (!correct) {
-      await _spacedRepetitionService.processAnswer(question.id!, correct);
-    }
+    // 스파르타 오답노트 스케줄 갱신 — 정답일 때도 반드시 호출한다.
+    // 정답을 걸러내면 stage 승격이 일어나지 않아 오답노트가 영원히 비워지지 않고
+    // 복습 간격도 1분에 고정된다. '오답만 큐에 진입' 규칙은 서비스 내부가 담당한다.
+    await _spacedRepetitionService.processAnswer(question.id!, correct);
 
     // 콤보 카운트 갱신
     if (correct) {
@@ -227,29 +228,6 @@ class StudyProvider extends ChangeNotifier {
   }
 
   // === 내부 헬퍼 ===
-
-  /// 답안 비교 (줄바꿈, 쉼표 순서, 공백, 대소문자 무시)
-  static bool _isCorrectAnswer(String userAnswer, String correctAnswer) {
-    String normalize(String s) => s
-        .trim()
-        .replaceAll('\n', ', ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .toLowerCase();
-
-    final normUser = normalize(userAnswer);
-    final normCorrect = normalize(correctAnswer);
-    if (normUser == normCorrect) return true;
-
-    // 공백 완전 제거 비교 (상호배제 vs 상호 배제)
-    if (normUser.replaceAll(' ', '') == normCorrect.replaceAll(' ', '')) return true;
-
-    // 쉼표 리스트 순서 무관 비교
-    Set<String> tokens(String s) =>
-        s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
-    if (tokens(normUser) == tokens(normCorrect)) return true;
-
-    return false;
-  }
 
   /// 모든 문제의 오답률 계산 (PredictionEngine 입력용) — 단일 쿼리
   Future<Map<int, double>> _buildErrorRates(List<Question> questions) async {

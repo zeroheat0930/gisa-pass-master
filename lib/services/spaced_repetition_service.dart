@@ -25,8 +25,18 @@ class SpacedRepetitionService {
   /// 답안 처리: DB의 spaced_repetition 테이블 갱신
   /// 정답 시: stage +1 (최대 7), consecutiveCorrect +1
   /// 오답 시: stage -2 (최소 0), consecutiveCorrect 초기화
+  ///
+  /// **정답일 때도 반드시 호출해야 한다.** v1.5.4 이전에는 호출부가 오답일 때만
+  /// 이 함수를 불러서 stage 승격이 아예 일어나지 않았고, 그 결과
+  /// (1) 한 번 오답노트에 들어간 문제가 영원히 졸업하지 못해 큐가 줄지 않았고
+  /// (2) stage 가 0 에 고정되어 복습 간격이 항상 1분이었다.
+  /// 큐 진입 조건(오답만 등록)은 호출부가 아니라 아래 가드가 책임진다.
   Future<void> processAnswer(int questionId, bool isCorrect) async {
     final existing = await _db.getSpacedRepetition(questionId);
+
+    // 아직 복습 대상이 아닌 문제를 정답 처리한 경우엔 큐에 넣지 않는다.
+    // 오답노트는 '틀린 적 있는 문제'만 담는다.
+    if (isCorrect && existing == null) return;
 
     int currentStage = existing?['stage'] as int? ?? 0;
     int consecutiveCorrect = existing?['consecutive_correct'] as int? ?? 0;

@@ -2,17 +2,32 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'ad_service.dart';
 
 class PurchaseService extends ChangeNotifier {
+  // 1회성 비소모성 상품 (평생 이용) — ID 의 `_monthly` 는 초기 명명 잔재로, 구독이 아님
   static const String premiumMonthlyId = 'gisa_pass_premium_monthly';
+
+  /// 구매 완료 사실을 기기에 영속 저장하는 키.
+  /// 스토어는 이미 완료(completePurchase)된 트랜잭션을 앱 재시작 시 스트림으로
+  /// 다시 보내주지 않으므로, 이 캐시가 없으면 결제한 유저가 앱을 껐다 켤 때마다
+  /// 프리미엄을 잃는다.
+  static const String _prefsKeyPremium = 'premium_purchased';
+
+  /// 설치 후 자동 복원을 이미 시도했는지 여부 (설치당 1회로 제한).
+  static const String _prefsKeyAutoRestored = 'premium_auto_restore_done';
 
   // 관리자 기기: 자동 프리미엄 (결제 불필요)
   static const Set<String> _adminDeviceIds = {
     '91ED9D8E-7430-4194-B9D0-D0099A772E02', // 정동준의 iPhone
   };
 
-  final InAppPurchase _iap = InAppPurchase.instance;
+  /// 지연 평가한다. 필드 초기화로 두면 PurchaseService 를 만드는 것만으로
+  /// 스토어 연결이 시작되어, 스토어를 쓰지 않는 경로(로컬 캐시 복원 등)와
+  /// 테스트 환경에서 플랫폼 예외가 튄다.
+  InAppPurchase get _iap => InAppPurchase.instance;
+
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   AdService? _adService;
 
@@ -35,6 +50,10 @@ class PurchaseService extends ChangeNotifier {
   Future<void> initialize() async {
     if (kIsWeb) return;
 
+    // 저장된 구매 이력 복원 — 스토어 통신보다 먼저, 오프라인에서도 동작해야 한다.
+    // 여기서 광고를 즉시 끄지 않으면 결제 유저에게 첫 화면 광고가 새어나간다.
+    await _loadCachedPremium();
+
     // 관리자 기기 체크 (iOS 만 해당 — Android 는 AD_ID 권한 정책상 식별자 제한)
     try {
       if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -52,6 +71,16 @@ class PurchaseService extends ChangeNotifier {
       debugPrint('기기 정보 확인 실패: $e');
     }
 
+    // purchaseStream 구독은 스토어 가용성과 무관하게 **가장 먼저** 건다.
+    // 예전에는 isAvailable() 이 false 면 여기까지 오지 못하고 return 해서 구독이
+    // 영영 생성되지 않았다. 그 세션에서는 결제를 완료해도 콜백이 오지 않아
+    // 프리미엄이 켜지지 않았다(결제만 되고 물건은 안 나오는 상태).
+    _subscription ??= _iap.purchaseStream.listen(
+      _onPurchaseUpdate,
+      onDone: () => _subscription?.cancel(),
+      onError: (error) => debugPrint('구매 에러: $error'),
+    );
+
     try {
       _available = await _iap.isAvailable();
       debugPrint('IAP available: $_available');
@@ -61,17 +90,64 @@ class PurchaseService extends ChangeNotifier {
         return;
       }
 
-      _subscription = _iap.purchaseStream.listen(
-        _onPurchaseUpdate,
-        onDone: () => _subscription?.cancel(),
-        onError: (error) => debugPrint('구매 에러: $error'),
-      );
-
       await _loadProducts();
+      await _autoRestoreOnce();
     } catch (e) {
       debugPrint('IAP 초기화 실패: $e');
       _error = '스토어 초기화 실패';
       notifyListeners();
+    }
+  }
+
+  /// 설치 후 한 번만 자동으로 구매를 복원한다.
+  ///
+  /// 평생 이용권이라 재설치·기기변경 시에도 되살아나야 하는데, 로컬 캐시는
+  /// 재설치로 사라진다. 그렇다고 매 실행마다 복원을 걸면 iOS 에서
+  /// restoreCompletedTransactions 가 App Store 로그인 팝업을 띄울 수 있어
+  /// 무료 유저까지 매번 팝업을 맞는다. 그래서 설치당 1회로 제한한다.
+  /// (그 이후엔 구독 화면의 '구매 복원' 버튼이 담당한다.)
+  Future<void> _autoRestoreOnce() async {
+    if (_isPremium) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_prefsKeyAutoRestored) ?? false) return;
+      await prefs.setBool(_prefsKeyAutoRestored, true);
+      await _iap.restorePurchases();
+    } catch (e) {
+      debugPrint('자동 복원 실패: $e');
+    }
+  }
+
+  /// 기기에 저장된 구매 이력을 읽어 프리미엄을 즉시 복원한다.
+  Future<void> _loadCachedPremium() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_prefsKeyPremium) ?? false) {
+        _isPremium = true;
+        _adService?.setPremium(true);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('구매 이력 로드 실패: $e');
+    }
+  }
+
+  /// 구매/복원 확정 시 프리미엄을 켜고 기기에 영속 저장한다.
+  ///
+  /// 테스트에서 직접 호출할 수 있어야 한다. purchaseStream 을 통하지 않으면
+  /// '쓰기' 경로를 검증할 수 없어서, 저장 코드를 통째로 지워도 테스트가 통과해버린다.
+  @visibleForTesting
+  Future<void> grantPremium() async {
+    _isPremium = true;
+    _error = null;
+    _adService?.setPremium(true);
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefsKeyPremium, true);
+    } catch (e) {
+      debugPrint('구매 이력 저장 실패: $e');
     }
   }
 
@@ -151,10 +227,7 @@ class PurchaseService extends ChangeNotifier {
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
-        _isPremium = true;
-        _error = null;
-        _adService?.setPremium(true);
-        notifyListeners();
+        grantPremium();
 
         if (purchase.pendingCompletePurchase) {
           _iap.completePurchase(purchase);

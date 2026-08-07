@@ -7,26 +7,12 @@ import 'package:gisa_pass_master/services/spaced_repetition_service.dart';
 import 'package:gisa_pass_master/services/ad_service.dart';
 import 'package:gisa_pass_master/providers/study_provider.dart';
 import 'package:gisa_pass_master/config.dart';
+import 'package:gisa_pass_master/services/answer_checker.dart';
 
-// 답안 비교 로직 (StudyProvider._isCorrectAnswer와 동일)
-bool isCorrectAnswer(String userAnswer, String correctAnswer) {
-  String normalize(String s) => s
-      .trim()
-      .replaceAll('\n', ', ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .toLowerCase();
-
-  final normUser = normalize(userAnswer);
-  final normCorrect = normalize(correctAnswer);
-  if (normUser == normCorrect) return true;
-  if (normUser.replaceAll(' ', '') == normCorrect.replaceAll(' ', '')) return true;
-
-  final tokensUser = normUser.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
-  final tokensCorrect = normCorrect.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toSet();
-  if (tokensUser.length == tokensCorrect.length && tokensUser.containsAll(tokensCorrect)) return true;
-
-  return false;
-}
+// 예전에는 여기에 채점 로직 사본이 있었다. 사본을 검증하면 실제 앱이 틀려도
+// 테스트는 통과하므로, 정본(AnswerChecker)을 그대로 호출한다.
+bool isCorrectAnswer(String userAnswer, String correctAnswer) =>
+    AnswerChecker.isCorrect(userAnswer, correctAnswer);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,8 +34,9 @@ void main() {
   });
 
   // ─── 시나리오 2: 광고 설정 ───
-  test('adIntervalQuestions = 5', () {
-    expect(AppConfig.adIntervalQuestions, 5);
+  // v1.5.0+20 에서 간격을 5 → 3 으로 단축. 테스트 이름에 숫자를 박지 않아 다시 썩지 않게 한다.
+  test('전면광고 간격 설정', () {
+    expect(AppConfig.adIntervalQuestions, 3);
   });
 
   test('AdService shouldShowAds 정상 동작', () {
@@ -100,8 +87,22 @@ void main() {
       expect(isCorrectAnswer('개발, 6000, 영업, 4500', '개발, 6000\n영업, 4500'), true);
     });
 
-    test('쉼표 리스트 순서 무관', () {
-      expect(isCorrectAnswer('일관성, 원자성, 지속성, 독립성', '원자성, 일관성, 독립성, 지속성'), true);
+    // 순서 무시는 지문이 "모두 쓰시오" 류일 때만 허용된다.
+    // 지문 정보 없이 호출하면 순서를 지켜야 한다(안전한 기본값).
+    test('지문 없이는 순서를 지켜야 한다', () {
+      expect(isCorrectAnswer('일관성, 원자성, 지속성, 독립성', '원자성, 일관성, 독립성, 지속성'), false);
+    });
+
+    test('"모두 쓰시오" 지문이면 순서 무관', () {
+      expect(
+        AnswerChecker.isCorrect(
+          '일관성, 원자성, 지속성, 독립성',
+          '원자성, 일관성, 독립성, 지속성',
+          questionType: 'short_answer',
+          questionText: '트랜잭션의 ACID 특성 4가지를 모두 쓰시오.',
+        ),
+        true,
+      );
     });
 
     test('오답', () {

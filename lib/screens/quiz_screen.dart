@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../config.dart';
 import '../providers/study_provider.dart';
 import '../services/ad_service.dart';
+import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
 import '../widgets/answer_effect.dart';
 
@@ -303,33 +304,10 @@ class _QuizScreenState extends State<QuizScreen> {
 
                     // Answer input
                     if (!provider.isAnswered) ...[
-                      TextField(
+                      AnswerInputField(
                         controller: _answerController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: '정답을 입력하세요',
-                          hintStyle: TextStyle(color: Colors.grey[600]),
-                          filled: true,
-                          fillColor: AppConfig.cardColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppConfig.borderColor),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppConfig.primaryColor, width: 2),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppConfig.borderColor),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                        ),
-                        onSubmitted: (_) => _submit(provider),
+                        correctAnswer: question.answer,
+                        onSubmit: () => _submit(provider),
                       ),
                       const SizedBox(height: 14),
                       ElevatedButton(
