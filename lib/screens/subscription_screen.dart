@@ -75,6 +75,9 @@ class SubscriptionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // watch — 구매가 완료되면 이 화면이 즉시 '이용 중'으로 바뀌어야 한다.
+    final isPremium = context.watch<PurchaseService>().isPremium;
+
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
       appBar: AppBar(
@@ -111,25 +114,30 @@ class SubscriptionScreen extends StatelessWidget {
             const _FeatureList(),
             const SizedBox(height: 32),
 
-            // CTA button
-            _CtaButton(onTap: () => _onSubscribe(context)),
-            const SizedBox(height: 16),
+            // CTA — 이미 구매한 유저에게 '프리미엄 시작하기'를 다시 보여주면
+            // 중복 결제로 오해하게 된다. 구매 상태를 반영한다.
+            if (isPremium)
+              const _PremiumActiveBanner()
+            else ...[
+              _CtaButton(onTap: () => _onSubscribe(context)),
+              const SizedBox(height: 16),
 
-            // Restore purchases
-            Center(
-              child: TextButton(
-                onPressed: () => _onRestore(context),
-                child: const Text(
-                  '구매 복원',
-                  style: TextStyle(
-                    color: Color(0xFF9E9E9E),
-                    fontSize: 13,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Color(0xFF9E9E9E),
+              // Restore purchases (이미 프리미엄이면 필요 없다)
+              Center(
+                child: TextButton(
+                  onPressed: () => _onRestore(context),
+                  child: const Text(
+                    '구매 복원',
+                    style: TextStyle(
+                      color: Color(0xFF9E9E9E),
+                      fontSize: 13,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Color(0xFF9E9E9E),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: 8),
           ],
         ),
@@ -474,6 +482,54 @@ class _FeatureRowWidget extends StatelessWidget {
 }
 
 // ─── CTA Button ─────────────────────────────────────────────────────────────
+
+/// 이미 프리미엄인 유저에게 보여주는 상태 배너.
+/// 결제한 사람에게 '프리미엄 시작하기' 버튼을 계속 노출하면 결제가 안 된 줄 알고
+/// 다시 누르게 된다(문의·환불로 이어짐).
+class _PremiumActiveBanner extends StatelessWidget {
+  const _PremiumActiveBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      decoration: BoxDecoration(
+        color: AppConfig.correctColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppConfig.correctColor.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.verified, color: AppConfig.correctColor, size: 22),
+          const SizedBox(width: 10),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '프리미엄 이용 중',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '모든 기능이 열려 있습니다',
+                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _CtaButton extends StatelessWidget {
   final VoidCallback onTap;

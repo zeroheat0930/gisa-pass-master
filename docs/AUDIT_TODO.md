@@ -7,7 +7,7 @@
 
 - 1차: 91건 발견 → 상위 16건 재검증 → **확정 16 / 기각 0**
 - 2차: 나머지 69건 재검증 → **확정 37 / 가능성 20 / 기각 12**
-- 진행 상황: **수정 완료 20건** (데이터 오답 6건 + 시드 갱신 마이그레이션 포함), 남은 확정 약 28건
+- 진행 상황: **수정 완료 22건** (데이터 오답 6건 + 시드 갱신 마이그레이션 포함), 남은 확정 약 28건
 
 ---
 
@@ -36,13 +36,13 @@
 - [x] ~~`lib/screens/past_exam_screen.dart:436` — 문제은행 탭·AI 예측 모의고사 풀이가 DB에 전혀
       기록되지 않음~~ → `StudyProvider.recordAnswer()` 진입점을 만들어 두 화면에서 호출.
       기록 로직을 화면마다 복붙하지 않도록 정본 하나만 둠
-- [ ] `lib/screens/quiz_screen.dart:195` — 학습플랜 '미션 완료' 정답 수에 **전체 문항 수**를 넘겨
-      일별 정답률이 항상 100%로 기록됨
+- [x] ~~`lib/screens/quiz_screen.dart:195` — 학습플랜 '미션 완료' 정답 수에 전체 문항 수를 넘겨
+      일별 정답률이 항상 100%로 기록됨~~ → `StudyProvider` 에 세션 집계(`sessionSolved`/`sessionCorrect`) 추가
 - [ ] `lib/main.dart:171` — `IndexedStack` 탭 캐싱 때문에 통계가 **앱 재시작 전까지 절대 자동 갱신 안 됨**
 - [ ] `lib/screens/stats_screen.dart:384` — '전체 문제 완료율'이 중복 풀이를 세어 부풀려지고
       100% / 1000문제를 초과 표시
-- [ ] `lib/screens/subscription_screen.dart:77` — 구독 화면이 프리미엄 구매 상태를 반영하지 않아
-      **결제한 유저에게 계속 "프리미엄 시작하기"** 노출
+- [x] ~~`lib/screens/subscription_screen.dart:77` — 구독 화면이 프리미엄 구매 상태를 반영하지 않아
+      결제한 유저에게 계속 "프리미엄 시작하기" 노출~~ → `watch<PurchaseService>` 로 '프리미엄 이용 중' 배너 표시
 - [ ] `lib/services/purchase_service.dart:182` — 복원이 `_available=false`면 조용히 무시되는데
       UI는 "구매 복원 중..."만 띄우고 끝남
 - [ ] `lib/services/answer_checker.dart:51` — `toLowerCase()` 정규화가 **대소문자 변환 자체를 묻는

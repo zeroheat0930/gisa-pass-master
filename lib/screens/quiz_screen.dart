@@ -191,13 +191,11 @@ class _QuizScreenState extends State<QuizScreen> {
               ElevatedButton(
                 onPressed: () {
                   if (widget.planDayNumber != null) {
-                    final totalSolved = provider.questionList.length;
-                    final totalCorrect = provider.questionList
-                        .where((q) => q.id != null)
-                        .length; // approximate
+                    // 실제 세션 집계를 넘긴다. 예전에는 정답 수를 문제 리스트 길이로
+                    // 추측해서 넘기는 바람에 일별 정답률이 항상 100%로 기록됐다.
                     Navigator.pop(context, {
-                      'solved': totalSolved,
-                      'correct': totalCorrect,
+                      'solved': provider.sessionSolved,
+                      'correct': provider.sessionCorrect,
                     });
                   } else {
                     Navigator.pop(context);

@@ -46,6 +46,12 @@ class StudyProvider extends ChangeNotifier {
   int _comboCount = 0;
   int _maxCombo = 0;
 
+  /// 이번 세션에서 푼 문제 수 / 맞힌 문제 수.
+  /// 학습플랜 '미션 완료' 기록에 쓰인다. 예전에는 화면이 정답 수를 추측해서
+  /// (문제 리스트 길이) 넘기는 바람에 일별 정답률이 **항상 100%** 로 기록됐다.
+  int _sessionSolved = 0;
+  int _sessionCorrect = 0;
+
   // === Getters ===
   DatabaseService get db => _db;
   List<Question> get questionList => _questionList;
@@ -58,6 +64,8 @@ class StudyProvider extends ChangeNotifier {
   bool get shouldShowAd => _shouldShowAd;
   int get comboCount => _comboCount;
   int get maxCombo => _maxCombo;
+  int get sessionSolved => _sessionSolved;
+  int get sessionCorrect => _sessionCorrect;
 
   /// 콤보 카운트 리셋
   void resetCombo() {
@@ -177,6 +185,10 @@ class StudyProvider extends ChangeNotifier {
 
     await _persistAnswer(question.id!, trimmedAnswer, correct);
 
+    // 세션 집계 (학습플랜 미션 완료 기록용)
+    _sessionSolved++;
+    if (correct) _sessionCorrect++;
+
     // 콤보 카운트 갱신
     if (correct) {
       _comboCount++;
@@ -270,5 +282,7 @@ class StudyProvider extends ChangeNotifier {
     _shouldShowAd = false;
     _comboCount = 0;
     _maxCombo = 0;
+    _sessionSolved = 0;
+    _sessionCorrect = 0;
   }
 }
