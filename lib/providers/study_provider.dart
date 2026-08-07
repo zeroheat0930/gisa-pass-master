@@ -90,9 +90,15 @@ class StudyProvider extends ChangeNotifier {
     _studyMode = StudyMode.prediction;
 
     try {
-      final questions = await _db.getRandomQuestions(50);
+      // 전체 문항을 대상으로 우선순위를 매긴 뒤 상위 50개를 쓴다.
+      // 예전에는 무작위 50개를 뽑아서 그 안에서만 정렬해, '출제 예측'이라면서
+      // 사실상 랜덤 출제였다. 빈출·약점 가중치가 전혀 힘을 쓰지 못했다.
+      final questions = await _db.getAllQuestions();
       final errorRates = await _buildErrorRates(questions);
-      _questionList = _predictionEngine.getPrioritizedQuestions(questions, errorRates);
+      _questionList = _predictionEngine
+          .getPrioritizedQuestions(questions, errorRates)
+          .take(50)
+          .toList();
       _questionIndex = 0;
       _resetSession();
     } finally {

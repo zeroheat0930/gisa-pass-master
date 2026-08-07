@@ -35,6 +35,16 @@ class _QuizScreenState extends State<QuizScreen> {
       onError: () {
         if (mounted) setState(() => _bannerLoaded = false);
       },
+      // 로드가 실패해도 재시도한 배너로 교체한다. 재시도가 없으면 일시적인
+      // 네트워크 오류 한 번으로 이 화면 세션의 배너 수익이 0이 된다.
+      onRetry: (ad) {
+        if (!mounted) {
+          ad.dispose();
+          return;
+        }
+        _bannerAd?.dispose();
+        setState(() => _bannerAd = ad);
+      },
     );
   }
 

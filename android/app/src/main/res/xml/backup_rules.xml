@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 자동 백업 대상에서 프리미엄 구매 캐시를 제외한다.
+
+  v1.5.4 에서 결제 상태를 SharedPreferences 에 영속 저장했다(앱 재시작 시
+  프리미엄이 소실되던 문제 수정). 그런데 자동 백업이 켜져 있으면 이 값이
+  클라우드 백업과 기기 이전으로 그대로 복제되어, 결제하지 않은 기기에서도
+  프리미엄이 켜진다. 구매의 정본은 스토어이므로 캐시는 백업하지 않는다.
+  (복원이 필요하면 구독 화면의 '구매 복원'을 쓴다)
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSharedPreferences.xml"/>
+</full-backup-content>

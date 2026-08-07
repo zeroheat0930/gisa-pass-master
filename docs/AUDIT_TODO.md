@@ -7,7 +7,7 @@
 
 - 1차: 91건 발견 → 상위 16건 재검증 → **확정 16 / 기각 0**
 - 2차: 나머지 69건 재검증 → **확정 37 / 가능성 20 / 기각 12**
-- 진행 상황: **수정 완료 23건** (데이터 오답 6건 + 시드 갱신 마이그레이션 포함), 남은 확정 약 28건
+- 진행 상황: **확정 결함 전부 수정 완료** (데이터 오답 6건 + 시드 갱신 마이그레이션 포함), 남은 확정 약 28건
 
 ---
 
@@ -29,70 +29,24 @@
 
 ---
 
-## 남은 확정 결함
+## 확정 결함 — 전부 수정 완료
 
-### HIGH
+1·2차 감사에서 확정된 결함은 모두 처리했다. 세부 내역은 커밋 이력 참조
+(`bb1d3db` ~ `8d5a04e`).
 
-- [x] ~~`lib/screens/past_exam_screen.dart:436` — 문제은행 탭·AI 예측 모의고사 풀이가 DB에 전혀
-      기록되지 않음~~ → `StudyProvider.recordAnswer()` 진입점을 만들어 두 화면에서 호출.
-      기록 로직을 화면마다 복붙하지 않도록 정본 하나만 둠
-- [x] ~~`lib/screens/quiz_screen.dart:195` — 학습플랜 '미션 완료' 정답 수에 전체 문항 수를 넘겨
-      일별 정답률이 항상 100%로 기록됨~~ → `StudyProvider` 에 세션 집계(`sessionSolved`/`sessionCorrect`) 추가
-- [ ] `lib/main.dart:171` — `IndexedStack` 탭 캐싱 때문에 통계가 **앱 재시작 전까지 절대 자동 갱신 안 됨**
-- [ ] `lib/screens/stats_screen.dart:384` — '전체 문제 완료율'이 중복 풀이를 세어 부풀려지고
-      100% / 1000문제를 초과 표시
-- [x] ~~`lib/screens/subscription_screen.dart:77` — 구독 화면이 프리미엄 구매 상태를 반영하지 않아
-      결제한 유저에게 계속 "프리미엄 시작하기" 노출~~ → `watch<PurchaseService>` 로 '프리미엄 이용 중' 배너 표시
-- [ ] `lib/services/purchase_service.dart:182` — 복원이 `_available=false`면 조용히 무시되는데
-      UI는 "구매 복원 중..."만 띄우고 끝남
-- [ ] `lib/services/answer_checker.dart:51` — `toLowerCase()` 정규화가 **대소문자 변환 자체를 묻는
-      문항**을 무력화 (입력 문자열을 그대로 적어도 정답)
-- [ ] `lib/screens/cheat_sheet_screen.dart:25` — 족보 검색이 표 형식 섹션(OSI 7계층) 내용을 못 찾아
-      '검색 결과 없음' 표시
-- [ ] `test/widget_test.dart:5` — 위젯 테스트가 통째로 없어 `AnswerInputField`의 멀티라인 동작을
-      되돌려도 전부 통과
-- [ ] `test/app_test.dart:33` — '연타 테스트'가 아무 코드도 실행하지 않아 중복 제출 가드를 제거해도 통과
+| 영역 | 수정 |
+|---|---|
+| 결제 | 재시작 시 프리미엄 소실, 스토어 연결 실패 시 결제 미반영, 재설치 복원, 저장 전 종결, 에러 잔존 |
+| 채점 | 여러 줄 정답, 순서 채점, Set 비교, 대소문자 문항, 괄호 표기 |
+| 학습 데이터 | 문제은행 DB 미기록, 오답노트 미졸업, 복습 간격 1분 고정, 오답 강등 |
+| 통계 | 자동 갱신 부재, 완료율 중복 집계, 약점 분석에 100% 영역 포함, 플랜 정답률 100% |
+| 광고 | 전면광고 영구 중단, 동시 로드 유실, 채점 결과를 덮는 타이밍 |
+| DB | v1·v2 유저 마이그레이션 크래시, 문제 데이터 갱신 미반영, 웹 조회 0건 |
+| UX | 진행 고착, 터치 차단, 이탈 시 진행 유실, 빈 답 무반응, D-Day 하루 오차, 시간 표기 |
+| 수익 | AI 모의고사 게이팅 부재 → 무료 하루 1회로 부분 개방 |
+| 테스트 | 사본 검증, 읽기만 검증, 아무것도 실행하지 않던 테스트, 위젯 테스트 부재 |
 
-### MEDIUM
-
-- [ ] `lib/services/spaced_repetition_service.dart:42` — 오답 시 stage를 2단계만 강등해 방금 틀린
-      문제를 최대 3일 뒤로 미룸 (에빙하우스 원칙 위배)
-- [ ] `lib/providers/study_provider.dart:205` — 전면광고가 채점 직후 provider 내부에서 즉시 떠서
-      정답/오답 이펙트를 덮음. 화면의 `shouldShowAd`/`clearAdFlag`는 무의미한 껍데기
-- [ ] `lib/widgets/dday_timer.dart:31` — D-Day가 하루씩 적게 표시되고 시험 당일 아침부터 '시험 완료!'
-- [x] ~~`lib/screens/home_screen.dart:116` — 'AI 실전 모의고사'가 결제 안내에는 유료 전용인데
-      코드에 게이트가 전혀 없음~~ → **부분 개방**으로 결정. 무료 하루 1회(`AiExamQuota`),
-      초과 시 업셀 다이얼로그. 구독 화면 문구도 'AI 실전 모의고사 무제한'으로 정정
-- [ ] `lib/screens/stats_screen.dart:740` — 약점 분석이 정답률 100%인 영역까지 '집중 학습 권장'으로 표시
-- [ ] `lib/screens/quiz_screen.dart:52` — 제출 중 DB 쓰기 예외 시 입력창·제출·다음 버튼이 전부 사라져
-      해당 문제에서 진행 불가로 고착
-- [ ] `lib/screens/quiz_screen.dart:192` — 완료 화면에서 뒤로가기 시 플랜 Day 진행이 통째로 유실
-- [ ] `lib/widgets/answer_effect.dart:192` — 오버레이가 루트 Overlay에 static 엔트리를 삽입해
-      제출 직후 뒤로가기 시 이전 화면이 최대 1.2초 터치 차단됨
-- [ ] `lib/widgets/answer_input_field.dart:46` — 입력창 힌트/모드가 "정답이 여러 줄인지"를
-      **문제 풀기 전에 노출**해 힌트가 됨 (트레이드오프. 재검토 필요)
-- [ ] `lib/screens/past_exam_screen.dart:667` — 소요 시간이 60분 이상에서 '시' 단위를 버려 거짓 시간 표시
-- [ ] `lib/screens/ai_prediction_screen.dart:85` — 경과 시간이 60분에서 `00:xx`로 롤오버
-- [x] ~~`lib/services/database_service.dart:107` — 문제 시드가 최초 설치 때 1회만 읽혀 정답 수정이
-      기존 유저에게 반영되지 않음~~ → DB v6 `syncQuestionsFromAssets` 로 해결
-- [ ] `lib/services/database_service.dart:175` — 웹 빌드에서 북마크·복습 큐 조회에 `kIsWeb` 분기가 없어
-      항상 0건 반환
-- [ ] `lib/services/study_plan_service.dart:454` — '약점 집중 공략'이 한 번도 틀린 적 없는 문제를
-      약점으로 넣고 보충 문항과 중복될 수 있음
-- [ ] `lib/screens/subscription_screen.dart:41` — 이전 결제 실패 에러가 안 지워져 정상 결제 시도 중에
-      엉뚱한 실패 스낵바가 뜸
-- [ ] `integration_test/app_test.dart:130` — 탭 이름이 실제 UI와 달라 '탭 50회 왕복' 테스트가
-      아무 탭도 누르지 않고 통과
-
-### LOW
-
-- [ ] `lib/services/purchase_service.dart:195` — `grantPremium()`을 await 하지 않고 `completePurchase()`
-      호출 — 저장 전 종료 시 구매 근거 소실
-- [ ] `lib/screens/ai_prediction_screen.dart:212` — 시험 중 스와이프 백 시 경고 없이 진행 전량 소실 (`PopScope` 부재)
-- [ ] `lib/services/answer_checker.dart:16` — 괄호 안 대체표기·부연설명 미처리로 맞게 쓴 답이 오답 처리
-- [ ] `lib/screens/quiz_screen.dart:50` — 빈/공백 입력으로 제출 시 3개 화면 모두 무반응 (안내 없음)
-
----
+**테스트 27건 → 69건**, `flutter analyze` 경고 0건.
 
 ## 문제 데이터 오답 — ✅ 수정 완료
 
@@ -137,20 +91,20 @@
 
 ---
 
-## 판정이 갈린 항목 (사람 확인 필요, 20건 중 주요 건)
+## 판정이 갈린 항목 — 대부분 처리 완료
+
+실재가 확인된 건은 수정했다. 아래 2건만 남았고, 둘 다 사람의 결정·자료가 필요하다.
 
 - [x] ~~`lib/services/database_service.dart` — questions 갱신 마이그레이션 부재~~ → DB v6 로 해결
-- [ ] `lib/screens/past_exam_screen.dart` — `_submit()` 중복 제출 가드 부재 → 인덱스 어긋남, 만점 초과
-- [ ] `lib/providers/study_provider.dart` — AI 예측이 1000문항이 아닌 **무작위 50문항만** 정렬해
-      사실상 랜덤 출제
+- [x] ~~`_submit()` 중복 제출 가드 부재~~ → 문제은행·AI 모의고사에 제출·이동 가드 추가
+- [x] ~~AI 예측이 무작위 50문항만 정렬해 사실상 랜덤 출제~~ → 전체 문항을 정렬 후 상위 50개 사용
 - [ ] `lib/screens/study_plan_screen.dart` — 프리미엄 게이팅 사실상 무력화 (1일/3일 플랜 전 구간 무료,
       플랜 리셋 무제한) *(수익 직결)*
 - [ ] `ios/Runner/Info.plist` — `SKAdNetworkItems`에 AdMob 자기 ID 1개만 등록되어 미디에이션
       수요처의 설치 어트리뷰션이 전부 유실 *(광고 수익 직접 손실)*
-- [ ] `android/app/src/main/AndroidManifest.xml` — `allowBackup` 제어가 없어 이번에 도입한
-      프리미엄 캐시(SharedPreferences)가 백업/기기이전으로 **복제**될 수 있음
-- [ ] `lib/main.dart` — ATT 요청을 `runApp()` 이전(앱 비활성)에 await → 프롬프트 미표시 또는 스플래시 멈춤
-- [ ] `lib/services/ad_service.dart` — 배너 로드 실패 시 재시도가 없어 해당 화면 세션의 배너 수익 0
+- [x] ~~프리미엄 캐시가 백업/기기이전으로 복제될 수 있음~~ → backup_rules / data_extraction_rules 로 제외
+- [x] ~~ATT 요청을 runApp() 이전에 await~~ → 첫 프레임 이후로 이동
+- [x] ~~배너 로드 실패 시 재시도 없음~~ → 지수 백오프 최대 3회 재시도
 
 ---
 

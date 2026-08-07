@@ -422,6 +422,16 @@ class _QuizScreenState extends State<_QuizScreen> {
       onError: () {
         if (mounted) setState(() => _bannerLoaded = false);
       },
+      // 로드가 실패해도 재시도한 배너로 교체한다. 재시도가 없으면 일시적인
+      // 네트워크 오류 한 번으로 이 화면 세션의 배너 수익이 0이 된다.
+      onRetry: (ad) {
+        if (!mounted) {
+          ad.dispose();
+          return;
+        }
+        _bannerAd?.dispose();
+        setState(() => _bannerAd = ad);
+      },
     );
   }
 
@@ -435,6 +445,10 @@ class _QuizScreenState extends State<_QuizScreen> {
   }
 
   void _submit() {
+    // 중복 제출 가드. 없으면 연타 시 _userAnswers/_isCorrectList 에 항목이
+    // 두 번 들어가 문항 인덱스와 어긋나고, 결과 점수가 만점을 넘어간다.
+    if (_showExplanation) return;
+
     final answer = _answerController.text.trim();
     if (answer.isEmpty) {
       _showEmptyAnswerHint();
@@ -463,6 +477,10 @@ class _QuizScreenState extends State<_QuizScreen> {
   }
 
   void _next() {
+    // 중복 이동 가드. 연타하면 문항이 통째로 스킵되고, 마지막 문제를 풀지 못한 채
+    // 결과 화면으로 넘어간다.
+    if (!_showExplanation) return;
+
     // 해설을 다 본 뒤에 광고를 띄운다.
     if (_adCounter >= AppConfig.adIntervalQuestions) {
       _adCounter = 0;

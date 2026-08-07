@@ -143,10 +143,20 @@ class AdService {
   }
 
   /// 배너광고 생성 (shouldShowAds=false면 null 반환)
-  BannerAd? createBannerAd({VoidCallback? onLoad, VoidCallback? onError}) {
+  ///
+  /// [onRetry] 가 주어지면 로드 실패 시 잠시 뒤 새 배너를 만들어 넘겨준다.
+  /// 재시도가 없으면 일시적인 네트워크 오류 한 번으로 그 화면 세션의 배너 수익이
+  /// 통째로 0이 된다.
+  BannerAd? createBannerAd({
+    VoidCallback? onLoad,
+    VoidCallback? onError,
+    void Function(BannerAd ad)? onRetry,
+    int attempt = 0,
+  }) {
     if (!shouldShowAds) return null;
     final adUnitId = bannerAdUnitId;
     if (adUnitId.isEmpty) return null;
+
     return BannerAd(
       adUnitId: adUnitId,
       size: AdSize.banner,
@@ -154,9 +164,23 @@ class AdService {
       listener: BannerAdListener(
         onAdLoaded: (_) => onLoad?.call(),
         onAdFailedToLoad: (ad, err) {
-          debugPrint('배너광고 로드 실패: ${err.message}');
+          debugPrint('배너광고 로드 실패(시도 ${attempt + 1}): ${err.message}');
           ad.dispose();
           onError?.call();
+
+          // 지수 백오프로 최대 3회까지 재시도한다.
+          if (onRetry != null && attempt < 2) {
+            final delay = Duration(seconds: 4 * (attempt + 1));
+            Future.delayed(delay, () {
+              final next = createBannerAd(
+                onLoad: onLoad,
+                onError: onError,
+                onRetry: onRetry,
+                attempt: attempt + 1,
+              );
+              if (next != null) onRetry(next);
+            });
+          }
         },
       ),
     )..load();

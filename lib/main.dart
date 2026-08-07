@@ -26,17 +26,6 @@ void main() async {
     databaseFactory = databaseFactoryFfiWeb;
   }
 
-  // iOS ATT 권한 요청 — IDFA 접근 동의 (광고 송출 fill rate 정상화용)
-  if (!kIsWeb && Platform.isIOS) {
-    try {
-      final status = await AppTrackingTransparency.trackingAuthorizationStatus;
-      if (status == TrackingStatus.notDetermined) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        await AppTrackingTransparency.requestTrackingAuthorization();
-      }
-    } catch (_) {}
-  }
-
   // 광고 초기화 (실패해도 앱 실행 가능)
   try {
     await AdService.initialize();
@@ -163,6 +152,31 @@ class _RootNavigator extends StatefulWidget {
 class _RootNavigatorState extends State<_RootNavigator> {
   int _selectedIndex = 0;
   final Set<int> _loadedTabs = {0};
+
+  @override
+  void initState() {
+    super.initState();
+
+    // iOS ATT 권한 요청 — IDFA 접근 동의 (광고 fill rate 에 직결).
+    //
+    // runApp() 이전에 요청하면 앱이 아직 active 상태가 아니라 프롬프트가 그대로
+    // 무시될 수 있다(스플래시가 멈춘 것처럼 보이기도 한다). 첫 프레임이 그려진 뒤
+    // 요청해야 확실히 뜬다.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestTracking());
+  }
+
+  Future<void> _requestTracking() async {
+    if (kIsWeb || !Platform.isIOS) return;
+    try {
+      final status = await AppTrackingTransparency.trackingAuthorizationStatus;
+      if (status != TrackingStatus.notDetermined) return;
+      // 첫 프레임 직후 바로 띄우면 시스템이 삼키는 경우가 있어 한 박자 둔다.
+      await Future.delayed(const Duration(milliseconds: 500));
+      await AppTrackingTransparency.requestTrackingAuthorization();
+    } catch (e) {
+      debugPrint('ATT 요청 실패: $e');
+    }
+  }
 
   // 탭별 위젯 캐싱 — 매 빌드마다 재생성 방지
   final Map<int, Widget> _cachedTabs = {};
