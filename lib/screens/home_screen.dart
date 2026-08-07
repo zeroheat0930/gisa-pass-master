@@ -10,9 +10,11 @@ import '../providers/stats_provider.dart';
 import '../services/ai_exam_quota.dart';
 import '../services/purchase_service.dart';
 import '../widgets/dday_timer.dart';
+import '../widgets/pass_score_card.dart';
 import 'quiz_screen.dart';
 import 'ai_prediction_screen.dart';
 import 'subscription_screen.dart';
+import 'stats_screen.dart';
 import 'study_plan_screen.dart';
 
 // ─── Home Screen ─────────────────────────────────────────────────────────────
@@ -244,6 +246,22 @@ class _HomeScreenState extends State<HomeScreen>
                     type: MaterialType.transparency,
                     child: const DdayTimer(),
                   ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 1.5 — 합격 예측 점수
+              _staggered(
+                2,
+                PassScoreCard(
+                  stats: stats,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(builder: (_) => const StatsScreen()),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 24),
