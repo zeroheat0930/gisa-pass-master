@@ -1,0 +1,215 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'package:gisa_pass_master/models/answer_record.dart';
+import 'package:gisa_pass_master/models/question.dart';
+import 'package:gisa_pass_master/providers/study_provider.dart';
+import 'package:gisa_pass_master/services/database_service.dart';
+import 'package:gisa_pass_master/services/prediction_engine.dart';
+import 'package:gisa_pass_master/services/spaced_repetition_service.dart';
+
+/// **배선(wiring) 테스트.**
+///
+/// 이 앱의 반복 실패 패턴은 "부품은 멀쩡한데 연결이 빠진 것"이다.
+/// 실제로 아래 세 수정을 통째로 되돌려도 기존 테스트 77건이 전부 통과했다.
+///
+///   1. 정답일 때 processAnswer 를 호출하지 않도록 되돌림  → 77건 통과
+///   2. DB v6 동기화를 onUpgrade 에서 떼어냄               → 77건 통과
+///   3. AI 모의고사 무료 쿼터 게이트를 제거함              → 77건 통과
+///
+/// 부품 단위 테스트만으로는 이 종류를 절대 잡을 수 없다. 여기서 연결을 검증한다.
+
+// ── 배선 확인용 스파이 ──────────────────────────────────────────────────────
+
+class _SpyRepetition extends SpacedRepetitionService {
+  _SpyRepetition(super.db);
+
+  final List<({int questionId, bool isCorrect})> calls = [];
+
+  @override
+  Future<void> processAnswer(int questionId, bool isCorrect) async {
+    calls.add((questionId: questionId, isCorrect: isCorrect));
+  }
+}
+
+class _SpyDatabase extends DatabaseService {
+  final List<AnswerRecord> records = [];
+
+  @override
+  Future<void> insertAnswerRecord(AnswerRecord record) async {
+    records.add(record);
+  }
+}
+
+Question _question({int id = 42}) => Question(
+      id: id,
+      year: 2026,
+      round: 3,
+      subject: '테스트',
+      questionType: 'short_answer',
+      questionText: '용어를 쓰시오.',
+      answer: '스택',
+      explanation: '',
+    );
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
+  // ── 1) 복습 스케줄 배선 ───────────────────────────────────────────────────
+  // 정답일 때 processAnswer 를 부르지 않으면 stage 승격이 없어 오답노트가
+  // 영원히 비워지지 않고 복습 간격이 1분에 고정된다.
+  group('풀이 기록 → 복습 스케줄 배선', () {
+    late _SpyDatabase db;
+    late _SpyRepetition srs;
+    late StudyProvider provider;
+
+    setUp(() {
+      db = _SpyDatabase();
+      srs = _SpyRepetition(db);
+      provider = StudyProvider(
+        db: db,
+        predictionEngine: PredictionEngine(),
+        spacedRepetitionService: srs,
+      );
+    });
+
+    test('정답일 때도 복습 스케줄이 갱신된다', () async {
+      await provider.recordAnswer(
+        question: _question(),
+        userAnswer: '스택',
+        isCorrect: true,
+      );
+
+      expect(srs.calls, hasLength(1),
+          reason: '정답을 걸러내면 오답노트가 영원히 졸업되지 않는다');
+      expect(srs.calls.single.questionId, 42);
+      expect(srs.calls.single.isCorrect, isTrue);
+    });
+
+    test('오답일 때도 복습 스케줄이 갱신된다', () async {
+      await provider.recordAnswer(
+        question: _question(),
+        userAnswer: '큐',
+        isCorrect: false,
+      );
+
+      expect(srs.calls, hasLength(1));
+      expect(srs.calls.single.isCorrect, isFalse);
+    });
+
+    test('풀이 기록이 DB에 저장된다', () async {
+      await provider.recordAnswer(
+        question: _question(),
+        userAnswer: '스택',
+        isCorrect: true,
+      );
+
+      expect(db.records, hasLength(1));
+      expect(db.records.single.questionId, 42);
+      expect(db.records.single.userAnswer, '스택');
+    });
+  });
+
+  // ── 2) DB 마이그레이션 배선 ──────────────────────────────────────────────
+  // 개별 마이그레이션 함수는 테스트하면서도, 그것이 onUpgrade 에 실제로
+  // 연결되어 있는지는 아무도 확인하지 않았다.
+  group('DB 업그레이드 배선', () {
+    test('v5 → v6 업그레이드가 문제 데이터를 실제로 동기화한다', () async {
+      final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+      addTearDown(db.close);
+
+      await db.execute('''
+        CREATE TABLE questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          year INTEGER NOT NULL, round INTEGER NOT NULL,
+          subject TEXT NOT NULL, question_type TEXT NOT NULL,
+          question_text TEXT NOT NULL, code_snippet TEXT, code_language TEXT,
+          answer TEXT NOT NULL, explanation TEXT NOT NULL,
+          difficulty INTEGER DEFAULT 3, frequency_weight REAL DEFAULT 0.5
+        )
+      ''');
+
+      // 구버전 유저가 들고 있던 '틀린 정답' 상태를 재현
+      final raw = await rootBundle.loadString('assets/questions/c_questions.json');
+      final target = (json.decode(raw) as List)[22];
+      final id = await db.insert('questions', {
+        'year': target['year'],
+        'round': target['round'],
+        'subject': target['subject'],
+        'question_type': target['questionType'],
+        'question_text': target['questionText'],
+        'code_snippet': target['codeSnippet'],
+        'code_language': target['codeLanguage'],
+        'answer': 'STALE_WRONG_ANSWER',
+        'explanation': '옛 해설',
+      });
+
+      // onUpgrade 가 실제로 하는 일을 그대로 실행한다.
+      await DatabaseService().runMigrations(db, 5, 6);
+
+      final rows = await db.query('questions', where: 'id = ?', whereArgs: [id]);
+      expect(rows.single['answer'], target['answer'],
+          reason: 'v6 동기화가 onUpgrade 에 연결되어 있지 않으면 여기서 실패한다');
+      expect(rows.single['id'], id, reason: 'id 는 보존되어야 한다');
+    });
+
+    test('v3 → v6 업그레이드도 duplicate column 없이 통과한다', () async {
+      final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+      addTearDown(db.close);
+
+      await db.execute('''
+        CREATE TABLE questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          year INTEGER NOT NULL, round INTEGER NOT NULL,
+          subject TEXT NOT NULL, question_type TEXT NOT NULL,
+          question_text TEXT NOT NULL, code_snippet TEXT, code_language TEXT,
+          answer TEXT NOT NULL, explanation TEXT NOT NULL,
+          difficulty INTEGER DEFAULT 3, frequency_weight REAL DEFAULT 0.5
+        )
+      ''');
+      // v3 당시 스키마 (plan_type 없음)
+      await db.execute('''
+        CREATE TABLE study_plan (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          started_at TEXT NOT NULL, current_day INTEGER DEFAULT 1
+        )
+      ''');
+
+      await expectLater(DatabaseService().runMigrations(db, 3, 6), completes);
+
+      final cols = await db.rawQuery('PRAGMA table_info(study_plan)');
+      expect(cols.any((c) => c['name'] == 'plan_type'), isTrue);
+    });
+  });
+
+  // ── 3) 수익 게이트 배선 ──────────────────────────────────────────────────
+  // 쿼터 클래스 자체는 테스트하면서, 화면이 그것을 실제로 물어보는지는
+  // 검증하지 않았다. 게이트를 통째로 지워도 테스트가 전부 통과했다.
+  group('AI 모의고사 유료 게이트 배선', () {
+    String source(String path) => File(path).readAsStringSync();
+
+    test('모의고사 진입 경로가 쿼터를 확인한다', () {
+      final home = source('lib/screens/home_screen.dart');
+      expect(home.contains('AiExamQuota.canStart'), isTrue,
+          reason: '진입 시 무료 응시 가능 여부를 확인해야 한다 (수익 직결)');
+    });
+
+    test('다시 풀기 경로도 쿼터를 확인한다', () {
+      final exam = source('lib/screens/ai_prediction_screen.dart');
+      expect(exam.contains('AiExamQuota.canStart'), isTrue,
+          reason: '결과 화면의 다시 풀기가 게이트를 우회하면 안 된다');
+    });
+
+    test('시험이 시작되면 쿼터를 소모한다', () {
+      final exam = source('lib/screens/ai_prediction_screen.dart');
+      expect(exam.contains('AiExamQuota.consume'), isTrue,
+          reason: '확인만 하고 소모하지 않으면 제한이 무의미하다');
+    });
+  });
+}

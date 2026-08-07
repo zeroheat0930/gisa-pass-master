@@ -39,29 +39,37 @@ class DatabaseService {
       path,
       version: 6,
       onCreate: _onCreate,
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.execute('DROP TABLE IF EXISTS spaced_repetition');
-          await db.execute('DROP TABLE IF EXISTS answer_records');
-          await db.execute('DROP TABLE IF EXISTS questions');
-          await _onCreate(db, newVersion);
-        }
-        if (oldVersion < 3) {
-          await createStudyPlanTables(db);
-        }
-        if (oldVersion < 4) {
-          await _createBookmarkTable(db);
-        }
-        if (oldVersion < 5) {
-          await ensurePlanTypeColumn(db);
-        }
-        if (oldVersion < 6) {
-          // 문제 데이터는 최초 설치 때 1회만 시딩되므로, 정답 오류를 고쳐도
-          // 기존 유저에게는 영원히 반영되지 않았다. 에셋 기준으로 내용을 동기화한다.
-          await syncQuestionsFromAssets(db);
-        }
-      },
+      onUpgrade: runMigrations,
     );
+  }
+
+  /// 버전 업그레이드 마이그레이션 (테스트 가능한 진입점).
+  ///
+  /// 예전에는 이 로직이 onUpgrade 클로저 안에 갇혀 있어서, 개별 마이그레이션
+  /// 함수는 테스트하면서도 **그것이 실제로 연결되어 있는지는 아무도 검증하지
+  /// 못했다.** 연결을 끊어도 테스트가 전부 통과하는 상태였다.
+  @visibleForTesting
+  Future<void> runMigrations(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('DROP TABLE IF EXISTS spaced_repetition');
+      await db.execute('DROP TABLE IF EXISTS answer_records');
+      await db.execute('DROP TABLE IF EXISTS questions');
+      await _onCreate(db, newVersion);
+    }
+    if (oldVersion < 3) {
+      await createStudyPlanTables(db);
+    }
+    if (oldVersion < 4) {
+      await _createBookmarkTable(db);
+    }
+    if (oldVersion < 5) {
+      await ensurePlanTypeColumn(db);
+    }
+    if (oldVersion < 6) {
+      // 문제 데이터는 최초 설치 때 1회만 시딩되므로, 정답 오류를 고쳐도
+      // 기존 유저에게는 영원히 반영되지 않았다. 에셋 기준으로 내용을 동기화한다.
+      await syncQuestionsFromAssets(db);
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
