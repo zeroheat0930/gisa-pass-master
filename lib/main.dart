@@ -49,8 +49,10 @@ void main() async {
     debugPrint('Purchase init failed: $e');
   }
 
-  // 전면광고 프리로드는 프리미엄 여부가 확정된 뒤에 — 결제 유저의 광고 요청 낭비 방지
-  adService.loadInterstitialAd();
+  // 전면광고 프리로드는 여기서 하지 않는다.
+  // ATT 동의를 받기 전에 광고를 요청하면 IDFA 없이 나가서 fill rate 가 떨어진다.
+  // ATT 는 앱이 active 가 된 뒤(첫 프레임 이후)에만 띄울 수 있으므로,
+  // 첫 광고 요청도 그 뒤로 미룬다. (_RootNavigator.initState 참조)
 
   // DB 워밍업 — 첫 쿼리 전에 DB 준비 (흰 화면 방지)
   try {
@@ -162,7 +164,12 @@ class _RootNavigatorState extends State<_RootNavigator> {
     // runApp() 이전에 요청하면 앱이 아직 active 상태가 아니라 프롬프트가 그대로
     // 무시될 수 있다(스플래시가 멈춘 것처럼 보이기도 한다). 첫 프레임이 그려진 뒤
     // 요청해야 확실히 뜬다.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestTracking());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // 순서가 중요하다: ATT 동의를 먼저 받고 그 다음에 첫 광고를 요청한다.
+      // 반대로 하면 IDFA 없이 광고를 요청하게 되어 ATT 를 띄우는 의미가 없다.
+      await _requestTracking();
+      globalAdService?.loadInterstitialAd();
+    });
   }
 
   /// 통합 테스트에서는 ATT 시스템 모달이 앱을 덮어 자동화가 진행되지 않는다.

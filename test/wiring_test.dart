@@ -271,4 +271,47 @@ void main() {
       expect(selected, hasLength(10));
     });
   });
+
+  // ── 5) 채점기 호출부 배선 ────────────────────────────────────────────────
+  // 문제은행 채점을 단순 문자열 비교로 되돌려도 기존 테스트가 전부 통과했다.
+  // 채점기 자체만 검증하고 화면이 그것을 쓰는지는 아무도 안 봤기 때문이다.
+  group('채점기 호출부 배선', () {
+    String source(String path) => File(path).readAsStringSync();
+
+    const screens = [
+      'lib/screens/quiz_screen.dart',
+      'lib/screens/past_exam_screen.dart',
+      'lib/screens/ai_prediction_screen.dart',
+    ];
+
+    test('답을 채점하는 화면은 모두 AnswerChecker 정본을 쓴다', () {
+      final offenders = <String>[];
+      for (final path in screens) {
+        final src = source(path);
+        final gradesHere = src.contains('_isCorrectList') ||
+            src.contains('submitAnswer(');
+        if (!gradesHere) continue;
+        // quiz_screen 은 StudyProvider.submitAnswer 를 통해 채점한다.
+        final usesChecker = src.contains('AnswerChecker.isCorrectFor') ||
+            src.contains('provider.submitAnswer');
+        if (!usesChecker) offenders.add(path);
+      }
+      expect(offenders, isEmpty,
+          reason: '직접 문자열 비교로 되돌아간 화면: $offenders');
+    });
+
+    test('화면에 자체 정답 비교가 재등장하지 않았다', () {
+      final offenders = <String>[];
+      for (final path in screens) {
+        final src = source(path);
+        // "answer.toLowerCase() == question.answer..." 같은 직접 비교의 흔적
+        if (RegExp(r'answer\s*\.toLowerCase\(\)\s*(\.trim\(\))?\s*==')
+            .hasMatch(src)) {
+          offenders.add(path);
+        }
+      }
+      expect(offenders, isEmpty,
+          reason: '채점 로직이 화면에 복제되었다: $offenders');
+    });
+  });
 }

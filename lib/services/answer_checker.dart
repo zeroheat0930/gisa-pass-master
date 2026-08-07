@@ -45,11 +45,16 @@ class AnswerChecker {
     //    "35"(한 값)가 서로 정답 처리되는 오탐이 생긴다.
     if (_stripSpaces(normUser) == _stripSpaces(normCorrect)) return true;
 
-    // 3) 괄호 안 대체표기·부연설명 허용.
+    // 3) 괄호 안 대체표기 허용 — 용어 문항에 한정한다.
     //    정답이 "스택(Stack)" 일 때 "스택" 이나 "Stack" 만 써도 맞는 답이다.
-    for (final variant in _parenVariants(normCorrect)) {
-      if (normUser == variant) return true;
-      if (_stripSpaces(normUser) == _stripSpaces(variant)) return true;
+    //    단, 실행 결과 문제의 괄호는 대체표기가 아니라 파이썬 튜플 같은 **출력 구문**이다.
+    //    거기까지 허용하면 "Alice(30)" 에 "30" 만 써도, "[(0, 0), (0, 1)]" 에
+    //    "0, 0" 만 써도 정답이 되어버린다.
+    if (_allowsParenVariants(questionType, correctAnswer)) {
+      for (final variant in _parenVariants(normCorrect)) {
+        if (normUser == variant) return true;
+        if (_stripSpaces(normUser) == _stripSpaces(variant)) return true;
+      }
     }
 
     // 4) SQL 결과 행 비교 — ORDER BY 가 없으면 행 순서는 보장되지 않는다.
@@ -84,6 +89,22 @@ class AnswerChecker {
         .map((r) => caseSensitive ? r : r.toLowerCase())
         .where((r) => r.isNotEmpty)
         .toList();
+  }
+
+  /// 괄호 변형을 인정해도 되는 문항인지 판정한다.
+  ///
+  /// 용어 단답형에서 "스택(stack)" 처럼 **끝에 붙은 하나의 괄호**만 대체표기로 본다.
+  /// 실행 결과·SQL 결과의 괄호는 출력 구문이므로 제외한다.
+  static bool _allowsParenVariants(String? questionType, String correctAnswer) {
+    if (questionType != 'short_answer') return false;
+
+    final trimmed = correctAnswer.trim();
+    // 괄호가 정확히 한 쌍이고, 그것이 답 끝에 붙어 있어야 한다.
+    if ('('.allMatches(trimmed).length != 1) return false;
+    if (!trimmed.endsWith(')')) return false;
+    // "(전체가 괄호)" 형태는 대체표기가 아니다.
+    if (trimmed.startsWith('(')) return false;
+    return true;
   }
 
   /// 괄호가 있는 정답에서 인정 가능한 표기들을 만든다.

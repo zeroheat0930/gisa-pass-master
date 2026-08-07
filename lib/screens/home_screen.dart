@@ -86,33 +86,39 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void _startMode(BuildContext context, StudyMode mode, {String? subType}) {
+  void _startMode(BuildContext context, StudyMode mode, {String? subType}) async {
     if (_isNavigating) return;
     _isNavigating = true;
     HapticFeedback.lightImpact();
-    final provider = context.read<StudyProvider>();
-    Future<void> loader;
-    if (mode == StudyMode.wrongAnswer) {
-      loader = provider.loadWrongAnswerQuestions();
-    } else if (mode == StudyMode.byType && subType != null) {
-      loader = provider.loadQuestionsByType(subType);
-    } else if (mode == StudyMode.bookmark) {
-      loader = provider.loadBookmarkedQuestions();
-    } else {
-      loader = provider.loadQuestions();
-    }
-    loader.then((_) {
-      _isNavigating = false;
+
+    try {
+      final provider = context.read<StudyProvider>();
+      if (mode == StudyMode.wrongAnswer) {
+        await provider.loadWrongAnswerQuestions();
+      } else if (mode == StudyMode.byType && subType != null) {
+        await provider.loadQuestionsByType(subType);
+      } else if (mode == StudyMode.bookmark) {
+        await provider.loadBookmarkedQuestions();
+      } else {
+        await provider.loadQuestions();
+      }
+
       if (!context.mounted) return;
-      Navigator.push(
+      await Navigator.push(
         context,
-        CupertinoPageRoute(
-          builder: (_) => QuizScreen(mode: mode),
-        ),
+        CupertinoPageRoute(builder: (_) => QuizScreen(mode: mode)),
       );
-    }).catchError((_) {
+
+      // 풀이를 마치고 돌아왔으면 홈 통계를 다시 읽는다.
+      // 탭 전환 시에만 갱신하면 이 주 경로(홈→퀴즈→뒤로→홈)가 통째로 빠져서,
+      // 문제를 풀어도 홈 화면이 옛 값을 계속 보여준다.
+      if (!context.mounted) return;
+      await context.read<StatsProvider>().loadStats();
+    } catch (_) {
+      // 로딩 실패 시 조용히 복귀 (버튼은 다시 눌릴 수 있어야 한다)
+    } finally {
       _isNavigating = false;
-    });
+    }
   }
 
   /// 무료 응시 횟수를 다 쓴 유저에게 보여주는 안내.
@@ -157,24 +163,32 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _startAiPrediction(BuildContext context) async {
     if (_isNavigating) return;
-
-    // 구독 화면은 AI 모의고사를 유료 전용으로 광고하는데 게이트가 없었다.
-    // 완전히 막으면 쓰던 유저에게서 기능을 빼앗는 것이라 하루 1회는 열어둔다.
-    final isPremium = context.read<PurchaseService>().isPremium;
-    if (!await AiExamQuota.canStart(isPremium: isPremium)) {
-      if (!context.mounted) return;
-      _showExamQuotaDialog(context);
-      return;
-    }
-
+    // 가드는 **await 앞에서** 세워야 한다. 쿼터 조회를 기다리는 사이에 두 번째 탭이
+    // 통과하면 모의고사 화면이 두 번 쌓이고 무료 응시도 2회 소모된다.
     _isNavigating = true;
+
+    try {
+      // 구독 화면은 AI 모의고사를 유료 전용으로 광고하는데 게이트가 없었다.
+      // 완전히 막으면 쓰던 유저에게서 기능을 빼앗는 것이라 하루 1회는 열어둔다.
+      final isPremium = context.read<PurchaseService>().isPremium;
+      if (!await AiExamQuota.canStart(isPremium: isPremium)) {
+        if (!context.mounted) return;
+        _showExamQuotaDialog(context);
+        return;
+      }
+      await _launchAiPrediction(context);
+    } finally {
+      _isNavigating = false;
+    }
+  }
+
+  Future<void> _launchAiPrediction(BuildContext context) async {
     HapticFeedback.lightImpact();
     final provider = context.read<StudyProvider>();
     await provider.loadQuestions();
     // 쿼터는 여기서 깎지 않는다. 로딩 중에 뒤로가기로 빠져나가면 시험을 보지도
     // 않고 무료 1회가 증발한다. 소모는 시험이 실제로 시작되는 시점
     // (AiPredictionScreen 의 로딩 완료)에서 한다.
-    _isNavigating = false;
     if (!context.mounted) return;
 
     final questions = provider.questionList;
@@ -186,12 +200,16 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final examQuestions = questions.take(20).toList();
-    Navigator.push(
+    await Navigator.push(
       context,
       CupertinoPageRoute(
         builder: (_) => AiPredictionScreen(questions: examQuestions),
       ),
     );
+
+    // 모의고사를 마치고 돌아왔으면 홈 통계를 다시 읽는다.
+    if (!context.mounted) return;
+    await context.read<StatsProvider>().loadStats();
   }
 
   @override

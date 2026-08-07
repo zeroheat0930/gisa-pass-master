@@ -18,6 +18,9 @@ class PurchaseService extends ChangeNotifier {
   /// 설치 후 자동 복원을 이미 시도했는지 여부 (설치당 1회로 제한).
   static const String _prefsKeyAutoRestored = 'premium_auto_restore_done';
 
+  /// 이 구매가 어느 기기에서 이뤄졌는지. 백업 복제 감지용.
+  static const String _prefsKeyPremiumOwner = 'premium_owner_device';
+
   // 관리자 기기: 자동 프리미엄 (결제 불필요)
   static const Set<String> _adminDeviceIds = {
     '91ED9D8E-7430-4194-B9D0-D0099A772E02', // 정동준의 iPhone
@@ -126,14 +129,46 @@ class PurchaseService extends ChangeNotifier {
   Future<void> _loadCachedPremium() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool(_prefsKeyPremium) ?? false) {
-        _isPremium = true;
-        _adService?.setPremium(true);
-        notifyListeners();
+      if (!(prefs.getBool(_prefsKeyPremium) ?? false)) return;
+
+      // 이 기기에서 산 구매인지 확인한다.
+      // SharedPreferences 는 iCloud/Google 백업과 기기 이전으로 그대로 복제되므로,
+      // 플래그만 믿으면 결제하지 않은 기기에서도 프리미엄이 켜진다.
+      // 기기 식별자가 다르면 캐시를 버리고 스토어 복원에 맡긴다.
+      final owner = prefs.getString(_prefsKeyPremiumOwner);
+      final current = await _deviceFingerprint();
+      if (owner != null && current != null && owner != current) {
+        debugPrint('다른 기기의 구매 캐시 — 무시하고 스토어 복원에 맡긴다');
+        await prefs.remove(_prefsKeyPremium);
+        await prefs.remove(_prefsKeyPremiumOwner);
+        await prefs.remove(_prefsKeyAutoRestored); // 새 기기에서 자동 복원 1회 허용
+        return;
       }
+
+      _isPremium = true;
+      _adService?.setPremium(true);
+      notifyListeners();
     } catch (e) {
       debugPrint('구매 이력 로드 실패: $e');
     }
+  }
+
+  /// 기기 식별자. 얻지 못하면 null (그때는 캐시를 그대로 신뢰한다 —
+  /// 정당한 유저를 막는 쪽이 더 해롭다).
+  Future<String?> _deviceFingerprint() async {
+    if (kIsWeb) return null;
+    try {
+      final info = DeviceInfoPlugin();
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        return (await info.iosInfo).identifierForVendor;
+      }
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return (await info.androidInfo).id;
+      }
+    } catch (e) {
+      debugPrint('기기 식별자 조회 실패: $e');
+    }
+    return null;
   }
 
   /// 구매/복원 확정 시 프리미엄을 켜고 기기에 영속 저장한다.
@@ -150,10 +185,20 @@ class PurchaseService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefsKeyPremium, true);
+      final fingerprint = await _deviceFingerprint();
+      if (fingerprint != null) {
+        await prefs.setString(_prefsKeyPremiumOwner, fingerprint);
+      }
+      _lastSaveSucceeded = true;
     } catch (e) {
       debugPrint('구매 이력 저장 실패: $e');
+      _lastSaveSucceeded = false;
     }
   }
+
+  /// 직전 grantPremium 의 저장이 성공했는지. 저장이 실패했는데 스토어 트랜잭션을
+  /// 종결해버리면 재시작 후 프리미엄이 사라지고 복구 경로도 사라진다.
+  bool _lastSaveSucceeded = false;
 
   Future<void> _loadProducts() async {
     _loading = true;
@@ -239,6 +284,14 @@ class PurchaseService extends ChangeNotifier {
         // 죽었을 때 스토어는 '완료'로 처리했는데 기기에는 구매 근거가 없어,
         // 결제한 유저가 프리미엄을 잃는다.
         grantPremium().then((_) {
+          // 저장에 실패했으면 트랜잭션을 종결하지 않는다.
+          // 종결해버리면 스토어는 '완료'로 처리하는데 기기에는 구매 근거가 없어
+          // 재시작 후 프리미엄이 사라지고 복구 경로도 함께 사라진다.
+          // 미종결로 두면 다음 실행에 스트림으로 다시 내려와 재시도된다.
+          if (!_lastSaveSucceeded) {
+            debugPrint('구매 저장 실패 — 트랜잭션을 종결하지 않고 다음 실행에 재시도한다');
+            return;
+          }
           if (purchase.pendingCompletePurchase) {
             _iap.completePurchase(purchase);
           }

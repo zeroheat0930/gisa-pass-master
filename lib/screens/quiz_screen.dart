@@ -110,6 +110,50 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 학습플랜 미션 중에는 뒤로가기로 나가면 그날 진행이 통째로 유실된다
+    // (미션 완료 결과를 Navigator.pop 으로 돌려주는 구조라 중간 이탈은 기록이 없다).
+    // 일반 학습은 언제 나가도 기록이 남으므로 막지 않는다.
+    if (widget.planDayNumber == null) return _buildBody(context);
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmExitMission() && mounted) Navigator.pop(context);
+      },
+      child: _buildBody(context),
+    );
+  }
+
+  /// 미션 도중 이탈 확인.
+  Future<bool> _confirmExitMission() async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppConfig.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('미션을 중단할까요?',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        content: Text('지금 나가면 오늘 미션 진행이 기록되지 않습니다.',
+            style: TextStyle(color: Colors.grey[300], fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('계속 풀기', style: TextStyle(color: Colors.grey[400])),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppConfig.primaryColor),
+            child: const Text('나가기'),
+          ),
+        ],
+      ),
+    );
+    return leave ?? false;
+  }
+
+  Widget _buildBody(BuildContext context) {
     final provider = context.watch<StudyProvider>();
 
     if (provider.isLoading) {
