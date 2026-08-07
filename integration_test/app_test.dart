@@ -12,6 +12,19 @@ import 'package:gisa_pass_master/services/study_plan_service.dart';
 import 'package:gisa_pass_master/services/purchase_service.dart';
 import 'package:gisa_pass_master/providers/study_provider.dart';
 
+
+/// D-Day 타이머가 1초마다 setState 를 호출하므로, 이 앱에서는 pumpAndSettle 이
+/// 영원히 끝나지 않는다(프레임 스케줄이 비지 않는다). 그래서 통합 테스트가
+/// 첫 시나리오에서 멈춰 있었고, 사실상 한 번도 실행된 적이 없었다.
+/// 고정 횟수만큼 프레임을 진행시키는 방식으로 대체한다.
+Future<void> settle(WidgetTester tester,
+    [Duration total = const Duration(seconds: 2)]) async {
+  const step = Duration(milliseconds: 100);
+  for (var elapsed = Duration.zero; elapsed < total; elapsed += step) {
+    await tester.pump(step);
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -39,13 +52,13 @@ void main() {
   // ─── 시나리오 1: 제출 버튼 20번 연타 (비동기 충돌 체크) ───
   testWidgets('연타 테스트: 제출 버튼 20번 연속 탭해도 크래시 없음', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    await settle(tester, const Duration(seconds: 3));
 
     // "예측 학습 시작" 버튼 찾기
     final predictionBtn = find.text('예측 학습 시작');
     if (predictionBtn.evaluate().isNotEmpty) {
       await tester.tap(predictionBtn);
-      await tester.pumpAndSettle(const Duration(seconds: 2));
+      await settle(tester, const Duration(seconds: 2));
 
       // 답안 입력 필드 찾기
       final textField = find.byType(TextField);
@@ -54,24 +67,29 @@ void main() {
 
         // 제출 버튼 찾기
         final submitBtn = find.text('제출');
-        if (submitBtn.evaluate().isNotEmpty) {
-          // 20번 연타!
-          for (int i = 0; i < 20; i++) {
-            await tester.tap(submitBtn, warnIfMissed: false);
-            await tester.pump(const Duration(milliseconds: 100));
-          }
-          await tester.pumpAndSettle(const Duration(seconds: 1));
+        expect(submitBtn, findsWidgets, reason: '제출 버튼을 찾지 못했다');
+
+        // 좌표를 미리 잡아두고 그 지점을 20번 연타한다.
+        // 위젯 파인더로 매번 다시 찾으면 안 된다 — 첫 제출 직후 버튼이 '다음'으로
+        // 바뀌어 사라지므로 두 번째 탭에서 테스트가 터진다. 실제 유저의 연타는
+        // '같은 화면 위치를 계속 누르는 것'이므로 좌표 탭이 현실에 가깝다.
+        final point = tester.getCenter(submitBtn.first);
+        for (int i = 0; i < 20; i++) {
+          await tester.tapAt(point);
+          await tester.pump(const Duration(milliseconds: 50));
         }
+        await settle(tester, const Duration(seconds: 1));
       }
     }
     // 크래시 없이 여기까지 도달하면 성공
     expect(find.byType(MaterialApp), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: '연타 중 예외가 발생하면 안 된다');
   });
 
   // ─── 시나리오 2: 5문제 풀기 후 광고 플래그 확인 ───
   testWidgets('5문제 풀면 shouldShowAd 플래그 활성화', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    await settle(tester, const Duration(seconds: 3));
 
     // Provider에서 StudyProvider 접근
     final context = tester.element(find.byType(MaterialApp));
@@ -79,7 +97,7 @@ void main() {
 
     // 문제 로드
     await provider.loadQuestions();
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     // 5문제 연속 제출
     int adTriggered = 0;
@@ -99,24 +117,24 @@ void main() {
   // ─── 시나리오 3: 뒤로가기 크래시 체크 ───
   testWidgets('퀴즈 화면에서 뒤로가기 시 크래시 없음', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    await settle(tester, const Duration(seconds: 3));
 
     // 예측 학습 시작
     final predictionBtn = find.text('예측 학습 시작');
     if (predictionBtn.evaluate().isNotEmpty) {
       await tester.tap(predictionBtn);
-      await tester.pumpAndSettle(const Duration(seconds: 2));
+      await settle(tester, const Duration(seconds: 2));
 
       // 뒤로가기 (AppBar back button)
       final backBtn = find.byType(BackButton);
       if (backBtn.evaluate().isNotEmpty) {
         await tester.tap(backBtn.first);
-        await tester.pumpAndSettle();
+        await settle(tester);
       } else {
         // Navigator pop 직접 실행
         final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
         navigator.pop();
-        await tester.pumpAndSettle();
+        await settle(tester);
       }
     }
 
@@ -127,7 +145,7 @@ void main() {
   // ─── 시나리오 4: 탭 왕복 50회 메모리 릭 체크 ───
   testWidgets('탭 50회 왕복 전환해도 크래시/흰화면 없음', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    await settle(tester, const Duration(seconds: 3));
 
     // NavigationBar 의 실제 라벨과 일치해야 한다.
     // 예전에는 '기출문제'로 되어 있었는데 실제 라벨은 '문제은행'이라 탭을 못 찾았고,
@@ -143,7 +161,7 @@ void main() {
       await tester.tap(find.text(tabs[tabIndex]).last);
       await tester.pump(const Duration(milliseconds: 50));
     }
-    await tester.pumpAndSettle(const Duration(seconds: 1));
+    await settle(tester, const Duration(seconds: 1));
 
     // 앱이 살아있고 위젯 트리가 정상인지 확인
     expect(find.byType(MaterialApp), findsOneWidget);

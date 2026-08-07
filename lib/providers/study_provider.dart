@@ -82,6 +82,9 @@ class StudyProvider extends ChangeNotifier {
   bool get isLastQuestion =>
       _questionList.isNotEmpty && _questionIndex >= _questionList.length - 1;
 
+  /// 한 세션에 내보내는 문항 수
+  static const int sessionQuestionCount = 50;
+
   // === 문제 로딩 ===
 
   /// 출제 예측 모드: PredictionEngine으로 우선순위 정렬된 문제 로드
@@ -90,15 +93,13 @@ class StudyProvider extends ChangeNotifier {
     _studyMode = StudyMode.prediction;
 
     try {
-      // 전체 문항을 대상으로 우선순위를 매긴 뒤 상위 50개를 쓴다.
-      // 예전에는 무작위 50개를 뽑아서 그 안에서만 정렬해, '출제 예측'이라면서
-      // 사실상 랜덤 출제였다. 빈출·약점 가중치가 전혀 힘을 쓰지 못했다.
       final questions = await _db.getAllQuestions();
       final errorRates = await _buildErrorRates(questions);
-      _questionList = _predictionEngine
-          .getPrioritizedQuestions(questions, errorRates)
-          .take(50)
-          .toList();
+      _questionList = _predictionEngine.selectForSession(
+        questions,
+        errorRates,
+        sessionSize: sessionQuestionCount,
+      );
       _questionIndex = 0;
       _resetSession();
     } finally {

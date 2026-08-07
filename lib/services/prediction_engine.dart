@@ -77,6 +77,41 @@ class PredictionEngine {
   }
 }
 
+/// 한 세션에 출제할 문제를 고른다.
+///
+/// **정렬 결과를 그대로 잘라 쓰면 안 된다.** 우선순위 점수는 빈도·최신성·유형가중이
+/// 문항마다 고정이고 약점만 0.1 가중치로 흔들어서 사실상 결정적이다. 전체를 정렬해
+/// 상위 N개를 자르면 매 세션 완전히 똑같은 문제만 나오고, 나머지 수백 문항은
+/// 영영 출제되지 않는다.
+///
+/// 그렇다고 전체에서 무작위로 뽑으면 '출제 예측'이 무의미해진다.
+/// 그래서 상위 우선순위 풀에서 무작위로 뽑는다 — 예측은 살리고 반복은 피한다.
+extension PredictionSessionSelection on PredictionEngine {
+  /// 세션 크기의 [poolMultiplier] 배수만큼 상위 문항을 후보로 두고 그 안에서 섞는다.
+  List<Question> selectForSession(
+    List<Question> questions,
+    Map<int, double> errorRates, {
+    int sessionSize = 50,
+    int poolMultiplier = 4,
+  }) {
+    final prioritized = getPrioritizedQuestions(questions, errorRates);
+    if (prioritized.length <= sessionSize) return prioritized;
+
+    final poolSize = (sessionSize * poolMultiplier).clamp(sessionSize, prioritized.length);
+    final pool = prioritized.take(poolSize).toList()..shuffle();
+    final selected = pool.take(sessionSize).toList();
+
+    // 고른 뒤에는 다시 우선순위 순서로 보여준다 (중요한 문제부터 풀도록).
+    final rank = <int?, int>{
+      for (var i = 0; i < prioritized.length; i++) prioritized[i].id: i,
+    };
+    selected.sort(
+      (a, b) => (rank[a.id] ?? 1 << 30).compareTo(rank[b.id] ?? 1 << 30),
+    );
+    return selected;
+  }
+}
+
 /// 내부 헬퍼: 점수가 부여된 문제
 class _ScoredQuestion {
   final Question question;

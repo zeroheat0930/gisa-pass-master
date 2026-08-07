@@ -165,7 +165,14 @@ class _RootNavigatorState extends State<_RootNavigator> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestTracking());
   }
 
+  /// 통합 테스트에서는 ATT 시스템 모달이 앱을 덮어 자동화가 진행되지 않는다.
+  /// 시뮬레이터는 이 권한을 미리 설정할 수도 없어서(simctl privacy 불가),
+  /// 테스트 실행 시에만 건너뛴다. 실제 빌드에는 영향이 없다.
+  static const bool _skipTracking =
+      bool.fromEnvironment('SKIP_ATT', defaultValue: false);
+
   Future<void> _requestTracking() async {
+    if (_skipTracking) return;
     if (kIsWeb || !Platform.isIOS) return;
     try {
       final status = await AppTrackingTransparency.trackingAuthorizationStatus;

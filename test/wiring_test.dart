@@ -212,4 +212,63 @@ void main() {
           reason: '확인만 하고 소모하지 않으면 제한이 무의미하다');
     });
   });
+
+  // ── 4) 출제 예측 선정 ────────────────────────────────────────────────────
+  // 우선순위 점수는 사실상 결정적이라, 전체를 정렬해 상위 N개를 자르면 매 세션
+  // 똑같은 문제만 나오고 나머지 수백 문항이 영영 출제되지 않는다.
+  group('출제 예측 세션 선정', () {
+    List<Question> pool(int n) => List.generate(
+          n,
+          (i) => Question(
+            id: i + 1,
+            year: 2020 + (i % 7),
+            round: 1,
+            subject: '과목${i % 5}',
+            questionType: ['code_reading', 'sql', 'short_answer'][i % 3],
+            questionText: '문제 $i',
+            answer: '답 $i',
+            explanation: '',
+            frequencyWeight: (i % 10) / 10,
+          ),
+        );
+
+    test('세션마다 같은 문제만 반복되지 않는다', () {
+      final engine = PredictionEngine();
+      final questions = pool(1000);
+
+      final a = engine.selectForSession(questions, const {}, sessionSize: 50);
+      final b = engine.selectForSession(questions, const {}, sessionSize: 50);
+
+      expect(a, hasLength(50));
+      expect(b, hasLength(50));
+
+      final idsA = a.map((q) => q.id).toSet();
+      final idsB = b.map((q) => q.id).toSet();
+      expect(idsA, isNot(equals(idsB)),
+          reason: '두 세션이 완전히 같으면 대부분의 문항이 영영 출제되지 않는다');
+    });
+
+    test('무작위가 아니라 상위 우선순위 풀에서만 뽑는다', () {
+      final engine = PredictionEngine();
+      final questions = pool(1000);
+
+      final prioritized = engine.getPrioritizedQuestions(questions, const {});
+      final topPool = prioritized.take(50 * 4).map((q) => q.id).toSet();
+
+      final selected =
+          engine.selectForSession(questions, const {}, sessionSize: 50);
+
+      for (final q in selected) {
+        expect(topPool.contains(q.id), isTrue,
+            reason: '예측 엔진이 고른 상위 풀 밖에서 나오면 예측이 무의미하다');
+      }
+    });
+
+    test('문항이 세션 크기보다 적으면 전부 반환한다', () {
+      final engine = PredictionEngine();
+      final selected =
+          engine.selectForSession(pool(10), const {}, sessionSize: 50);
+      expect(selected, hasLength(10));
+    });
+  });
 }
