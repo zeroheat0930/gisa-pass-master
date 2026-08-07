@@ -67,4 +67,44 @@ void main() {
       expect(await AiExamQuota.canStart(isPremium: false), isTrue);
     });
   });
+
+  // 광고 보상으로 얻는 보너스 응시.
+  // 새 수익원이면서 무료 유저가 유료 기능을 체험하는 통로다.
+  // 다만 무제한이면 프리미엄을 살 이유가 사라지므로 상한을 둔다.
+  group('광고 보상 보너스', () {
+    test('보너스를 받으면 한 번 더 응시할 수 있다', () async {
+      SharedPreferences.setMockInitialValues({});
+      await AiExamQuota.consume(isPremium: false);
+      expect(await AiExamQuota.canStart(isPremium: false), isFalse);
+
+      expect(await AiExamQuota.grantBonus(), isTrue);
+      expect(await AiExamQuota.canStart(isPremium: false), isTrue);
+    });
+
+    test('하루 보너스 상한을 넘으면 더 받을 수 없다', () async {
+      SharedPreferences.setMockInitialValues({});
+      for (var i = 0; i < AiExamQuota.maxBonusPerDay; i++) {
+        expect(await AiExamQuota.grantBonus(), isTrue);
+      }
+      expect(await AiExamQuota.grantBonus(), isFalse,
+          reason: '무제한이면 프리미엄을 살 이유가 사라진다');
+      expect(await AiExamQuota.canEarnBonus(isPremium: false), isFalse);
+    });
+
+    test('프리미엄은 보너스가 필요 없다', () async {
+      SharedPreferences.setMockInitialValues({});
+      expect(await AiExamQuota.canEarnBonus(isPremium: true), isFalse);
+    });
+
+    test('날짜가 바뀌면 보너스도 초기화된다', () async {
+      SharedPreferences.setMockInitialValues({});
+      await AiExamQuota.grantBonus();
+      expect(await AiExamQuota.bonusToday(), 1);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('ai_exam_quota_date', '2000-01-01');
+
+      expect(await AiExamQuota.bonusToday(), 0);
+    });
+  });
 }

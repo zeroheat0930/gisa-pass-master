@@ -10,6 +10,7 @@ import '../providers/stats_provider.dart';
 import '../services/ai_exam_quota.dart';
 import '../services/purchase_service.dart';
 import '../widgets/dday_timer.dart';
+import '../widgets/exam_quota_dialog.dart';
 import '../widgets/pass_score_card.dart';
 import 'quiz_screen.dart';
 import 'ai_prediction_screen.dart';
@@ -123,46 +124,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  /// 무료 응시 횟수를 다 쓴 유저에게 보여주는 안내.
-  /// 기능을 막았다는 인상보다 "오늘 몫을 다 썼다"로 읽히도록 문구를 잡았다.
-  void _showExamQuotaDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppConfig.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          '오늘의 무료 모의고사 완료',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          '무료로는 하루 ${AiExamQuota.freeAttemptsPerDay}회 응시할 수 있어요.\n'
-          '내일 다시 열리고, 프리미엄이면 지금 바로 무제한으로 볼 수 있습니다.',
-          style: TextStyle(color: Colors.grey[300], fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('내일 다시', style: TextStyle(color: Colors.grey[400])),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              Navigator.push(
-                context,
-                CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppConfig.primaryColor,
-            ),
-            child: const Text('프리미엄 보기'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _startAiPrediction(BuildContext context) async {
     if (_isNavigating) return;
     // 가드는 **await 앞에서** 세워야 한다. 쿼터 조회를 기다리는 사이에 두 번째 탭이
@@ -175,8 +136,16 @@ class _HomeScreenState extends State<HomeScreen>
       final isPremium = context.read<PurchaseService>().isPremium;
       if (!await AiExamQuota.canStart(isPremium: isPremium)) {
         if (!context.mounted) return;
-        _showExamQuotaDialog(context);
-        return;
+        final earned = await ExamQuotaDialog.show(
+          context,
+          isPremium: isPremium,
+          onSeePremium: () => Navigator.push(
+            context,
+            CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
+          ),
+        );
+        // 광고를 끝까지 봐서 1회를 얻었으면 그대로 이어서 응시한다.
+        if (!earned || !context.mounted) return;
       }
       await _launchAiPrediction(context);
     } finally {

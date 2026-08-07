@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -18,6 +20,18 @@ class AdService {
   static const String _androidBannerId = 'ca-app-pub-5911237489066113/3631497162';
   static const String _iosBannerId = 'ca-app-pub-5911237489066113/2286625905';
 
+  // ⚠️ 리워드 광고 ID — 현재 Google 공식 **테스트 ID** 다.
+  // AdMob 콘솔에서 리워드 광고 단위를 Android/iOS 각각 만들고 이 두 줄만 바꾸면
+  // 실제 수익이 잡힌다. 테스트 ID 그대로 배포해도 앱은 정상 동작하지만
+  // 수익은 0 이다. (실 ID 로 바꾸기 전까지 이 주석을 지우지 말 것)
+  static const String _androidRewardedId =
+      'ca-app-pub-3940256099942544/5224354917';
+  static const String _iosRewardedId = 'ca-app-pub-3940256099942544/1712485313';
+
+  /// 리워드 광고 ID 가 아직 테스트 ID 인지. 설정 화면 등에서 안내에 쓸 수 있다.
+  static bool get isRewardedUsingTestId =>
+      _androidRewardedId.startsWith('ca-app-pub-3940256099942544');
+
   static String get interstitialAdUnitId {
     if (kIsWeb) return '';
     switch (defaultTargetPlatform) {
@@ -25,6 +39,18 @@ class AdService {
         return _androidInterstitialId;
       case TargetPlatform.iOS:
         return _iosInterstitialId;
+      default:
+        return '';
+    }
+  }
+
+  static String get rewardedAdUnitId {
+    if (kIsWeb) return '';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return _androidRewardedId;
+      case TargetPlatform.iOS:
+        return _iosRewardedId;
       default:
         return '';
     }
@@ -56,6 +82,9 @@ class AdService {
       _interstitialAd = null;
       _isAdLoaded = false;
       _isLoadingInterstitial = false;
+      _rewardedAd?.dispose();
+      _rewardedAd = null;
+      _isLoadingRewarded = false;
     }
   }
 
@@ -188,6 +217,82 @@ class AdService {
         },
       ),
     )..load();
+  }
+
+  // ── 리워드 광고 ──────────────────────────────────────────────────────────
+  // 무료 유저가 광고를 보고 잠긴 기능을 1회 열 수 있게 한다.
+  // 새 수익원이면서, 프리미엄을 체험시켜 구매로 이어지는 통로이기도 하다.
+
+  RewardedAd? _rewardedAd;
+  bool _isLoadingRewarded = false;
+
+  bool get isRewardedReady => _rewardedAd != null;
+
+  /// 리워드 광고 미리 로드. 프리미엄 유저에게는 필요 없다.
+  void loadRewardedAd() {
+    try {
+      if (!shouldShowAds) return;
+      if (_isLoadingRewarded || _rewardedAd != null) return;
+      final adUnitId = rewardedAdUnitId;
+      if (adUnitId.isEmpty) return;
+
+      _isLoadingRewarded = true;
+      RewardedAd.load(
+        adUnitId: adUnitId,
+        request: const AdRequest(),
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
+          onAdLoaded: (ad) {
+            _isLoadingRewarded = false;
+            _rewardedAd?.dispose();
+            _rewardedAd = ad;
+          },
+          onAdFailedToLoad: (error) {
+            debugPrint('리워드 광고 로드 실패: ${error.message}');
+            _isLoadingRewarded = false;
+          },
+        ),
+      );
+    } catch (e) {
+      debugPrint('리워드 광고 로드 중 오류: $e');
+      _isLoadingRewarded = false;
+    }
+  }
+
+  /// 리워드 광고를 보여주고 **끝까지 봤는지** 반환한다.
+  /// 중간에 닫으면 false — 보상을 주면 안 된다.
+  Future<bool> showRewardedAd() async {
+    if (!shouldShowAds) return false;
+    final ad = _rewardedAd;
+    if (ad == null) {
+      loadRewardedAd();
+      return false;
+    }
+
+    _rewardedAd = null; // 1회용
+    var earned = false;
+
+    final completer = Completer<bool>();
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        loadRewardedAd(); // 다음 기회를 위해 미리 채워둔다
+        if (!completer.isCompleted) completer.complete(earned);
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        debugPrint('리워드 광고 표시 실패: ${error.message}');
+        ad.dispose();
+        loadRewardedAd();
+        if (!completer.isCompleted) completer.complete(false);
+      },
+    );
+
+    try {
+      await ad.show(onUserEarnedReward: (_, __) => earned = true);
+    } catch (e) {
+      debugPrint('리워드 광고 show 오류: $e');
+      if (!completer.isCompleted) completer.complete(false);
+    }
+    return completer.future;
   }
 
   /// 리소스 해제

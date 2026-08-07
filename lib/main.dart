@@ -174,6 +174,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
       // 반대로 하면 IDFA 없이 광고를 요청하게 되어 ATT 를 띄우는 의미가 없다.
       await _requestTracking();
       globalAdService?.loadInterstitialAd();
+      globalAdService?.loadRewardedAd();
 
       // 알림 초기화 + 예약 갱신. 유저가 켜둔 경우에만 실제로 예약된다.
       await NotificationService.initialize();

@@ -11,7 +11,9 @@ import '../services/ai_exam_quota.dart';
 import '../services/purchase_service.dart';
 import '../services/answer_checker.dart';
 import '../widgets/answer_input_field.dart';
+import '../widgets/exam_quota_dialog.dart';
 import '../widgets/question_card.dart';
+import 'subscription_screen.dart';
 
 class AiPredictionScreen extends StatefulWidget {
   final List<Question> questions;
@@ -174,27 +176,15 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
     final isPremium = context.read<PurchaseService>().isPremium;
     if (!await AiExamQuota.canStart(isPremium: isPremium)) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppConfig.cardColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('오늘의 무료 모의고사 완료',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
-          content: Text(
-            '무료로는 하루 ${AiExamQuota.freeAttemptsPerDay}회 응시할 수 있어요.\n'
-            '내일 다시 열리고, 프리미엄이면 지금 바로 무제한으로 볼 수 있습니다.',
-            style: TextStyle(color: Colors.grey[300], fontSize: 14, height: 1.5),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('닫기', style: TextStyle(color: Colors.grey[400])),
-            ),
-          ],
+      final earned = await ExamQuotaDialog.show(
+        context,
+        isPremium: isPremium,
+        onSeePremium: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
         ),
       );
-      return;
+      if (!earned || !mounted) return;
     }
 
     _timerTick?.cancel();

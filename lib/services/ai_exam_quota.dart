@@ -41,14 +41,56 @@ class AiExamQuota {
   /// 남은 무료 응시 횟수 (프리미엄은 무제한이므로 사용처에서 먼저 걸러낼 것)
   static Future<int> remainingToday() async {
     final used = await usedToday();
-    final left = freeAttemptsPerDay - used;
+    final left = freeAttemptsPerDay + await bonusToday() - used;
     return left < 0 ? 0 : left;
+  }
+
+  /// 오늘 광고로 얻은 보너스 응시 횟수
+  static const String _bonusKey = 'ai_exam_bonus_count';
+
+  static Future<int> bonusToday() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_dateKey) != _today()) return 0;
+      return prefs.getInt(_bonusKey) ?? 0;
+    } catch (e) {
+      debugPrint('보너스 조회 실패: $e');
+      return 0;
+    }
+  }
+
+  /// 광고 시청 보상으로 1회 추가. 하루에 얻을 수 있는 보너스에도 상한을 둔다
+  /// (무제한이면 프리미엄을 살 이유가 사라진다).
+  static const int maxBonusPerDay = 2;
+
+  static Future<bool> grantBonus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final today = _today();
+      final current = prefs.getString(_dateKey) == today
+          ? (prefs.getInt(_bonusKey) ?? 0)
+          : 0;
+      if (current >= maxBonusPerDay) return false;
+      await prefs.setString(_dateKey, today);
+      await prefs.setInt(_bonusKey, current + 1);
+      return true;
+    } catch (e) {
+      debugPrint('보너스 지급 실패: $e');
+      return false;
+    }
+  }
+
+  /// 광고로 응시권을 더 얻을 수 있는 상태인지
+  static Future<bool> canEarnBonus({required bool isPremium}) async {
+    if (isPremium) return false;
+    return await bonusToday() < maxBonusPerDay;
   }
 
   /// 응시 가능 여부. 프리미엄은 항상 true.
   static Future<bool> canStart({required bool isPremium}) async {
     if (isPremium) return true;
-    return await usedToday() < freeAttemptsPerDay;
+    final allowed = freeAttemptsPerDay + await bonusToday();
+    return await usedToday() < allowed;
   }
 
   /// 응시 1회 소모. 프리미엄은 카운트하지 않는다.
@@ -72,5 +114,6 @@ class AiExamQuota {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_dateKey);
     await prefs.remove(_countKey);
+    await prefs.remove(_bonusKey);
   }
 }
