@@ -15,6 +15,7 @@ class AnswerChecker {
         question.answer,
         questionType: question.questionType,
         questionText: question.questionText,
+        codeSnippet: question.codeSnippet,
       );
 
   /// 줄바꿈·공백·대소문자 차이를 흡수해 정답 여부를 판정한다.
@@ -27,9 +28,14 @@ class AnswerChecker {
     String correctAnswer, {
     String? questionType,
     String? questionText,
+    String? codeSnippet,
   }) {
-    final normUser = _normalize(userAnswer);
-    final normCorrect = _normalize(correctAnswer);
+    // 대소문자 변환 자체를 묻는 문항은 대소문자를 접으면 채점이 무의미해진다.
+    // (입력 문자열을 그대로 옮겨 적어도 정답 처리됐다)
+    final caseSensitive = _isCaseSensitive(questionText, codeSnippet);
+
+    final normUser = _normalize(userAnswer, caseSensitive: caseSensitive);
+    final normCorrect = _normalize(correctAnswer, caseSensitive: caseSensitive);
 
     // 1) 정규화 후 완전 일치
     if (normUser == normCorrect) return true;
@@ -49,13 +55,43 @@ class AnswerChecker {
 
   /// 줄바꿈을 쉼표로 바꿔 여러 줄 정답과 한 줄 나열 답안을 같은 형태로 만든다.
   /// (전체 1000문항 중 125문항은 정답이 여러 줄이다.)
-  static String _normalize(String s) => s
-      .trim()
-      .replaceAll('\r\n', '\n')
-      .replaceAll('\r', '\n')
-      .replaceAll('\n', ', ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .toLowerCase();
+  static String _normalize(String s, {bool caseSensitive = false}) {
+    final t = s
+        .trim()
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .replaceAll('\n', ', ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+    return caseSensitive ? t : t.toLowerCase();
+  }
+
+  /// 대소문자가 채점 대상인 문항인지 판정한다.
+  ///
+  /// 보통은 대소문자를 접어야 한다("Stack"과 "stack"은 같은 답이다).
+  /// 하지만 대소문자 변환 결과를 묻는 문항에서 접어버리면, 유저가 입력 문자열을
+  /// 그대로 옮겨 적어도 정답이 되어 문제가 성립하지 않는다.
+  static bool _isCaseSensitive(String? questionText, String? codeSnippet) {
+    final haystack = '${questionText ?? ''}\n${codeSnippet ?? ''}';
+    if (haystack.isEmpty) return false;
+
+    const markers = [
+      '대문자',
+      '소문자',
+      'toUpperCase',
+      'toLowerCase',
+      'upper(',
+      'lower(',
+      'UPPER(',
+      'LOWER(',
+      'capitalize',
+      'swapcase',
+      'title()',
+    ];
+    for (final m in markers) {
+      if (haystack.contains(m)) return true;
+    }
+    return false;
+  }
 
   static String _stripSpaces(String s) => s.replaceAll(' ', '');
 

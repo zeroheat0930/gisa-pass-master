@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
+import '../utils/duration_format.dart';
 import '../models/question.dart';
 import '../providers/study_provider.dart';
 import '../services/ad_service.dart';
@@ -84,9 +85,7 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
     _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       final elapsed = _stopwatch.elapsed;
-      final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
-      setState(() => _elapsedDisplay = '$mm:$ss');
+      setState(() => _elapsedDisplay = formatElapsed(elapsed));
     });
   }
 
@@ -392,9 +391,7 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
     }
 
     final elapsed = _stopwatch.elapsed;
-    final mm = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final ss = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
-    final timeTaken = '$mm:$ss';
+    final timeTaken = formatElapsed(elapsed);
 
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,

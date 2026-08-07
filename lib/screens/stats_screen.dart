@@ -381,7 +381,8 @@ class _OverallProgressCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${stats.totalSolved} / ${stats.totalAvailable}',
+                    // 중복 풀이를 세면 "1500 / 1000" 같은 값이 나온다.
+                    stats.completionLabel,
                     style: TextStyle(
                       color: Colors.grey[400],
                       fontSize: 12,

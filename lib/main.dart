@@ -193,6 +193,13 @@ class _RootNavigatorState extends State<_RootNavigator> {
         onDestinationSelected: (index) {
           _loadedTabs.add(index);
           setState(() => _selectedIndex = index);
+
+          // IndexedStack 은 탭을 계속 살려두므로 initState 가 다시 돌지 않는다.
+          // 그래서 문제를 풀어도 홈·통계 화면이 앱 재시작 전까지 옛 값을 붙들고 있었다.
+          // 통계를 보여주는 탭으로 이동할 때마다 다시 읽는다.
+          if (index == 0 || index == 3) {
+            context.read<StatsProvider>().loadStats();
+          }
         },
         backgroundColor: AppConfig.surfaceColor,
         indicatorColor: AppConfig.primaryColor.withValues(alpha: 0.2),

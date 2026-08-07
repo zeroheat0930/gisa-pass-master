@@ -46,6 +46,7 @@ class StatsProvider extends ChangeNotifier {
       final typeSolved = await _db.getSolvedCountByField('question_type');
       final difficultyAcc = await _db.getAccuracyByDifficulty();
       final totalAvailable = await _db.getTotalQuestionCount();
+      final uniqueSolved = await _db.getUniqueSolvedCount();
       final streakDays = await _db.getStreakDays();
       final last7Raw = await _db.getLast7DaysStats();
 
@@ -72,6 +73,7 @@ class StatsProvider extends ChangeNotifier {
         todaySolved: todaySolved,
         todayCorrect: todayCorrect,
         totalAvailable: totalAvailable,
+        uniqueSolved: uniqueSolved,
         subjectAccuracy: subjectAcc,
         subjectSolved: subjectSolved,
         typeAccuracy: typeAcc,
