@@ -451,17 +451,30 @@ class StudyPlanService extends ChangeNotifier {
           // 아직 풀어본 문제가 없으면 랜덤
           return await _db.getRandomQuestions(mission.questionCount);
         }
-        final sorted = errorRates.entries.toList()
+        // 한 번도 틀린 적 없는 문제(오답률 0)는 약점이 아니다.
+        // 거르지 않으면 '약점 집중 공략'에 다 맞힌 문제가 섞여 들어온다.
+        final sorted = errorRates.entries.where((e) => e.value > 0).toList()
           ..sort((a, b) => b.value.compareTo(a.value));
         final weakIds = sorted.take(mission.questionCount).map((e) => e.key).toList();
         final questions = <Question>[];
+        final pickedIds = <int>{};
         for (final id in weakIds) {
           final q = await _db.getQuestionById(id);
-          if (q != null) questions.add(q);
+          if (q != null) {
+            questions.add(q);
+            if (q.id != null) pickedIds.add(q.id!);
+          }
         }
+        // 약점이 모자라면 랜덤으로 채우되, 이미 고른 문제와 겹치지 않게 한다.
         if (questions.length < mission.questionCount) {
-          final more = await _db.getRandomQuestions(mission.questionCount - questions.length);
-          questions.addAll(more);
+          final need = mission.questionCount - questions.length;
+          final pool = await _db.getRandomQuestions(need + pickedIds.length);
+          for (final q in pool) {
+            if (questions.length >= mission.questionCount) break;
+            if (q.id != null && pickedIds.contains(q.id)) continue;
+            questions.add(q);
+            if (q.id != null) pickedIds.add(q.id!);
+          }
         }
         return questions;
 
@@ -477,7 +490,9 @@ class StudyPlanService extends ChangeNotifier {
         if (questions.isEmpty) {
           return await _db.getRandomQuestions(mission.questionCount);
         }
-        if (mission.queryType == 'all_wrong') return questions;
+        // all_wrong 이라도 questionCount 로 자른다.
+        // 복습 대기가 수백 건 쌓이면 한 세션이 끝나지 않아 미션을 영영 완료할 수 없다.
+        // getDueReviews 는 복습 기한이 급한 순서라, 앞에서 자르면 가장 급한 것부터 본다.
         return questions.take(mission.questionCount).toList();
 
       case 'frequent':
