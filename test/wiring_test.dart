@@ -314,4 +314,37 @@ void main() {
           reason: '채점 로직이 화면에 복제되었다: $offenders');
     });
   });
+
+  // ── 6) 복습 알림 배선 ────────────────────────────────────────────────────
+  // 망각곡선 엔진은 있었지만 알려줄 수단이 없어 리텐션 엔진이 절반만 돌았다.
+  // 알림 예약이 복습 스케줄 갱신에 실제로 연결되어야 의미가 있다.
+  group('복습 알림 배선', () {
+    String source(String path) => File(path).readAsStringSync();
+
+    test('복습 스케줄이 갱신되면 알림도 다시 예약한다', () {
+      final srs = source('lib/services/spaced_repetition_service.dart');
+      expect(srs.contains('rescheduleReviewNotification'), isTrue,
+          reason: '스케줄만 갱신하고 알림을 안 잡으면 유저에게 도달하지 못한다');
+      expect(srs.contains('NotificationService.scheduleReviewReminder'), isTrue);
+    });
+
+    test('앱 시작 시 알림을 초기화하고 예약을 갱신한다', () {
+      final main = source('lib/main.dart');
+      expect(main.contains('NotificationService.initialize'), isTrue);
+      expect(main.contains('rescheduleReviewNotification'), isTrue,
+          reason: '앱을 껐다 켜면 예약이 사라질 수 있으므로 시작 시 다시 잡아야 한다');
+    });
+
+    test('학습을 마친 시점에 알림 사용을 제안한다', () {
+      final quiz = source('lib/screens/quiz_screen.dart');
+      expect(quiz.contains('NotificationOptIn.maybeAsk'), isTrue,
+          reason: '첫 실행에 권한을 물으면 맥락이 없어 대부분 거부한다');
+    });
+
+    test('Android 알림 권한이 선언되어 있다', () {
+      final manifest = source('android/app/src/main/AndroidManifest.xml');
+      expect(manifest.contains('android.permission.POST_NOTIFICATIONS'), isTrue,
+          reason: 'Android 13+ 는 이 권한 없이는 알림이 나가지 않는다');
+    });
+  });
 }

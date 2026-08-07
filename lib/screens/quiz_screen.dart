@@ -8,6 +8,7 @@ import '../services/ad_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
 import '../widgets/answer_effect.dart';
+import '../widgets/notification_opt_in.dart';
 
 class QuizScreen extends StatefulWidget {
   final StudyMode mode;
@@ -196,6 +197,13 @@ class _QuizScreenState extends State<QuizScreen> {
 
     final question = provider.currentQuestion;
     if (question == null) {
+      // 학습을 마친 이 시점이 복습 알림을 제안하기 가장 좋은 순간이다.
+      // 첫 실행에 권한을 물으면 맥락이 없어 대부분 거부한다.
+      final wrong = provider.sessionSolved - provider.sessionCorrect;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) NotificationOptIn.maybeAsk(context, wrongCount: wrong);
+      });
+
       final daysLeft = AppConfig.daysUntilExam;
       return Scaffold(
         backgroundColor: AppConfig.backgroundColor,

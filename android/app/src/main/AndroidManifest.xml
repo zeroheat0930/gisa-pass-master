@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 복습 알림 (Android 13+ 는 런타임 권한 필요) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="com.android.vending.BILLING"/>
     <!-- Google Play 정책: Android 13+ 광고 ID 접근 필수 권한 (AdMob 요청 가능하려면 반드시 선언) -->

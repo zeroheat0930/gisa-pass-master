@@ -155,6 +155,28 @@ class DatabaseService {
   static String _questionKey(String? questionText, String? codeSnippet) =>
       '${questionText ?? ''}\u0000${codeSnippet ?? ''}';
 
+  /// 다음 복습 예정 시각과 그 시점까지 쌓이는 대기 건수.
+  /// 복습 알림을 예약하는 데 쓴다. 복습 대상이 없으면 null.
+  Future<({DateTime dueAt, int count})?> getNextReviewSchedule() async {
+    if (kIsWeb) return null;
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT MIN(next_review_at) AS next FROM spaced_repetition',
+    );
+    final raw = rows.isEmpty ? null : rows.first['next'] as String?;
+    if (raw == null) return null;
+
+    final dueAt = DateTime.tryParse(raw);
+    if (dueAt == null) return null;
+
+    // 그 시각까지 복습 기한이 도래하는 문항 수
+    final countRows = await db.rawQuery(
+      'SELECT COUNT(*) FROM spaced_repetition WHERE next_review_at <= ?',
+      [raw],
+    );
+    return (dueAt: dueAt, count: _firstInt(countRows));
+  }
+
   /// 서로 다른 문제를 몇 개 풀었는지 (중복 제거).
   /// 완료율 계산에 총 풀이 수를 쓰면 같은 문제를 여러 번 풀 때마다 진도가 오른다.
   Future<int> getUniqueSolvedCount() async {

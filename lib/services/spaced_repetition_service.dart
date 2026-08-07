@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/question.dart';
+import 'notification_service.dart';
 import 'database_service.dart';
 
 /// 에빙하우스 망각곡선 기반 스파르타 오답노트
@@ -62,6 +65,24 @@ class SpacedRepetitionService {
       nextReviewAt: nextReviewAt,
       consecutiveCorrect: consecutiveCorrect,
     );
+
+    // 스케줄이 바뀌었으니 복습 알림을 다시 잡는다.
+    // 이 연결이 없으면 망각곡선 엔진이 계산만 하고 유저에게 도달하지 못한다.
+    await rescheduleReviewNotification();
+  }
+
+  /// 현재 복습 큐를 기준으로 알림을 다시 예약한다.
+  Future<void> rescheduleReviewNotification() async {
+    try {
+      final next = await _db.getNextReviewSchedule();
+      if (next == null) return;
+      await NotificationService.scheduleReviewReminder(
+        dueAt: next.dueAt,
+        dueCount: next.count,
+      );
+    } catch (e) {
+      debugPrint('복습 알림 재예약 실패: $e');
+    }
   }
 
   /// 현재 복습 기한이 된 문제 목록 반환

@@ -14,6 +14,7 @@ import 'services/prediction_engine.dart';
 import 'services/spaced_repetition_service.dart';
 import 'services/ad_service.dart';
 import 'services/purchase_service.dart';
+import 'services/notification_service.dart';
 import 'services/study_plan_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/past_exam_screen.dart';
@@ -137,7 +138,10 @@ class GisaPassMasterApp extends StatelessWidget {
             },
           ),
         ),
-        home: _RootNavigator(db: db),
+        home: _RootNavigator(
+          db: db,
+          spacedRepetitionService: spacedRepetitionService,
+        ),
       ),
     );
   }
@@ -145,7 +149,8 @@ class GisaPassMasterApp extends StatelessWidget {
 
 class _RootNavigator extends StatefulWidget {
   final DatabaseService db;
-  const _RootNavigator({required this.db});
+  final SpacedRepetitionService spacedRepetitionService;
+  const _RootNavigator({required this.db, required this.spacedRepetitionService});
 
   @override
   State<_RootNavigator> createState() => _RootNavigatorState();
@@ -169,6 +174,11 @@ class _RootNavigatorState extends State<_RootNavigator> {
       // 반대로 하면 IDFA 없이 광고를 요청하게 되어 ATT 를 띄우는 의미가 없다.
       await _requestTracking();
       globalAdService?.loadInterstitialAd();
+
+      // 알림 초기화 + 예약 갱신. 유저가 켜둔 경우에만 실제로 예약된다.
+      await NotificationService.initialize();
+      await NotificationService.scheduleExamCountdown();
+      await widget.spacedRepetitionService.rescheduleReviewNotification();
     });
   }
 
