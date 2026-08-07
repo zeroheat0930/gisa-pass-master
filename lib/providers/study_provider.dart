@@ -248,19 +248,27 @@ class StudyProvider extends ChangeNotifier {
   }
 
   /// 풀이 기록 + 복습 스케줄 갱신 (단일 정본)
+  ///
+  /// 기록 실패로 풀이 자체를 막지 않는다. 예전에는 DB 쓰기 예외가 그대로 튀어나가
+  /// 호출부(화면)의 후속 코드가 실행되지 않았고, 입력창·제출·다음 버튼이 모두
+  /// 사라진 채 그 문제에서 진행이 고착됐다. 채점은 이미 끝난 뒤이므로 기록만 포기한다.
   Future<void> _persistAnswer(
       int questionId, String userAnswer, bool isCorrect) async {
-    await _db.insertAnswerRecord(AnswerRecord(
-      questionId: questionId,
-      isCorrect: isCorrect,
-      userAnswer: userAnswer,
-      answeredAt: DateTime.now(),
-    ));
+    try {
+      await _db.insertAnswerRecord(AnswerRecord(
+        questionId: questionId,
+        isCorrect: isCorrect,
+        userAnswer: userAnswer,
+        answeredAt: DateTime.now(),
+      ));
 
-    // 스파르타 오답노트 스케줄 갱신 — 정답일 때도 반드시 호출한다.
-    // 정답을 걸러내면 stage 승격이 일어나지 않아 오답노트가 영원히 비워지지 않고
-    // 복습 간격도 1분에 고정된다. '오답만 큐에 진입' 규칙은 서비스 내부가 담당한다.
-    await _spacedRepetitionService.processAnswer(questionId, isCorrect);
+      // 스파르타 오답노트 스케줄 갱신 — 정답일 때도 반드시 호출한다.
+      // 정답을 걸러내면 stage 승격이 일어나지 않아 오답노트가 영원히 비워지지 않고
+      // 복습 간격도 1분에 고정된다. '오답만 큐에 진입' 규칙은 서비스 내부가 담당한다.
+      await _spacedRepetitionService.processAnswer(questionId, isCorrect);
+    } catch (e) {
+      debugPrint('풀이 기록 실패 (진행은 계속): $e');
+    }
   }
 
   /// 모든 문제의 오답률 계산 (PredictionEngine 입력용) — 단일 쿼리

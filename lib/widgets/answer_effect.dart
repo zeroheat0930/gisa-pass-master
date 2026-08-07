@@ -173,22 +173,35 @@ class AnswerEffectOverlay {
   }) {
     _entry?.remove();
     _entry = OverlayEntry(
-      builder: (ctx) => Positioned.fill(
-        child: Material(
-          color: Colors.black45,
-          child: Center(
-            child: AnswerEffect(
-              isCorrect: isCorrect,
-              onComplete: () {
-                _entry?.remove();
-                _entry = null;
-                onComplete?.call();
-              },
+      // 순수 시각 효과다. IgnorePointer 로 감싸지 않으면 애니메이션이 끝날 때까지
+      // (최대 1.2초) 화면 전체의 터치를 먹어, 유저가 '다음'을 눌러도 반응하지 않는다.
+      builder: (ctx) => IgnorePointer(
+        child: Positioned.fill(
+          child: Material(
+            color: Colors.black45,
+            child: Center(
+              child: AnswerEffect(
+                isCorrect: isCorrect,
+                onComplete: () {
+                  dismiss();
+                  onComplete?.call();
+                },
+              ),
             ),
           ),
         ),
       ),
     );
     Overlay.of(context).insert(_entry!);
+  }
+
+  /// 표시 중인 오버레이를 즉시 제거한다.
+  ///
+  /// 이 오버레이는 라우트가 아니라 Navigator 의 Overlay 에 붙는다. 그래서 효과가
+  /// 끝나기 전에 화면을 벗어나면 이전 화면 위에 그대로 남는다.
+  /// 퀴즈 화면의 dispose 에서 반드시 호출할 것.
+  static void dismiss() {
+    _entry?.remove();
+    _entry = null;
   }
 }

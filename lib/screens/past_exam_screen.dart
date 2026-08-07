@@ -436,7 +436,10 @@ class _QuizScreenState extends State<_QuizScreen> {
 
   void _submit() {
     final answer = _answerController.text.trim();
-    if (answer.isEmpty) return;
+    if (answer.isEmpty) {
+      _showEmptyAnswerHint();
+      return;
+    }
     final question = widget.questions[_currentIndex];
     final correct = AnswerChecker.isCorrectFor(question, answer);
 
@@ -500,7 +503,57 @@ class _QuizScreenState extends State<_QuizScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isFinished) return _buildResultsScreen();
-    return _buildQuizScreen();
+
+    // 풀이 도중 스와이프 백·뒤로가기로 진행이 통째로 날아가는 것을 막는다.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmExit() && mounted) Navigator.pop(context);
+      },
+      child: _buildQuizScreen(),
+    );
+  }
+
+  /// 빈 답으로 제출을 누르면 아무 반응이 없어 유저가 버튼이 고장난 줄 알았다.
+  void _showEmptyAnswerHint() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('정답을 입력한 뒤 제출해주세요. 모르겠으면 아무거나 적어도 됩니다.'),
+        backgroundColor: AppConfig.cardColor,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  /// 진행 중인 풀이에서 나가려 할 때 확인을 받는다.
+  Future<bool> _confirmExit() async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppConfig.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('지금 나가시겠어요?',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        content: Text('여기서 나가면 지금까지 푼 내용이 사라집니다.',
+            style: TextStyle(color: Colors.grey[300], fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('계속 풀기', style: TextStyle(color: Colors.grey[400])),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppConfig.primaryColor),
+            child: const Text('나가기'),
+          ),
+        ],
+      ),
+    );
+    return leave ?? false;
   }
 
   Widget _buildQuizScreen() {

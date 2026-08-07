@@ -189,6 +189,10 @@ class PurchaseService extends ChangeNotifier {
 
   Future<void> buyPremium() async {
     try {
+      // 이전 시도의 실패 메시지를 지운다. 남겨두면 이번 결제가 정상 진행 중인데도
+      // 화면이 옛 에러 스낵바를 띄운다.
+      _error = null;
+
       // 상품이 없으면 재로딩 시도
       if (_products.isEmpty) {
         await reloadProducts();
@@ -227,11 +231,14 @@ class PurchaseService extends ChangeNotifier {
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
-        grantPremium();
-
-        if (purchase.pendingCompletePurchase) {
-          _iap.completePurchase(purchase);
-        }
+        // 저장이 끝난 뒤에 트랜잭션을 종결한다. 순서가 뒤바뀌면 저장 전에 앱이
+        // 죽었을 때 스토어는 '완료'로 처리했는데 기기에는 구매 근거가 없어,
+        // 결제한 유저가 프리미엄을 잃는다.
+        grantPremium().then((_) {
+          if (purchase.pendingCompletePurchase) {
+            _iap.completePurchase(purchase);
+          }
+        });
       } else if (purchase.status == PurchaseStatus.error) {
         debugPrint('구매 실패: ${purchase.error?.message}');
         _error = purchase.error?.message ?? '구매에 실패했습니다';

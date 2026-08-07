@@ -40,14 +40,34 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   void dispose() {
+    // 정답 이펙트는 Navigator 의 Overlay 에 붙으므로, 효과가 끝나기 전에 화면을
+    // 벗어나면 이전 화면 위에 그대로 남는다.
+    AnswerEffectOverlay.dismiss();
     _bannerAd?.dispose();
     _answerController.dispose();
     super.dispose();
   }
 
+
+  /// 빈 답으로 제출을 누르면 아무 반응이 없어 유저가 버튼이 고장난 줄 알았다.
+  void _showEmptyAnswerHint() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('정답을 입력한 뒤 제출해주세요. 모르겠으면 아무거나 적어도 됩니다.'),
+        backgroundColor: AppConfig.cardColor,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   Future<void> _submit(StudyProvider provider) async {
     final answer = _answerController.text.trim();
-    if (answer.isEmpty) return;
+    if (answer.isEmpty) {
+      _showEmptyAnswerHint();
+      return;
+    }
 
     await provider.submitAnswer(answer);
 
