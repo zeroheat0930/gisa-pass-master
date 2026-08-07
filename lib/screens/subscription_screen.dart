@@ -335,7 +335,7 @@ class _FeatureList extends StatelessWidget {
     _FeatureRow(label: '기본 통계', free: true, premium: true),
     _FeatureRow(label: '광고 제거', free: false, premium: true),
     _FeatureRow(label: 'AI 무제한 예측 문제', free: false, premium: true),
-    _FeatureRow(label: 'AI 실전 모의고사', free: false, premium: true),
+    _FeatureRow(label: 'AI 실전 모의고사 무제한', free: false, premium: true),
     _FeatureRow(label: '기출 유형 심층 분석', free: false, premium: true),
   ];
 

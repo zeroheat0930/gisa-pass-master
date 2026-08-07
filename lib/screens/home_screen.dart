@@ -7,6 +7,8 @@ import '../config.dart';
 import '../models/study_stats.dart';
 import '../providers/study_provider.dart';
 import '../providers/stats_provider.dart';
+import '../services/ai_exam_quota.dart';
+import '../services/purchase_service.dart';
 import '../widgets/dday_timer.dart';
 import 'quiz_screen.dart';
 import 'ai_prediction_screen.dart';
@@ -113,12 +115,63 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
+  /// 무료 응시 횟수를 다 쓴 유저에게 보여주는 안내.
+  /// 기능을 막았다는 인상보다 "오늘 몫을 다 썼다"로 읽히도록 문구를 잡았다.
+  void _showExamQuotaDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppConfig.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          '오늘의 무료 모의고사 완료',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          '무료로는 하루 ${AiExamQuota.freeAttemptsPerDay}회 응시할 수 있어요.\n'
+          '내일 다시 열리고, 프리미엄이면 지금 바로 무제한으로 볼 수 있습니다.',
+          style: TextStyle(color: Colors.grey[300], fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('내일 다시', style: TextStyle(color: Colors.grey[400])),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Navigator.push(
+                context,
+                CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConfig.primaryColor,
+            ),
+            child: const Text('프리미엄 보기'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _startAiPrediction(BuildContext context) async {
     if (_isNavigating) return;
+
+    // 구독 화면은 AI 모의고사를 유료 전용으로 광고하는데 게이트가 없었다.
+    // 완전히 막으면 쓰던 유저에게서 기능을 빼앗는 것이라 하루 1회는 열어둔다.
+    final isPremium = context.read<PurchaseService>().isPremium;
+    if (!await AiExamQuota.canStart(isPremium: isPremium)) {
+      if (!context.mounted) return;
+      _showExamQuotaDialog(context);
+      return;
+    }
+
     _isNavigating = true;
     HapticFeedback.lightImpact();
     final provider = context.read<StudyProvider>();
     await provider.loadQuestions();
+    await AiExamQuota.consume(isPremium: isPremium);
     _isNavigating = false;
     if (!context.mounted) return;
 
