@@ -66,12 +66,9 @@ class AiExamQuota {
   static Future<bool> grantBonus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final today = _today();
-      final current = prefs.getString(_dateKey) == today
-          ? (prefs.getInt(_bonusKey) ?? 0)
-          : 0;
+      await _rollOverIfNewDay(prefs);
+      final current = prefs.getInt(_bonusKey) ?? 0;
       if (current >= maxBonusPerDay) return false;
-      await prefs.setString(_dateKey, today);
       await prefs.setInt(_bonusKey, current + 1);
       return true;
     } catch (e) {
@@ -98,15 +95,25 @@ class AiExamQuota {
     if (isPremium) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final today = _today();
-      final count = prefs.getString(_dateKey) == today
-          ? (prefs.getInt(_countKey) ?? 0)
-          : 0;
-      await prefs.setString(_dateKey, today);
-      await prefs.setInt(_countKey, count + 1);
+      await _rollOverIfNewDay(prefs);
+      await prefs.setInt(_countKey, (prefs.getInt(_countKey) ?? 0) + 1);
     } catch (e) {
       debugPrint('모의고사 쿼터 기록 실패: $e');
     }
+  }
+
+  /// 날짜가 바뀌었으면 **사용횟수와 보너스를 함께** 초기화하고 오늘 날짜를 찍는다.
+  ///
+  /// 예전에는 consume 과 grantBonus 가 각자 날짜를 갱신하면서 자기 카운터만
+  /// 리셋했다. 그래서 어제 광고로 얻은 보너스가 남아 있는 상태에서 오늘 무료 1회를
+  /// 쓰면, consume 이 날짜만 오늘로 바꿔놔 **어제 보너스가 오늘 것으로 둔갑**했다.
+  /// 광고를 보지 않고도 응시권이 생기는 경로였다.
+  static Future<void> _rollOverIfNewDay(SharedPreferences prefs) async {
+    final today = _today();
+    if (prefs.getString(_dateKey) == today) return;
+    await prefs.setString(_dateKey, today);
+    await prefs.setInt(_countKey, 0);
+    await prefs.setInt(_bonusKey, 0);
   }
 
   @visibleForTesting

@@ -177,6 +177,60 @@ class DatabaseService {
     return (dueAt: dueAt, count: _firstInt(countRows));
   }
 
+  /// 회차별 문항 수 (연도·회차 내림차순).
+  /// 회차별 문제집 화면에서 목록을 만드는 데 쓴다.
+  Future<List<({int year, int round, int count})>> getRoundSummary() async {
+    if (kIsWeb) {
+      final all = await _loadFromJson();
+      final map = <String, int>{};
+      for (final q in all) {
+        final key = '${q.year}-${q.round}';
+        map[key] = (map[key] ?? 0) + 1;
+      }
+      final out = map.entries.map((e) {
+        final parts = e.key.split('-');
+        return (
+          year: int.parse(parts[0]),
+          round: int.parse(parts[1]),
+          count: e.value
+        );
+      }).toList();
+      out.sort((a, b) => a.year != b.year
+          ? b.year.compareTo(a.year)
+          : b.round.compareTo(a.round));
+      return out;
+    }
+
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT year, round, COUNT(*) AS cnt FROM questions '
+      'GROUP BY year, round ORDER BY year DESC, round DESC',
+    );
+    return rows
+        .map((r) => (
+              year: r['year'] as int,
+              round: r['round'] as int,
+              count: (r['cnt'] as int?) ?? 0,
+            ))
+        .toList();
+  }
+
+  /// 특정 회차의 문항 전부
+  Future<List<Question>> getQuestionsByRound(int year, int round) async {
+    if (kIsWeb) {
+      final all = await _loadFromJson();
+      return all.where((q) => q.year == year && q.round == round).toList();
+    }
+    final db = await database;
+    final maps = await db.query(
+      'questions',
+      where: 'year = ? AND round = ?',
+      whereArgs: [year, round],
+      orderBy: 'id ASC',
+    );
+    return maps.map((m) => Question.fromMap(m)).toList();
+  }
+
   /// 서로 다른 문제를 몇 개 풀었는지 (중복 제거).
   /// 완료율 계산에 총 풀이 수를 쓰면 같은 문제를 여러 번 풀 때마다 진도가 오른다.
   Future<int> getUniqueSolvedCount() async {

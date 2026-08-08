@@ -107,4 +107,42 @@ void main() {
       expect(await AiExamQuota.bonusToday(), 0);
     });
   });
+
+  // QA 프로브가 잡아낸 회귀.
+  // consume 과 grantBonus 가 각자 날짜를 갱신하면서 자기 카운터만 리셋해서,
+  // 어제 얻은 보너스가 오늘 것으로 둔갑했다. 광고를 안 보고 응시권이 생기는 경로.
+  group('날짜 롤오버 — 사용횟수와 보너스가 함께 초기화된다', () {
+    Future<void> pretendYesterday() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('ai_exam_quota_date', '2000-01-01');
+    }
+
+    test('어제 보너스는 오늘로 이월되지 않는다', () async {
+      SharedPreferences.setMockInitialValues({});
+      await AiExamQuota.grantBonus();
+      await AiExamQuota.grantBonus();
+      await pretendYesterday();
+
+      // 오늘 무료 1회 사용 — 여기서 날짜가 오늘로 갱신된다
+      await AiExamQuota.consume(isPremium: false);
+
+      expect(await AiExamQuota.bonusToday(), 0,
+          reason: '광고를 안 봤으면 오늘 보너스는 0 이어야 한다');
+      expect(await AiExamQuota.canStart(isPremium: false), isFalse,
+          reason: '무료 1회를 썼으면 더 못 봐야 한다');
+    });
+
+    test('어제 사용횟수도 오늘로 이월되지 않는다', () async {
+      SharedPreferences.setMockInitialValues({});
+      await AiExamQuota.consume(isPremium: false);
+      await pretendYesterday();
+
+      // 오늘 보너스를 받으면 여기서도 날짜가 갱신된다
+      await AiExamQuota.grantBonus();
+
+      expect(await AiExamQuota.usedToday(), 0,
+          reason: '어제 쓴 횟수가 오늘 발목을 잡으면 안 된다');
+      expect(await AiExamQuota.canStart(isPremium: false), isTrue);
+    });
+  });
 }

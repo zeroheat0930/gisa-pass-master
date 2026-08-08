@@ -11,6 +11,7 @@ import '../services/answer_checker.dart';
 import '../services/database_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
+import 'round_list_screen.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -134,6 +135,59 @@ class _PastExamScreenState extends State<PastExamScreen> {
                     onTap: () => _loadAndStart(
                       type: null,
                       title: '전체 랜덤 20문제',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 회차별 문제집
+                  Material(
+                    color: AppConfig.cardColor,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RoundListScreen(db: widget.db),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF7E57C2)
+                                    .withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                              child: const Icon(Icons.library_books,
+                                  color: Color(0xFF9575CD), size: 22),
+                            ),
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('회차별 문제집',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w800)),
+                                  SizedBox(height: 2),
+                                  Text('2020~2026년 회차별로 골라 풀기',
+                                      style: TextStyle(
+                                          color: Color(0xFF9E9E9E),
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: Colors.grey[600]),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -1354,3 +1408,13 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
+/// 문제은행 풀이 화면을 다른 화면에서도 쓸 수 있게 하는 진입점.
+///
+/// 회차별 문제집도 같은 풀이 UI 를 쓴다. 화면을 복붙하면 한쪽만 고쳐지는
+/// 사고가 또 난다(이 앱에서 실제로 여러 번 있었다).
+Widget buildPastExamQuiz({
+  required List<Question> questions,
+  required String title,
+}) =>
+    _QuizScreen(questions: questions, title: title);

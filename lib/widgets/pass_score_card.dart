@@ -57,14 +57,20 @@ class PassScoreCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 좁은 화면(320pt) + 큰 글씨 배율에서 Row 가 넘치던 것을 막는다.
+          // 접근성 설정으로 글씨를 키운 유저에게 레이아웃이 깨져 보이면 안 된다.
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _label('지금 시험 보면', Colors.grey[400]!),
-              const Spacer(),
+              Flexible(
+                child: _label('지금 시험 보면', Colors.grey[400]!),
+              ),
+              const SizedBox(width: 8),
               Text(
                 '합격 ${PassPredictor.passingScore}점',
                 style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -73,13 +79,17 @@ class PassScoreCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                '${p.score}',
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 44,
-                  fontWeight: FontWeight.w900,
-                  height: 1.0,
+              Flexible(
+                child: Text(
+                  '${p.score}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
