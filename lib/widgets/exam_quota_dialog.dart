@@ -63,7 +63,11 @@ class ExamQuotaDialog {
               style: ElevatedButton.styleFrom(
                   backgroundColor: AppConfig.primaryColor),
               icon: const Icon(Icons.play_circle_outline, size: 18),
-              label: const Text('광고 보고 1회 더'),
+              label: Text(
+                (globalAdService?.isRewardedReady ?? false)
+                    ? '광고 보고 1회 더'
+                    : '광고 준비 중...',
+              ),
             ),
         ],
       ),
@@ -74,6 +78,25 @@ class ExamQuotaDialog {
       return false;
     }
     if (choice != 'ad') return false;
+
+    // 광고가 아직 준비되지 않았으면 유저 탓을 하지 않는다.
+    // "끝까지 보셔야" 라고 안내하면 보지도 못한 유저가 자기가 잘못한 줄 안다.
+    final ready = globalAdService?.isRewardedReady ?? false;
+    if (!ready) {
+      globalAdService?.loadRewardedAd();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('광고를 불러오는 중이에요. 잠시 후 다시 눌러주세요.'),
+            backgroundColor: AppConfig.cardColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      return false;
+    }
 
     // 광고를 끝까지 본 경우에만 보상한다.
     final watched = await globalAdService?.showRewardedAd() ?? false;

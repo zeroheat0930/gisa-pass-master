@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../config.dart';
 import '../providers/stats_provider.dart';
 import '../models/study_stats.dart';
+import '../widgets/notification_opt_in.dart';
+import '../widgets/notification_settings_tile.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -47,7 +49,11 @@ class _StatsScreenState extends State<StatsScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: AppConfig.primaryColor),
             )
-          : _StatsDashboard(stats: stats),
+          : _StatsDashboard(
+              stats: stats,
+              // main 에서 SpacedRepetitionService 를 물려준 콜백을 그대로 쓴다.
+              onEnableNotifications: NotificationOptIn.onEnabled,
+            ),
     );
   }
 }
@@ -58,8 +64,9 @@ class _StatsScreenState extends State<StatsScreen> {
 
 class _StatsDashboard extends StatelessWidget {
   final StudyStats stats;
+  final Future<void> Function()? onEnableNotifications;
 
-  const _StatsDashboard({required this.stats});
+  const _StatsDashboard({required this.stats, this.onEnableNotifications});
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +75,12 @@ class _StatsDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 0. 알림 설정
+          // 옵트인 다이얼로그에서 '나중에' 를 누른 유저가 알림을 다시 켤 수 있는
+          // 유일한 경로다. 이게 없으면 한 번 거절로 기능이 영구히 잠긴다.
+          NotificationSettingsTile(onEnabled: onEnableNotifications),
+          const SizedBox(height: 20),
+
           // 1. 오늘의 학습
           _SectionHeader(icon: Icons.today, label: '오늘의 학습'),
           const SizedBox(height: 8),

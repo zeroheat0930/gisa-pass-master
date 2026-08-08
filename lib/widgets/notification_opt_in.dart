@@ -39,8 +39,6 @@ class NotificationOptIn {
     if (await NotificationService.isEnabled()) return;
     if (!context.mounted) return;
 
-    await _markAsked();
-
     final accepted = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -78,12 +76,24 @@ class NotificationOptIn {
       ),
     );
 
+    // 다이얼로그를 실제로 보여준 뒤에 '물어봤음' 을 기록한다.
+    // 표시 전에 기록하면 화면 전환 등으로 다이얼로그가 삼켜졌을 때
+    // 유저는 보지도 못한 채 알림 제안 기회가 영영 사라진다.
+    await _markAsked();
+
     if (accepted != true) return;
 
     final granted = await NotificationService.requestPermission();
     await NotificationService.setEnabled(granted);
-    if (granted) {
-      await NotificationService.scheduleExamCountdown();
-    }
+    if (!granted) return;
+
+    // 수락 직후 **복습 알림까지** 잡는다. D-Day 만 잡으면 다이얼로그가 약속한
+    // "복습 시간이 되면 알려드릴게요" 가 앱을 재시작하기 전까지 지켜지지 않는다.
+    await NotificationService.scheduleExamCountdown();
+    await onEnabled?.call();
   }
+
+  /// 알림을 켠 직후 실행할 후속 작업(복습 알림 재예약).
+  /// 호출부가 SpacedRepetitionService 를 갖고 있으므로 콜백으로 받는다.
+  static Future<void> Function()? onEnabled;
 }

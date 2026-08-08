@@ -160,22 +160,49 @@ class DatabaseService {
   Future<({DateTime dueAt, int count})?> getNextReviewSchedule() async {
     if (kIsWeb) return null;
     final db = await database;
-    final rows = await db.rawQuery(
-      'SELECT MIN(next_review_at) AS next FROM spaced_repetition',
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+
+    // 1) 이미 기한이 지난(밀린) 복습이 있는지 먼저 본다.
+    //
+    // 예전에는 MIN(next_review_at) 을 그대로 알림 시각으로 썼다. 그런데 복습이
+    // 하나라도 밀리면(= 지극히 정상적인 상황) MIN 이 과거 시각이 되고,
+    // scheduleReviewReminder 는 기존 예약을 취소한 뒤 "과거라서" 아무것도 잡지
+    // 않는다. 결과적으로 첫 연체 순간부터 복습 알림이 영구 정지됐다.
+    final overdueRows = await db.rawQuery(
+      'SELECT COUNT(*) FROM spaced_repetition WHERE next_review_at <= ?',
+      [nowIso],
     );
-    final raw = rows.isEmpty ? null : rows.first['next'] as String?;
+    final overdue = _firstInt(overdueRows);
+    if (overdue > 0) {
+      // 밀린 게 있으면 곧바로 알린다. 지금 즉시 띄우면 방금 문제를 푼 유저에게
+      // 알림이 겹치므로 잠깐 뒤로 미룬다.
+      return (dueAt: now.add(_overdueReminderDelay), count: overdue);
+    }
+
+    // 2) 밀린 게 없으면 앞으로 가장 빨리 도래하는 복습 시각을 잡는다.
+    final futureRows = await db.rawQuery(
+      'SELECT MIN(next_review_at) AS next FROM spaced_repetition '
+      'WHERE next_review_at > ?',
+      [nowIso],
+    );
+    final raw = futureRows.isEmpty ? null : futureRows.first['next'] as String?;
     if (raw == null) return null;
 
     final dueAt = DateTime.tryParse(raw);
     if (dueAt == null) return null;
 
-    // 그 시각까지 복습 기한이 도래하는 문항 수
+    // 그 시각까지 기한이 도래하는 문항 수 (알림 문구에 쓴다).
+    // 예전에는 MIN 값 자신만 세어 항상 1 이 나왔다.
     final countRows = await db.rawQuery(
       'SELECT COUNT(*) FROM spaced_repetition WHERE next_review_at <= ?',
       [raw],
     );
     return (dueAt: dueAt, count: _firstInt(countRows));
   }
+
+  /// 밀린 복습을 알릴 때 두는 여유. 방금 문제를 푼 직후 알림이 겹치지 않게 한다.
+  static const Duration _overdueReminderDelay = Duration(minutes: 30);
 
   /// 회차별 문항 수 (연도·회차 내림차순).
   /// 회차별 문제집 화면에서 목록을 만드는 데 쓴다.

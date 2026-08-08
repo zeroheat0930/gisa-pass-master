@@ -39,10 +39,25 @@ class _SpyRepetition extends SpacedRepetitionService {
 class _SpyDatabase extends DatabaseService {
   final List<AnswerRecord> records = [];
 
+  /// 이 문제가 이미 복습 큐에 있는지 (정답 시 승격 경로 재현용)
+  bool tracked = false;
+
   @override
   Future<void> insertAnswerRecord(AnswerRecord record) async {
     records.add(record);
   }
+
+  @override
+  Future<Map<String, dynamic>?> getSpacedRepetition(int questionId) async =>
+      tracked ? {'stage': 1, 'consecutive_correct': 1} : null;
+
+  @override
+  Future<void> upsertSpacedRepetition({
+    required int questionId,
+    required int stage,
+    required DateTime nextReviewAt,
+    required int consecutiveCorrect,
+  }) async {}
 }
 
 Question _question({int id = 42}) => Question(
@@ -316,35 +331,54 @@ void main() {
   });
 
   // ── 6) 복습 알림 배선 ────────────────────────────────────────────────────
-  // 망각곡선 엔진은 있었지만 알려줄 수단이 없어 리텐션 엔진이 절반만 돌았다.
-  // 알림 예약이 복습 스케줄 갱신에 실제로 연결되어야 의미가 있다.
+  // 문자열 grep 으로 검증했더니 '함수 선언문 자체' 에 걸려서, 호출을 통째로
+  // 지워도 전부 통과했다(QA 가 잡아냄). 실제 호출을 스파이로 검증한다.
   group('복습 알림 배선', () {
-    String source(String path) => File(path).readAsStringSync();
+    test('복습 스케줄을 갱신하면 알림 재예약이 실제로 호출된다', () async {
+      final db = _SpyDatabase();
+      final srs = _SpyReschedule(db);
 
-    test('복습 스케줄이 갱신되면 알림도 다시 예약한다', () {
-      final srs = source('lib/services/spaced_repetition_service.dart');
-      expect(srs.contains('rescheduleReviewNotification'), isTrue,
+      await srs.processAnswer(1, false);
+
+      expect(srs.rescheduleCalls, greaterThan(0),
           reason: '스케줄만 갱신하고 알림을 안 잡으면 유저에게 도달하지 못한다');
-      expect(srs.contains('NotificationService.scheduleReviewReminder'), isTrue);
     });
 
-    test('앱 시작 시 알림을 초기화하고 예약을 갱신한다', () {
-      final main = source('lib/main.dart');
-      expect(main.contains('NotificationService.initialize'), isTrue);
-      expect(main.contains('rescheduleReviewNotification'), isTrue,
-          reason: '앱을 껐다 켜면 예약이 사라질 수 있으므로 시작 시 다시 잡아야 한다');
+    test('정답이어도(큐에 있는 문제면) 알림을 다시 잡는다', () async {
+      final db = _SpyDatabase()..tracked = true;
+      final srs = _SpyReschedule(db);
+
+      await srs.processAnswer(1, true);
+
+      expect(srs.rescheduleCalls, greaterThan(0));
     });
 
-    test('학습을 마친 시점에 알림 사용을 제안한다', () {
-      final quiz = source('lib/screens/quiz_screen.dart');
-      expect(quiz.contains('NotificationOptIn.maybeAsk'), isTrue,
-          reason: '첫 실행에 권한을 물으면 맥락이 없어 대부분 거부한다');
+    test('Android 예약 알림 리시버가 선언되어 있다', () {
+      final manifest =
+          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      expect(manifest.contains('ScheduledNotificationReceiver'), isTrue,
+          reason: '이 선언이 없으면 Android 에서 예약 알림이 단 한 건도 발화하지 않는다');
+      expect(manifest.contains('ScheduledNotificationBootReceiver'), isTrue,
+          reason: '재부팅 후 예약이 복원되지 않는다');
+      expect(manifest.contains('android.permission.POST_NOTIFICATIONS'), isTrue);
     });
 
-    test('Android 알림 권한이 선언되어 있다', () {
-      final manifest = source('android/app/src/main/AndroidManifest.xml');
-      expect(manifest.contains('android.permission.POST_NOTIFICATIONS'), isTrue,
-          reason: 'Android 13+ 는 이 권한 없이는 알림이 나가지 않는다');
+    test('알림을 켜는 경로에 후속 재예약 훅이 물려 있다', () {
+      final main = File('lib/main.dart').readAsStringSync();
+      expect(main.contains('NotificationOptIn.onEnabled ='), isTrue,
+          reason: '켠 직후 복습 알림을 잡지 않으면 다이얼로그가 한 약속이 안 지켜진다');
     });
   });
+}
+
+/// processAnswer 가 알림 재예약을 실제로 부르는지 세는 스파이.
+class _SpyReschedule extends SpacedRepetitionService {
+  _SpyReschedule(super.db);
+
+  int rescheduleCalls = 0;
+
+  @override
+  Future<void> rescheduleReviewNotification() async {
+    rescheduleCalls++;
+  }
 }

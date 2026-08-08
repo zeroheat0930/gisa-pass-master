@@ -15,6 +15,7 @@ import 'services/spaced_repetition_service.dart';
 import 'services/ad_service.dart';
 import 'services/purchase_service.dart';
 import 'services/notification_service.dart';
+import 'widgets/notification_opt_in.dart';
 import 'services/study_plan_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/past_exam_screen.dart';
@@ -178,6 +179,12 @@ class _RootNavigatorState extends State<_RootNavigator> {
 
       // 알림 초기화 + 예약 갱신. 유저가 켜둔 경우에만 실제로 예약된다.
       await NotificationService.initialize();
+
+      // 알림을 켜는 모든 경로(옵트인 다이얼로그 / 통계 화면 토글)가 켠 직후
+      // 복습 알림까지 잡도록 후속 작업을 여기서 물려준다.
+      NotificationOptIn.onEnabled =
+          widget.spacedRepetitionService.rescheduleReviewNotification;
+
       await NotificationService.scheduleExamCountdown();
       await widget.spacedRepetitionService.rescheduleReviewNotification();
     });

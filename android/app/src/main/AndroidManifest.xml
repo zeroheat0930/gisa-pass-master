@@ -39,6 +39,26 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-5911237489066113~7692264742"/>
+        <!-- flutter_local_notifications 예약 알림 수신자.
+             이 선언이 없으면 zonedSchedule 로 잡은 알림이 단 한 건도 발화하지 않는다.
+             (플러그인이 AlarmManager 로 브로드캐스트를 쏘는데 받을 컴포넌트가 없다) -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false"/>
+
+        <!-- 재부팅·앱 업데이트 후 예약을 복원한다.
+             없으면 기기를 껐다 켜는 순간 모든 예약 알림이 사라진다. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
