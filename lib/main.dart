@@ -28,13 +28,6 @@ void main() async {
     databaseFactory = databaseFactoryFfiWeb;
   }
 
-  // 광고 초기화 (실패해도 앱 실행 가능)
-  try {
-    await AdService.initialize();
-  } catch (e) {
-    debugPrint('Ad init failed: $e');
-  }
-
   // 서비스 생성 (앱 수명 동안 한 번만)
   final db = DatabaseService();
   final predictionEngine = PredictionEngine();
@@ -44,23 +37,20 @@ void main() async {
   final purchaseService = PurchaseService()..setAdService(adService);
   final studyPlanService = StudyPlanService(db);
 
-  // 구매 서비스 초기화 (await — 레이스 컨디션 방지)
+  // 첫 프레임 전에 기다리는 건 이 둘뿐이다. 나머지 초기화(AdMob SDK·스토어
+  // 연결·알림)는 첫 프레임 이후에 한다 (_RootNavigator.initState 참조).
+  // 예전에는 AdMob SDK(수 초 가능)와 스토어 왕복 2회(상품 조회 + 자동 복원)까지
+  // 타임아웃 없이 직렬로 await 해서, 콜드 스타트가 세 지연의 합이었고 최초 설치
+  // 첫 실행에선 스플래시 위로 Apple ID 로그인 시트가 뜰 수 있었다.
   try {
-    await purchaseService.initialize();
+    await Future.wait([
+      // 프리미엄 캐시 복원(로컬) — 안 하면 결제 유저에게 첫 화면 광고가 샌다
+      purchaseService.restoreCachedPremium(),
+      // DB 워밍업 — 첫 쿼리 전에 DB 준비 (흰 화면 방지)
+      db.database,
+    ]);
   } catch (e) {
-    debugPrint('Purchase init failed: $e');
-  }
-
-  // 전면광고 프리로드는 여기서 하지 않는다.
-  // ATT 동의를 받기 전에 광고를 요청하면 IDFA 없이 나가서 fill rate 가 떨어진다.
-  // ATT 는 앱이 active 가 된 뒤(첫 프레임 이후)에만 띄울 수 있으므로,
-  // 첫 광고 요청도 그 뒤로 미룬다. (_RootNavigator.initState 참조)
-
-  // DB 워밍업 — 첫 쿼리 전에 DB 준비 (흰 화면 방지)
-  try {
-    await db.database;
-  } catch (e) {
-    debugPrint('DB init failed: $e');
+    debugPrint('Startup init failed: $e');
   }
 
   runApp(GisaPassMasterApp(
@@ -171,11 +161,30 @@ class _RootNavigatorState extends State<_RootNavigator> {
     // 무시될 수 있다(스플래시가 멈춘 것처럼 보이기도 한다). 첫 프레임이 그려진 뒤
     // 요청해야 확실히 뜬다.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // AdMob SDK 초기화 — 수 초 걸릴 수 있어 runApp 전에 둘 이유가 없다.
+      try {
+        await AdService.initialize();
+      } catch (e) {
+        debugPrint('Ad init failed: $e');
+      }
+
       // 순서가 중요하다: ATT 동의를 먼저 받고 그 다음에 첫 광고를 요청한다.
       // 반대로 하면 IDFA 없이 광고를 요청하게 되어 ATT 를 띄우는 의미가 없다.
       await _requestTracking();
       globalAdService?.loadInterstitialAd();
       globalAdService?.loadRewardedAd();
+
+      // 스토어 연결(상품 조회 + 설치당 1회 자동 복원). ATT 뒤에 두는 이유:
+      // 최초 설치에서 자동 복원이 띄울 수 있는 Apple ID 로그인 시트가
+      // ATT 다이얼로그와 겹치지 않게 한다. 프리미엄 캐시는 이미 첫 프레임
+      // 전에 복원됐으므로 여기가 늦어도 결제 유저에게 광고가 새지 않는다.
+      if (mounted) {
+        try {
+          await context.read<PurchaseService>().initialize();
+        } catch (e) {
+          debugPrint('Purchase init failed: $e');
+        }
+      }
 
       // 알림 초기화 + 예약 갱신. 유저가 켜둔 경우에만 실제로 예약된다.
       await NotificationService.initialize();

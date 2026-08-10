@@ -136,7 +136,10 @@ class _DdayTimerState extends State<DdayTimer> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${AppConfig.examRoundLabel} | ${AppConfig.examDate.month}월 ${AppConfig.examDate.day}일',
+              // 확정 공고가 아니라 통상 시기로 추정한 날짜면 '예정'을 붙인다.
+              // 추정치를 확정 일정과 같은 형식으로 보여주면 유저를 오도한다.
+              '${AppConfig.examRoundLabel} | ${AppConfig.examDate.month}월 ${AppConfig.examDate.day}일'
+              '${AppConfig.isExamDateConfirmed ? '' : ' (예정)'}',
               style: TextStyle(
                 color: Colors.grey[500],
                 fontSize: 12,

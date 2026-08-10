@@ -18,6 +18,13 @@ class PurchaseService extends ChangeNotifier {
   /// 설치 후 자동 복원을 이미 시도했는지 여부 (설치당 1회로 제한).
   static const String _prefsKeyAutoRestored = 'premium_auto_restore_done';
 
+  /// 자동 복원 시도 횟수. 성공해야만 완료 플래그가 서므로, iOS App Store
+  /// 미로그인 유저가 로그인 팝업을 취소하면(예외) 매 실행 팝업이 반복된다.
+  /// SDK 가 '유저 취소'와 '네트워크 실패'를 구분해주지 않아 횟수 상한으로 막는다.
+  static const String _prefsKeyAutoRestoreAttempts =
+      'premium_auto_restore_attempts';
+  static const int _maxAutoRestoreAttempts = 3;
+
   /// 이 구매가 어느 기기에서 이뤄졌는지. 백업 복제 감지용.
   static const String _prefsKeyPremiumOwner = 'premium_owner_device';
 
@@ -50,12 +57,37 @@ class PurchaseService extends ChangeNotifier {
     _adService = adService;
   }
 
+  /// 기기에 저장된 구매 이력만 복원한다. 네트워크를 타지 않는다.
+  ///
+  /// **첫 프레임 전에 이것만 호출할 것.** 여기서 광고를 즉시 끄지 않으면
+  /// 결제 유저에게 첫 화면 광고가 새어나간다. 스토어 연결(initialize)은
+  /// 네트워크 왕복이라 첫 프레임을 인질로 잡으면 안 된다.
+  Future<void> restoreCachedPremium() async {
+    if (kIsWeb || _cacheRestored) return;
+    _cacheRestored = true;
+    await _loadCachedPremium();
+  }
+
+  bool _cacheRestored = false;
+
   Future<void> initialize() async {
     if (kIsWeb) return;
 
     // 저장된 구매 이력 복원 — 스토어 통신보다 먼저, 오프라인에서도 동작해야 한다.
-    // 여기서 광고를 즉시 끄지 않으면 결제 유저에게 첫 화면 광고가 새어나간다.
-    await _loadCachedPremium();
+    // (main 이 첫 프레임 전에 이미 호출했으면 그대로 통과한다)
+    await restoreCachedPremium();
+
+    // purchaseStream 구독은 스토어 가용성과 무관하게 **가장 먼저** 건다.
+    // 예전에는 isAvailable() 이 false 면 여기까지 오지 못하고 return 해서 구독이
+    // 영영 생성되지 않았다. 그 세션에서는 결제를 완료해도 콜백이 오지 않아
+    // 프리미엄이 켜지지 않았다(결제만 되고 물건은 안 나오는 상태).
+    // 관리자 기기 분기보다도 먼저다 — 분기 뒤에 두면 관리자 기기에서
+    // 결제 콜백이 영영 오지 않아 그 기기에서의 결제 QA 가 무의미해진다.
+    _subscription ??= _iap.purchaseStream.listen(
+      _onPurchaseUpdate,
+      onDone: () => _subscription?.cancel(),
+      onError: (error) => debugPrint('구매 에러: $error'),
+    );
 
     // 관리자 기기 체크 (iOS 만 해당 — Android 는 AD_ID 권한 정책상 식별자 제한)
     try {
@@ -73,16 +105,6 @@ class PurchaseService extends ChangeNotifier {
     } catch (e) {
       debugPrint('기기 정보 확인 실패: $e');
     }
-
-    // purchaseStream 구독은 스토어 가용성과 무관하게 **가장 먼저** 건다.
-    // 예전에는 isAvailable() 이 false 면 여기까지 오지 못하고 return 해서 구독이
-    // 영영 생성되지 않았다. 그 세션에서는 결제를 완료해도 콜백이 오지 않아
-    // 프리미엄이 켜지지 않았다(결제만 되고 물건은 안 나오는 상태).
-    _subscription ??= _iap.purchaseStream.listen(
-      _onPurchaseUpdate,
-      onDone: () => _subscription?.cancel(),
-      onError: (error) => debugPrint('구매 에러: $error'),
-    );
 
     try {
       _available = await _iap.isAvailable();
@@ -115,6 +137,16 @@ class PurchaseService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool(_prefsKeyAutoRestored) ?? false) return;
 
+      // 실패가 반복되면 포기한다. iOS 미로그인 유저가 로그인 팝업을 취소하면
+      // 예외로 떨어져 완료 플래그가 서지 않는데, 상한이 없으면 그 유저는
+      // 매 실행 팝업을 맞는다. 이후엔 구독 화면의 '구매 복원' 버튼이 담당한다.
+      final attempts = prefs.getInt(_prefsKeyAutoRestoreAttempts) ?? 0;
+      if (attempts >= _maxAutoRestoreAttempts) {
+        await prefs.setBool(_prefsKeyAutoRestored, true);
+        return;
+      }
+      await prefs.setInt(_prefsKeyAutoRestoreAttempts, attempts + 1);
+
       // 복원을 **성공한 뒤에** 플래그를 쓴다.
       // 먼저 쓰면 오프라인·스토어 일시 장애 한 번으로 1회뿐인 자동 복원 티켓이
       // 헛되이 소진되어, 기기를 바꾼 결제 유저가 영영 자동 복원을 못 받는다.
@@ -141,7 +173,8 @@ class PurchaseService extends ChangeNotifier {
         debugPrint('다른 기기의 구매 캐시 — 무시하고 스토어 복원에 맡긴다');
         await prefs.remove(_prefsKeyPremium);
         await prefs.remove(_prefsKeyPremiumOwner);
-        await prefs.remove(_prefsKeyAutoRestored); // 새 기기에서 자동 복원 1회 허용
+        await prefs.remove(_prefsKeyAutoRestored); // 새 기기에서 자동 복원 허용
+        await prefs.remove(_prefsKeyAutoRestoreAttempts);
         return;
       }
 
@@ -155,15 +188,17 @@ class PurchaseService extends ChangeNotifier {
 
   /// 기기 식별자. 얻지 못하면 null (그때는 캐시를 그대로 신뢰한다 —
   /// 정당한 유저를 막는 쪽이 더 해롭다).
+  ///
+  /// Android 는 항상 null — 지문 검사를 하지 않는다.
+  /// 예전에 쓰던 `androidInfo.id` 는 Build.ID 라서 OS 업데이트·보안패치마다
+  /// 바뀌고(결제 유저가 오프라인이면 무료로 강등), 같은 펌웨어의 모든 기기에서
+  /// 동일해 백업 복제 감지라는 본래 목적에도 무력했다. 안정적인 기기 식별자가
+  /// 없는 플랫폼에서는 검사를 생략하는 쪽이 결제 유저에게 안전하다.
   Future<String?> _deviceFingerprint() async {
     if (kIsWeb) return null;
     try {
-      final info = DeviceInfoPlugin();
       if (defaultTargetPlatform == TargetPlatform.iOS) {
-        return (await info.iosInfo).identifierForVendor;
-      }
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        return (await info.androidInfo).id;
+        return (await DeviceInfoPlugin().iosInfo).identifierForVendor;
       }
     } catch (e) {
       debugPrint('기기 식별자 조회 실패: $e');
@@ -265,12 +300,29 @@ class PurchaseService extends ChangeNotifier {
     }
   }
 
-  Future<void> restorePurchases() async {
+  /// 스토어에 구매 복원을 요청한다. 요청이 접수됐으면 true.
+  ///
+  /// buyPremium 처럼 스토어 가용성을 재확인한다 — 시작 시 1회 판정된
+  /// `_available` 이 false 로 남아 있으면, 재설치 유저의 유일한 수동 복구
+  /// 경로인 이 버튼이 아무 표시 없이 침묵으로 죽는다.
+  Future<bool> restorePurchases() async {
     try {
-      if (!_available) return;
+      _error = null;
+      if (!_available) {
+        _available = await _iap.isAvailable();
+        if (!_available) {
+          _error = '스토어에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.';
+          notifyListeners();
+          return false;
+        }
+      }
       await _iap.restorePurchases();
+      return true;
     } catch (e) {
       debugPrint('구매 복원 실패: $e');
+      _error = '구매 복원에 실패했습니다. 잠시 후 다시 시도해주세요.';
+      notifyListeners();
+      return false;
     }
   }
 

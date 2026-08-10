@@ -49,16 +49,22 @@ class QuestionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header row: subject badge + type badge + year/round
+            // 배지는 Flexible 로 감싼다 — 좁은 화면 × 큰 글씨 배율에서
+            // 과목명이 길면 Row 가 우측으로 넘친다 (W320 × 1.2배부터 재현).
             Row(
               children: [
-                _Badge(
-                  label: question.subject,
-                  color: const Color(0xFF9C27B0),
+                Flexible(
+                  child: _Badge(
+                    label: question.subject,
+                    color: const Color(0xFF9C27B0),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _Badge(
-                  label: _typeLabel,
-                  color: _typeColor,
+                Flexible(
+                  child: _Badge(
+                    label: _typeLabel,
+                    color: _typeColor,
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -129,6 +135,8 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: color,
           fontSize: 12,

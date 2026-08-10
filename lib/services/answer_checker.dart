@@ -57,6 +57,19 @@ class AnswerChecker {
       }
     }
 
+    // 3b) 항목마다 설명 괄호가 붙은 나열형 정답 — "POST(Create), GET(Read)".
+    //     여기서 괄호는 항목별 부연이지 답의 일부가 아니므로, 괄호를 벗긴
+    //     항목끼리 비교한다("POST, GET"). 일부 항목만 괄호를 생략해도 된다.
+    if (_allowsItemParenVariants(questionType, normCorrect)) {
+      final cu = _tokens(normUser).map(_stripItemParen).toList();
+      final cc = _tokens(normCorrect).map(_stripItemParen).toList();
+      if (_sameOrderedList(cu, cc)) return true;
+      if (_allowsUnorderedList(questionType, questionText) &&
+          _sameMultiset(cu, cc)) {
+        return true;
+      }
+    }
+
     // 4) SQL 결과 행 비교 — ORDER BY 가 없으면 행 순서는 보장되지 않는다.
     //    행(개행) 단위 다중집합으로 본다. 쉼표로 쪼개면 한 행 안의 컬럼 순서까지
     //    무너져서 "개발, 6000" 과 "6000, 개발" 이 같아져버린다.
@@ -109,22 +122,64 @@ class AnswerChecker {
 
   /// 괄호가 있는 정답에서 인정 가능한 표기들을 만든다.
   /// "스택(stack)" -> ["스택", "stack"]
+  ///
+  /// "delivery(또는 deployment)" 의 괄호는 전체 답의 대체표기가 아니라
+  /// **바로 앞 단어의 대체어**다. 앞 단어를 치환한 문장을 변형으로 만들고,
+  /// 괄호 안 문구 단독("또는 deployment")은 변형으로 인정하지 않는다.
   static List<String> _parenVariants(String normalized) {
     if (!normalized.contains('(')) return const [];
 
     final withoutParens =
         normalized.replaceAll(RegExp(r'\([^)]*\)'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
 
+    final orSubstituted = normalized.replaceAllMapped(
+        RegExp(r'(\S+)\s*\(\s*또는\s+([^)]+?)\s*\)'), (m) => m.group(2)!);
+
     final inside = RegExp(r'\(([^)]*)\)')
         .allMatches(normalized)
         .map((m) => m.group(1)?.trim() ?? '')
-        .where((v) => v.isNotEmpty)
+        .where((v) => v.isNotEmpty && !v.startsWith('또는'))
         .toList();
 
     return [
       if (withoutParens.isNotEmpty) withoutParens,
+      if (orSubstituted != normalized) orSubstituted,
       ...inside,
     ];
+  }
+
+  /// 항목별 설명 괄호를 인정해도 되는 정답인지 판정한다.
+  ///
+  /// 항목이 2개 이상 나열되고, 그중 하나 이상이 "이름(설명)" 꼴이어야 한다.
+  /// 실행 결과 문제의 괄호는 출력 구문이므로 제외하고, "COUNT(*)" 처럼
+  /// 괄호 안에 글자가 없는 것은 문법의 일부로 보고 벗기지 않는다.
+  static bool _allowsItemParenVariants(String? questionType, String normCorrect) {
+    if (questionType == 'code_reading') return false;
+
+    final tokens = _tokens(normCorrect);
+    if (tokens.length < 2) return false;
+
+    final annotated = RegExp(r'^[^(].*\(([^)]*)\)$');
+    return tokens.any((t) {
+      final m = annotated.firstMatch(t);
+      if (m == null) return false;
+      return RegExp(r'[a-zA-Z가-힣]').hasMatch(m.group(1) ?? '');
+    });
+  }
+
+  /// "이름(설명)" 항목에서 끝에 붙은 괄호 하나를 벗긴다. 벗길 게 없으면 그대로.
+  static String _stripItemParen(String token) {
+    final m = RegExp(r'^(.*?)\s*\([^)]*\)$').firstMatch(token);
+    final stripped = m?.group(1)?.trim() ?? '';
+    return stripped.isNotEmpty ? stripped : token;
+  }
+
+  static bool _sameOrderedList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// 줄바꿈을 쉼표로 바꿔 여러 줄 정답과 한 줄 나열 답안을 같은 형태로 만든다.
@@ -160,6 +215,15 @@ class AnswerChecker {
       'capitalize',
       'swapcase',
       'title()',
+      // C 관용구: 'A'+32 == 'a'. 이 마커 없이 대소문자를 접으면
+      // 입력 문자열을 그대로 옮겨 적어도 정답 처리된다.
+      // 숫자 출력 문항이 오탐되어도 답에 알파벳이 없으니 무해하다.
+      'toupper',
+      'tolower',
+      '+32',
+      '+ 32',
+      '-32',
+      '- 32',
     ];
     for (final m in markers) {
       if (haystack.contains(m)) return true;

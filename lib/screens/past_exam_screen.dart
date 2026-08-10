@@ -167,18 +167,19 @@ class _PastExamScreenState extends State<PastExamScreen> {
                                   color: Color(0xFF9575CD), size: 22),
                             ),
                             const SizedBox(width: 14),
-                            const Expanded(
+                            Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('회차별 문제집',
+                                  const Text('회차별 문제집',
                                       style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 15,
                                           fontWeight: FontWeight.w800)),
-                                  SizedBox(height: 2),
-                                  Text('2020~2026년 회차별로 골라 풀기',
-                                      style: TextStyle(
+                                  const SizedBox(height: 2),
+                                  Text(
+                                      '2020~${AppConfig.latestQuestionYear}년 회차별로 골라 풀기',
+                                      style: const TextStyle(
                                           color: Color(0xFF9E9E9E),
                                           fontSize: 12)),
                                 ],
@@ -557,6 +558,9 @@ class _QuizScreenState extends State<_QuizScreen> {
     _answerController.clear();
     _userAnswers.clear();
     _isCorrectList.clear();
+    // 광고 주기도 초기화한다. 남겨두면 이전 세션 잔여값에서 이어져
+    // 다시 풀기 직후 첫 문제부터 전면광고가 뜰 수 있다.
+    _adCounter = 0;
     _stopwatch.reset();
     _stopwatch.start();
     _timerTick = Timer.periodic(const Duration(seconds: 1), (_) {

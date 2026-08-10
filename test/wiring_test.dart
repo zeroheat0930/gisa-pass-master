@@ -23,6 +23,22 @@ import 'package:gisa_pass_master/services/spaced_repetition_service.dart';
 ///
 /// 부품 단위 테스트만으로는 이 종류를 절대 잡을 수 없다. 여기서 연결을 검증한다.
 
+// ── grep 기반 검증용: 주석을 걷어낸 소스 ────────────────────────────────────
+//
+// 원본 소스를 그대로 grep 하면 **주석에도 매칭**된다. 실제로 AiExamQuota.consume
+// 호출을 주석 처리해 되돌려도(무료 무제한 응시) 전부 녹색이었다.
+// 라인 주석을 지운 소스에서만 찾는다.
+String _activeSource(String path) {
+  return File(path)
+      .readAsStringSync()
+      .split('\n')
+      .map((line) {
+        final i = line.indexOf('//');
+        return i < 0 ? line : line.substring(0, i);
+      })
+      .join('\n');
+}
+
 // ── 배선 확인용 스파이 ──────────────────────────────────────────────────────
 
 class _SpyRepetition extends SpacedRepetitionService {
@@ -207,7 +223,7 @@ void main() {
   // 쿼터 클래스 자체는 테스트하면서, 화면이 그것을 실제로 물어보는지는
   // 검증하지 않았다. 게이트를 통째로 지워도 테스트가 전부 통과했다.
   group('AI 모의고사 유료 게이트 배선', () {
-    String source(String path) => File(path).readAsStringSync();
+    String source(String path) => _activeSource(path);
 
     test('모의고사 진입 경로가 쿼터를 확인한다', () {
       final home = source('lib/screens/home_screen.dart');
@@ -291,7 +307,7 @@ void main() {
   // 문제은행 채점을 단순 문자열 비교로 되돌려도 기존 테스트가 전부 통과했다.
   // 채점기 자체만 검증하고 화면이 그것을 쓰는지는 아무도 안 봤기 때문이다.
   group('채점기 호출부 배선', () {
-    String source(String path) => File(path).readAsStringSync();
+    String source(String path) => _activeSource(path);
 
     const screens = [
       'lib/screens/quiz_screen.dart',
@@ -364,16 +380,28 @@ void main() {
     });
 
     test('DB 를 열 때 데이터 리비전 동기화가 호출된다', () {
-      final src = File('lib/services/database_service.dart').readAsStringSync();
+      final src = _activeSource('lib/services/database_service.dart');
       // 선언문이 아니라 **호출식**을 확인한다 (await + 인자).
       expect(src.contains('await syncQuestionsIfRevisionChanged(db);'), isTrue,
           reason: '이 호출이 빠지면 v6 이후 유저에게 정답 수정이 영영 도달하지 않는다');
     });
 
     test('알림을 켜는 경로에 후속 재예약 훅이 물려 있다', () {
-      final main = File('lib/main.dart').readAsStringSync();
+      final main = _activeSource('lib/main.dart');
       expect(main.contains('NotificationOptIn.onEnabled ='), isTrue,
           reason: '켠 직후 복습 알림을 잡지 않으면 다이얼로그가 한 약속이 안 지켜진다');
+    });
+  });
+
+  // ── 7) 통계 재조회 배선 ──────────────────────────────────────────────────
+  // IndexedStack 은 탭을 계속 살려두므로 initState 가 다시 돌지 않는다.
+  // 이 재조회가 빠지면 문제를 풀어도 홈·통계 화면이 앱 재시작 전까지 옛 값을
+  // 붙들고 있는다 — 과거 실제로 터졌던 회귀인데 어떤 테스트도 지키지 않았다.
+  group('통계 재조회 배선', () {
+    test('통계를 보여주는 탭으로 전환하면 다시 읽는다', () {
+      final main = _activeSource('lib/main.dart');
+      expect(main.contains('StatsProvider>().loadStats()'), isTrue,
+          reason: '탭 전환 시 loadStats 호출이 빠지면 통계가 앱 재시작 전까지 멈춘다');
     });
   });
 }

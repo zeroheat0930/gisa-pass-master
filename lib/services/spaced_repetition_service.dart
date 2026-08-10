@@ -75,7 +75,12 @@ class SpacedRepetitionService {
   Future<void> rescheduleReviewNotification() async {
     try {
       final next = await _db.getNextReviewSchedule();
-      if (next == null) return;
+      if (next == null) {
+        // 큐가 비면 이전에 잡아둔 알림도 지운다. 안 지우면 마지막 문제를
+        // 졸업한 유저에게 "틀린 문제 N개" 알림이 그대로 나간다.
+        await NotificationService.cancelReviewReminder();
+        return;
+      }
       await NotificationService.scheduleReviewReminder(
         dueAt: next.dueAt,
         dueCount: next.count,

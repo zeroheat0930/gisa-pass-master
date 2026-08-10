@@ -47,6 +47,7 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
   BannerAd? _bannerAd;
   bool _bannerLoaded = false;
   int _adCounter = 0;
+  bool _isRetrying = false;
 
   @override
   void initState() {
@@ -173,33 +174,43 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
   Future<void> _retry() async {
     // '다시 풀기'도 응시 1회다. 여기를 막지 않으면 결과 화면에서 무한 재응시가
     // 가능해 무료 하루 1회 게이트가 통째로 무력해진다.
-    final isPremium = context.read<PurchaseService>().isPremium;
-    if (!await AiExamQuota.canStart(isPremium: isPremium)) {
-      if (!mounted) return;
-      final earned = await ExamQuotaDialog.show(
-        context,
-        isPremium: isPremium,
-        onSeePremium: () => Navigator.push(
+    //
+    // 연타 가드: canStart 의 await 사이에 두 번째 탭이 통과하면 응시권이
+    // 2회 소모되고 타이머가 이중 예약된다 (home_screen 의 _isNavigating 과 동일 이유).
+    if (_isRetrying) return;
+    _isRetrying = true;
+    try {
+      final isPremium = context.read<PurchaseService>().isPremium;
+      if (!await AiExamQuota.canStart(isPremium: isPremium)) {
+        if (!mounted) return;
+        final earned = await ExamQuotaDialog.show(
           context,
-          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-        ),
-      );
-      if (!earned || !mounted) return;
-    }
+          isPremium: isPremium,
+          onSeePremium: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+          ),
+        );
+        if (!earned || !mounted) return;
+      }
 
-    _timerTick?.cancel();
-    _timerTick = null;
-    _answerController.clear();
-    _userAnswers.clear();
-    _isCorrectList.clear();
-    _stopwatch.reset();
-    setState(() {
-      _currentIndex = 0;
-      _showExplanation = false;
-      _isFinished = false;
-      _isLoading = true;
-    });
-    _startLoadingPhase();
+      _timerTick?.cancel();
+      _timerTick = null;
+      _answerController.clear();
+      _userAnswers.clear();
+      _isCorrectList.clear();
+      _stopwatch.reset();
+      _adCounter = 0;
+      setState(() {
+        _currentIndex = 0;
+        _showExplanation = false;
+        _isFinished = false;
+        _isLoading = true;
+      });
+      _startLoadingPhase();
+    } finally {
+      _isRetrying = false;
+    }
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────

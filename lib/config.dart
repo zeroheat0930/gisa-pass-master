@@ -6,8 +6,11 @@ class AppConfig {
 
   // === 앱 기본 정보 ===
   static const String appTitle = '기사패스마스터';
-  static const String appSubtitle = '2026 정보처리기사 실기';
   static const String examLabel = '정보처리기사 실기 시험';
+
+  /// 부제. 연도는 다음 시험 기준으로 따라간다 — 상수로 박아두면
+  /// 해가 바뀌어도 화면에 옛 연도가 그대로 남는다.
+  static String get appSubtitle => '${nextExam.year} 정보처리기사 실기';
 
   // === 시험 일정 (자동으로 다음 회차 전환) ===
   static final List<({int year, int round, DateTime date})> _examSchedule = [
@@ -42,8 +45,14 @@ class AppConfig {
 
   /// 확정 일정이 바닥났을 때 다음 회차를 추정한다.
   static ({int year, int round, DateTime date}) _projectNextExam(DateTime today) {
+    // 확정 일정에 이미 있는 (연도, 회차) 는 추정으로 다시 내놓지 않는다.
+    // 예: 2027-1회가 4/17(확정) 시행됐는데, 통상일인 4/18 하루 동안
+    // 같은 1회가 'D-DAY' 로 재표시되던 문제.
+    final held = _examSchedule.map((e) => (e.year, e.round)).toSet();
+
     for (var year = today.year; year <= today.year + 5; year++) {
       for (var i = 0; i < _typicalExamDates.length; i++) {
+        if (held.contains((year, i + 1))) continue;
         final d = _typicalExamDates[i];
         final date = DateTime(year, d.month, d.day);
         if (!date.isBefore(today)) {
@@ -94,6 +103,11 @@ class AppConfig {
 
   /// 해당 연도 문항이 예상문제인지
   static bool isPredictedYear(int year) => year > lastRealExamYear;
+
+  /// 문제 데이터가 커버하는 마지막 연도.
+  /// 기출 마지막 해(lastRealExamYear)의 다음 해 예상문제까지 들어 있으므로 +1.
+  /// 새 연도 예상문제를 추가할 때 lastRealExamYear 를 올리면 함께 갱신된다.
+  static int get latestQuestionYear => lastRealExamYear + 1;
 
   // === 테마 컬러 ===
   static const Color primaryColor = Color(0xFFE53935);

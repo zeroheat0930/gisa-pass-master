@@ -226,4 +226,134 @@ void main() {
           reason: '지문의 순서와 짝이 맞아야 한다');
     });
   });
+
+  // ── 항목별 설명 괄호 — 실제 데이터 short[343,353,354], sql[108,163] ──────
+  // "POST(Create), GET(Read)" 의 괄호는 항목별 부연이지 답의 일부가 아니다.
+  // 기존 괄호 게이트는 '괄호 정확히 1쌍 + 답 끝'만 허용해서, 항목마다 괄호가
+  // 붙은 정답에서는 괄호를 뺀 교과서적 정답이 오답 처리됐다.
+  group('항목별 설명 괄호가 붙은 나열형 정답', () {
+    test('CRUD 4가지: 괄호 없이 메서드만 써도 정답 (short[354])', () {
+      final target = q(
+        type: 'short_answer',
+        text: 'REST API에서 CRUD에 대응하는 HTTP 메서드 4가지를 쓰시오.',
+        answer: 'POST(Create), GET(Read), PUT(Update), DELETE(Delete)',
+      );
+      expect(AnswerChecker.isCorrectFor(target, 'POST, GET, PUT, DELETE'), isTrue);
+      expect(AnswerChecker.isCorrectFor(target, 'GET, POST, PUT, DELETE'), isTrue,
+          reason: '"4가지" 나열형은 순서 무관');
+      expect(AnswerChecker.isCorrectFor(target, 'POST, GET, PUT'), isFalse,
+          reason: '하나 빠지면 오답');
+    });
+
+    test('2PL 두 단계: 괄호 설명 없이 단계 이름만 써도 정답 (short[353])', () {
+      final target = q(
+        type: 'short_answer',
+        text: '2단계 로킹 프로토콜(2PL)의 두 단계를 쓰시오.',
+        answer: '확장 단계(Lock만 가능), 축소 단계(Unlock만 가능)',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '확장 단계, 축소 단계'), isTrue);
+      expect(AnswerChecker.isCorrectFor(target, '확장 단계(Lock만 가능), 축소 단계'),
+          isTrue, reason: '일부 항목만 괄호를 생략해도 정답');
+    });
+
+    test('sql 유형의 이론 문항도 동일하게 인정한다 (sql[163])', () {
+      const answer = '보안(접근 제한), 쿼리 단순화, 데이터 독립성';
+      const text = '뷰(VIEW)를 사용하는 이유 3가지를 쓰시오.';
+      expect(
+          AnswerChecker.isCorrect('보안, 쿼리 단순화, 데이터 독립성', answer,
+              questionType: 'sql', questionText: text),
+          isTrue);
+    });
+
+    test('실행 결과 문제의 괄호는 여전히 출력 구문이다', () {
+      final target = q(
+        type: 'code_reading',
+        text: '다음 Python 프로그램의 실행 결과를 쓰시오.',
+        answer: '(1, 2), (3, 4)',
+      );
+      expect(AnswerChecker.isCorrectFor(target, '1, 3'), isFalse);
+      expect(AnswerChecker.isCorrectFor(target, ', '), isFalse);
+    });
+  });
+
+  // ── "(또는 X)" 는 앞 단어의 대체어다 — 실제 데이터 short[346] ────────────
+  group('"(또는 X)" 대체어 표기', () {
+    final target = q(
+      type: 'short_answer',
+      text: 'CI/CD에서 CI와 CD가 각각 무엇의 약자인지 쓰시오.',
+      answer: 'Continuous Integration, Continuous Delivery(또는 Deployment)',
+    );
+
+    test('정답 데이터가 허용한 대체어로 쓰면 정답', () {
+      expect(
+          AnswerChecker.isCorrectFor(
+              target, 'Continuous Integration, Continuous Deployment'),
+          isTrue);
+    });
+
+    test('괄호 원문을 그대로 쓰거나 괄호를 빼도 정답', () {
+      expect(
+          AnswerChecker.isCorrectFor(target,
+              'Continuous Integration, Continuous Delivery(또는 Deployment)'),
+          isTrue);
+      expect(
+          AnswerChecker.isCorrectFor(
+              target, 'Continuous Integration, Continuous Delivery'),
+          isTrue);
+    });
+
+    test('"또는 Deployment" 만 달랑 쓰면 오답', () {
+      expect(AnswerChecker.isCorrectFor(target, '또는 Deployment'), isFalse,
+          reason: '괄호 안 문구는 전체 답의 대체표기가 아니다');
+    });
+  });
+
+  // ── C 의 +32 관용구 — 실제 데이터 c[11], c[127] ──────────────────────────
+  // s[i]+32 로 소문자화하는 문항에서 대소문자를 접으면, 입력 문자열 "ABCDE" 를
+  // 그대로 옮겨 적어도 정답이 되어 출제 의도가 사라진다.
+  group('C 의 ±32 대소문자 변환 문항', () {
+    test('printf("%c", s[i]+32) 문항은 대소문자를 채점한다 (c[11])', () {
+      const snippet = '#include <stdio.h>\n'
+          'int main() {\n'
+          '    char s[] = "ABCDE";\n'
+          '    int i;\n'
+          "    for(i=0; s[i]!='\\0'; i++)\n"
+          '        printf("%c", s[i]+32);\n'
+          '    return 0;\n'
+          '}';
+      expect(
+          AnswerChecker.isCorrect('abcde', 'abcde',
+              questionType: 'code_reading',
+              questionText: '다음 C 프로그램의 실행 결과를 쓰시오.',
+              codeSnippet: snippet),
+          isTrue);
+      expect(
+          AnswerChecker.isCorrect('ABCDE', 'abcde',
+              questionType: 'code_reading',
+              questionText: '다음 C 프로그램의 실행 결과를 쓰시오.',
+              codeSnippet: snippet),
+          isFalse,
+          reason: '입력 문자열을 그대로 옮겨 적으면 오답이어야 한다');
+    });
+
+    test('s[i] = s[i] + 32 처럼 띄어 쓴 형태도 잡는다 (c[127])', () {
+      const snippet = '#include <stdio.h>\n'
+          'int main() {\n'
+          '    char s[] = "ABCDE";\n'
+          '    int i = 0;\n'
+          "    while (s[i] != '\\0') {\n"
+          '        s[i] = s[i] + 32;\n'
+          '        i++;\n'
+          '    }\n'
+          '    printf("%s", s);\n'
+          '    return 0;\n'
+          '}';
+      expect(
+          AnswerChecker.isCorrect('ABCDE', 'abcde',
+              questionType: 'code_reading',
+              questionText: '다음 C 프로그램의 실행 결과를 쓰시오.',
+              codeSnippet: snippet),
+          isFalse);
+    });
+  });
 }

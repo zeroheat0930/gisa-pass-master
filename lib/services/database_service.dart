@@ -20,10 +20,22 @@ class DatabaseService {
     'assets/questions/short_answer_questions.json',
   ];
 
+  static Future<Database>? _opening;
+
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB();
-    return _database!;
+    // 초기화가 끝나기 전에 두 번째 호출이 들어오면 _initDB 가 2회 실행되어
+    // 리비전 동기화가 겹치고 신규 문항이 중복 INSERT 된다. 첫 호출이 만든
+    // Future 를 공유하고, 실패 시에만 비워서 다음 호출이 재시도하게 한다.
+    final opening = _opening ??= _initDB();
+    try {
+      final db = await opening;
+      _database = db;
+      return db;
+    } catch (_) {
+      _opening = null;
+      rethrow;
+    }
   }
 
   Future<Database> _initDB() async {
@@ -80,11 +92,7 @@ class DatabaseService {
 
       // 동기화가 성공한 뒤에만 리비전을 기록한다.
       // 먼저 기록하면 동기화가 실패해도 "됐다" 고 착각해 영영 재시도하지 않는다.
-      await db.insert(
-        _metaTable,
-        {'key': _metaKeyRevision, 'value': '$questionDataRevision'},
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await _writeRevision(db);
     } catch (e) {
       debugPrint('문제 데이터 리비전 동기화 실패 (다음 실행에 재시도): $e');
     }
@@ -116,7 +124,17 @@ class DatabaseService {
       // v6 마이그레이션 시점의 동기화. 이후의 데이터 수정 반영은
       // questionDataRevision (매 실행 비교) 이 담당한다 — DB 버전에 묶어두면
       // 버전 올리는 것을 잊는 순간 수정이 기존 유저에게 도달하지 못한다.
-      await syncQuestionsFromAssets(db);
+      try {
+        await syncQuestionsFromAssets(db);
+        // 성공했으면 리비전을 여기서 기록한다. 안 남기면 openDatabase 직후의
+        // 리비전 검사가 같은 동기화를 한 번 더 돌아 첫 실행 스플래시가 배가된다.
+        await _writeRevision(db);
+      } catch (e) {
+        // onUpgrade 에서 새어나간 예외는 openDatabase 전체를 실패시킨다
+        // (v1·v2 duplicate column 사고와 같은 유형). 여기서 삼키면
+        // 리비전이 미기록 상태로 남아 다음 리비전 검사가 재시도한다.
+        debugPrint('v6 문제 동기화 실패 (리비전 검사가 재시도): $e');
+      }
     }
   }
 
@@ -176,6 +194,7 @@ class DatabaseService {
 
     // 모바일에서만 DB에 시드 데이터 삽입 (웹은 JSON 직접 로드)
     if (!kIsWeb) {
+      var seedFailed = false;
       for (final file in _questionAssetFiles) {
         try {
           final jsonStr = await rootBundle.loadString(file);
@@ -189,10 +208,34 @@ class DatabaseService {
           }
           await batch.commit(noResult: true);
         } catch (e) {
+          seedFailed = true;
           debugPrint('시드 로드 실패 ($file): $e');
         }
       }
+
+      // 전부 심었으면 리비전을 기록해 직후의 리비전 검사가 1000문항 동기화를
+      // 한 번 더 돌지 않게 한다 (신규 설치 첫 실행이 두 배로 느려지던 원인).
+      // 일부라도 실패했으면 기록하지 않는다 — 그래야 리비전 검사가 빠진
+      // 문항을 INSERT 로 메꾼다.
+      if (!seedFailed) {
+        try {
+          await _writeRevision(db);
+        } catch (e) {
+          debugPrint('리비전 기록 실패 (동기화 1회 중복될 뿐): $e');
+        }
+      }
     }
+  }
+
+  /// 현재 코드의 문제 데이터 리비전을 기기에 기록한다.
+  static Future<void> _writeRevision(Database db) async {
+    await db.execute(
+        'CREATE TABLE IF NOT EXISTS $_metaTable (key TEXT PRIMARY KEY, value TEXT)');
+    await db.insert(
+      _metaTable,
+      {'key': _metaKeyRevision, 'value': '$questionDataRevision'},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// 문항 식별 키. 본문과 코드가 모두 같아야 같은 문항으로 본다.
@@ -324,6 +367,15 @@ class DatabaseService {
   /// id 를 보존해야 한다. answer_records / bookmarks / spaced_repetition 이 question_id 로
   /// 참조하고 있어서, DELETE 후 재삽입하면 유저의 학습 이력이 엉뚱한 문제에 붙는다.
   /// 따라서 문제 본문+코드로 매칭해 내용만 UPDATE 하고, 없는 문항만 INSERT 한다.
+  ///
+  /// ⚠️ **questionText / codeSnippet 자체를 고치면 안 된다.** 이 둘이 매칭 키라서
+  /// 본문 오타를 고치면 옛 행은 방치되고 새 행이 INSERT 되어 문항이 영구 중복된다
+  /// (삭제 경로 없음). 본문을 고쳐야 하면 여기가 아니라 **DB 버전을 올리고
+  /// runMigrations 에 옛 본문 → 새 본문 UPDATE 마이그레이션을 추가**할 것.
+  /// 정답·해설·난이도 수정은 자유 (리비전만 올리면 됨).
+  ///
+  /// 일부 파일이라도 실패하면 예외를 던진다. 삼키면 호출자가 성공으로 보고
+  /// 리비전을 기록해, 이 기기에서 해당 리비전의 수정분이 영영 재시도되지 않는다.
   @visibleForTesting
   static Future<void> syncQuestionsFromAssets(Database db) async {
     // 기존 문항을 (본문 + 코드) 키로 색인
@@ -335,6 +387,7 @@ class DatabaseService {
           true;
     }
 
+    final failedFiles = <String>[];
     for (final file in _questionAssetFiles) {
       try {
         final jsonStr = await rootBundle.loadString(file);
@@ -382,8 +435,14 @@ class DatabaseService {
         }
         await batch.commit(noResult: true);
       } catch (e) {
+        // 나머지 파일은 계속 진행한다 — 성공분만큼은 반영해두는 쪽이 낫다.
+        failedFiles.add(file);
         debugPrint('문제 동기화 실패 ($file): $e');
       }
+    }
+
+    if (failedFiles.isNotEmpty) {
+      throw StateError('문제 동기화 실패: ${failedFiles.join(', ')}');
     }
   }
 

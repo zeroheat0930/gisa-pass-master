@@ -50,7 +50,7 @@ class SubscriptionScreen extends StatelessWidget {
     }
   }
 
-  void _onRestore(BuildContext context) {
+  Future<void> _onRestore(BuildContext context) async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -62,10 +62,18 @@ class SubscriptionScreen extends StatelessWidget {
       );
       return;
     }
-    context.read<PurchaseService>().restorePurchases();
+
+    final purchaseService = context.read<PurchaseService>();
+
+    // 결과를 기다렸다가 보여준다. 요청도 안 됐는데(스토어 연결 실패)
+    // '복원 중...'만 띄우면 유저는 성공한 줄 알고 기다리다 이탈한다.
+    final requested = await purchaseService.restorePurchases();
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('구매 복원 중...'),
+        content: Text(requested
+            ? '구매 복원 중... 구매 이력이 있으면 곧 반영됩니다'
+            : purchaseService.error ?? '구매 복원에 실패했습니다'),
         backgroundColor: AppConfig.cardColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

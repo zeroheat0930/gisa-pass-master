@@ -145,6 +145,21 @@ class NotificationService {
     }
   }
 
+  /// 예약된 복습 알림을 취소한다.
+  ///
+  /// 복습 큐가 빌 때 호출하지 않으면 마지막 문제를 졸업한 뒤에도
+  /// 이전에 잡힌 알림이 그대로 발송된다.
+  static Future<void> cancelReviewReminder() async {
+    if (kIsWeb) return;
+    try {
+      await initialize();
+      if (!_ready) return;
+      await _plugin.cancel(_reviewId);
+    } catch (e) {
+      debugPrint('복습 알림 취소 실패: $e');
+    }
+  }
+
   /// 시험 D-30 / D-7 / D-1 알림을 아침 9시로 예약한다.
   static Future<void> scheduleExamCountdown() async {
     if (kIsWeb) return;
@@ -160,9 +175,14 @@ class NotificationService {
 
     try {
       final exam = AppConfig.examDate;
+      // 추정 일정(공고 전)에는 예약하지 않는다. 통상 시기로 짚은 날짜라
+      // "내일이 시험입니다" 같은 단정 문구가 며칠씩 틀릴 수 있다.
+      // 기존 예약 취소는 위에서 계속 수행한다.
+      final confirmed = AppConfig.isExamDateConfirmed;
       for (final entry in milestones.entries) {
         final id = _ddayBaseId + entry.key;
         await _plugin.cancel(id);
+        if (!confirmed) continue;
 
         final day = exam.subtract(Duration(days: entry.key));
         final when = tz.TZDateTime(tz.local, day.year, day.month, day.day, 9);
