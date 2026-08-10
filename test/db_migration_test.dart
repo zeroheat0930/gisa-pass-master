@@ -270,6 +270,81 @@ void main() {
           '이, 6000\n박, 5000\n김, 4000');
     });
   });
+
+  // v1.6.0 QA 확정: 데이터 동기화가 oldVersion<6 마이그레이션에만 묶여 있어서,
+  // DB 가 v6 이 된 순간부터는 에셋 정답을 고쳐도 기존 유저에게 영영 반영되지
+  // 않았다. 이제 questionDataRevision 비교로 매 실행 판단한다.
+  group('데이터 리비전 동기화 (DB v6 이후)', () {
+    Future<Database> dbWithStaleQuestion() async {
+      final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+      await db.execute("""
+        CREATE TABLE questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          year INTEGER NOT NULL, round INTEGER NOT NULL,
+          subject TEXT NOT NULL, question_type TEXT NOT NULL,
+          question_text TEXT NOT NULL, code_snippet TEXT, code_language TEXT,
+          answer TEXT NOT NULL, explanation TEXT NOT NULL,
+          difficulty INTEGER DEFAULT 3, frequency_weight REAL DEFAULT 0.5
+        )
+      """);
+      final raw = await rootBundle.loadString('assets/questions/c_questions.json');
+      final target = (json.decode(raw) as List)[22];
+      await db.insert('questions', {
+        'year': target['year'],
+        'round': target['round'],
+        'subject': target['subject'],
+        'question_type': target['questionType'],
+        'question_text': target['questionText'],
+        'code_snippet': target['codeSnippet'],
+        'code_language': target['codeLanguage'],
+        'answer': 'STALE_ANSWER',
+        'explanation': '옛 해설',
+      });
+      return db;
+    }
+
+    // 동기화가 없던 문항 999개를 INSERT 하므로, 심어둔 문항만 집어서 본다.
+    Future<String> answerOf(Database db) async =>
+        (await db.query('questions', where: 'id = 1')).single['answer']
+            as String;
+
+    test('리비전이 다르면(v6 유저가 업데이트를 받으면) 데이터가 갱신된다', () async {
+      final db = await dbWithStaleQuestion();
+      addTearDown(db.close);
+
+      // DB 는 이미 v6 — runMigrations 는 아무것도 하지 않는 상태를 재현
+      await DatabaseService().runMigrations(db, 6, 6);
+      expect(await answerOf(db), 'STALE_ANSWER',
+          reason: '마이그레이션만으로는 v6 유저에게 수정이 도달하지 않는다');
+
+      await DatabaseService.syncQuestionsIfRevisionChanged(db);
+      expect(await answerOf(db), isNot('STALE_ANSWER'),
+          reason: '리비전 동기화가 이 구멍을 막아야 한다');
+    });
+
+    test('리비전이 같으면 다시 동기화하지 않는다 (매 실행 비용 방지)', () async {
+      final db = await dbWithStaleQuestion();
+      addTearDown(db.close);
+
+      await DatabaseService.syncQuestionsIfRevisionChanged(db);
+      // 동기화 완료 후 일부러 다시 오염시킨다
+      await db.update('questions', {'answer': 'TAMPERED'});
+
+      await DatabaseService.syncQuestionsIfRevisionChanged(db);
+      expect(await answerOf(db), 'TAMPERED',
+          reason: '리비전이 같으면 손대지 않아야 게이트가 실제로 동작하는 것이다');
+    });
+
+    test('동기화 성공 후에만 리비전이 기록된다', () async {
+      final db = await dbWithStaleQuestion();
+      addTearDown(db.close);
+
+      await DatabaseService.syncQuestionsIfRevisionChanged(db);
+      final rows = await db.query('app_meta',
+          where: 'key = ?', whereArgs: ['question_data_revision']);
+      expect(rows.single['value'], '${DatabaseService.questionDataRevision}');
+    });
+  });
 }
 
 int? _firstInt(List<Map<String, Object?>> rows) =>

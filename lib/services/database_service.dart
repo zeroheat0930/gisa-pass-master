@@ -35,12 +35,59 @@ class DatabaseService {
       path = join(dbPath, AppConfig.dbName);
     }
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
       version: 6,
       onCreate: _onCreate,
       onUpgrade: runMigrations,
     );
+
+    // 문제 데이터 동기화는 DB 버전이 아니라 **데이터 리비전**으로 판단한다.
+    //
+    // 예전에는 oldVersion < 6 마이그레이션 안에서만 동기화해서, DB 가 v6 이 된
+    // 순간부터는 에셋의 정답을 아무리 고쳐도 기존 유저에게 영영 반영되지 않았다.
+    // (다음 수정 때마다 DB 버전을 올리는 방식은 사람이 잊어버리는 순간 조용히 깨진다)
+    await syncQuestionsIfRevisionChanged(db);
+
+    return db;
+  }
+
+  /// 문제 데이터 리비전. **assets/questions/*.json 을 고칠 때마다 1 올릴 것.**
+  /// 이 숫자가 기기에 저장된 값과 다르면 앱 시작 시 에셋 기준으로 동기화된다.
+  ///
+  /// rev 1: v1.5.4 정답 오류 6건 수정
+  /// rev 2: sql_questions[135] 정답 3 -> 2
+  static const int questionDataRevision = 2;
+
+  static const String _metaTable = 'app_meta';
+  static const String _metaKeyRevision = 'question_data_revision';
+
+  /// 기기에 기록된 리비전과 코드의 리비전이 다르면 문제 데이터를 동기화한다.
+  /// 같으면 아무 것도 하지 않으므로 매 실행 비용은 SELECT 1회다.
+  @visibleForTesting
+  static Future<void> syncQuestionsIfRevisionChanged(Database db) async {
+    if (kIsWeb) return; // 웹은 JSON 을 직접 읽으므로 항상 최신이다
+    try {
+      await db.execute(
+          'CREATE TABLE IF NOT EXISTS $_metaTable (key TEXT PRIMARY KEY, value TEXT)');
+      final rows = await db.query(_metaTable,
+          where: 'key = ?', whereArgs: [_metaKeyRevision]);
+      final stored =
+          rows.isEmpty ? null : int.tryParse(rows.first['value'] as String? ?? '');
+      if (stored == questionDataRevision) return;
+
+      await syncQuestionsFromAssets(db);
+
+      // 동기화가 성공한 뒤에만 리비전을 기록한다.
+      // 먼저 기록하면 동기화가 실패해도 "됐다" 고 착각해 영영 재시도하지 않는다.
+      await db.insert(
+        _metaTable,
+        {'key': _metaKeyRevision, 'value': '$questionDataRevision'},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('문제 데이터 리비전 동기화 실패 (다음 실행에 재시도): $e');
+    }
   }
 
   /// 버전 업그레이드 마이그레이션 (테스트 가능한 진입점).
@@ -66,8 +113,9 @@ class DatabaseService {
       await ensurePlanTypeColumn(db);
     }
     if (oldVersion < 6) {
-      // 문제 데이터는 최초 설치 때 1회만 시딩되므로, 정답 오류를 고쳐도
-      // 기존 유저에게는 영원히 반영되지 않았다. 에셋 기준으로 내용을 동기화한다.
+      // v6 마이그레이션 시점의 동기화. 이후의 데이터 수정 반영은
+      // questionDataRevision (매 실행 비교) 이 담당한다 — DB 버전에 묶어두면
+      // 버전 올리는 것을 잊는 순간 수정이 기존 유저에게 도달하지 못한다.
       await syncQuestionsFromAssets(db);
     }
   }

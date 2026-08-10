@@ -363,6 +363,13 @@ void main() {
       expect(manifest.contains('android.permission.POST_NOTIFICATIONS'), isTrue);
     });
 
+    test('DB 를 열 때 데이터 리비전 동기화가 호출된다', () {
+      final src = File('lib/services/database_service.dart').readAsStringSync();
+      // 선언문이 아니라 **호출식**을 확인한다 (await + 인자).
+      expect(src.contains('await syncQuestionsIfRevisionChanged(db);'), isTrue,
+          reason: '이 호출이 빠지면 v6 이후 유저에게 정답 수정이 영영 도달하지 않는다');
+    });
+
     test('알림을 켜는 경로에 후속 재예약 훅이 물려 있다', () {
       final main = File('lib/main.dart').readAsStringSync();
       expect(main.contains('NotificationOptIn.onEnabled ='), isTrue,
