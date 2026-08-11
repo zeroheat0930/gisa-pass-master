@@ -107,6 +107,17 @@ class DatabaseService {
   @visibleForTesting
   Future<void> runMigrations(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
+      // v1 유저는 학습 이력(answer_records)과 복습 큐를 잃는다. **의도된 손실이다.**
+      //
+      // v1 은 이 저장소의 첫 커밋(v1.3.0, 2026-04)보다도 이전이라 그 시절
+      // questions 스키마를 알 방법이 없다. 이력만 남기고 questions 를 다시 심으면
+      // question_id 가 새 id 와 어긋나 **풀이 기록이 엉뚱한 문제에 붙는다** —
+      // 이력을 잃는 것보다 나쁜 결과다(통계·오답노트가 조용히 거짓말을 한다).
+      // 정확히 옮기려면 옛 본문으로 remap 해야 하는데, 알 수 없는 스키마를
+      // 추측해 쓰는 코드는 검증할 수도 없다.
+      //
+      // 대상자는 2026-04 이전 빌드를 설치한 뒤 그 이후로 한 번도 앱을 열지 않은
+      // 유저뿐이다. 되살릴 근거가 생기면(v1 스키마 확인) 그때 remap 을 넣을 것.
       await db.execute('DROP TABLE IF EXISTS spaced_repetition');
       await db.execute('DROP TABLE IF EXISTS answer_records');
       await db.execute('DROP TABLE IF EXISTS questions');
