@@ -40,16 +40,10 @@ class AnswerChecker {
     // 1) 정규화 후 완전 일치
     if (normUser == normCorrect) return true;
 
-    // 2) 공백만 제거해 비교 (상호배제 vs 상호 배제).
+    // 2) 공백 차이를 흡수해 비교 (상호배제 vs 상호 배제).
     //    쉼표는 남긴다. 쉼표까지 지우면 항목 경계가 사라져 "3,5"(두 줄 출력)와
     //    "35"(한 값)가 서로 정답 처리되는 오탐이 생긴다.
-    //    같은 이유로, 숫자가 공백으로 구분된 정답("30 50" — printf("%d %d") 류
-    //    96문항)은 공백이 값의 경계라서 지우면 "3050"(한 값으로 오해한 오답)이
-    //    정답 처리된다. 그때는 이 단계를 건너뛴다.
-    if (_spaceCollapseSafe(normCorrect) &&
-        _stripSpaces(normUser) == _stripSpaces(normCorrect)) {
-      return true;
-    }
+    if (_stripSpaces(normUser) == _stripSpaces(normCorrect)) return true;
 
     // 3) 괄호 안 대체표기 허용 — 용어 문항에 한정한다.
     //    정답이 "스택(Stack)" 일 때 "스택" 이나 "Stack" 만 써도 맞는 답이다.
@@ -262,12 +256,18 @@ class AnswerChecker {
     return false;
   }
 
-  static String _stripSpaces(String s) => s.replaceAll(' ', '');
-
-  /// 공백 제거 비교를 해도 되는 정답인지. 숫자가 공백으로 구분되어 있으면
-  /// 그 공백은 띄어쓰기 허용이 아니라 **값의 경계**다.
-  static bool _spaceCollapseSafe(String normCorrect) =>
-      !RegExp(r'\d\s+\d').hasMatch(normCorrect);
+  /// 공백을 지우되 **숫자와 숫자 사이의 공백은 남긴다.**
+  ///
+  /// 띄어쓰기 차이는 흡수해야 하지만("상호 배제" == "상호배제"), 숫자 사이의
+  /// 공백은 띄어쓰기가 아니라 **값의 경계**다. 전부 지우면 printf("%d %d") 류
+  /// 출력에서 "3050"(두 값을 하나로 오해한 오답)이 "30 50"과 같아진다(96문항).
+  ///
+  /// 반대로 경계가 아닌 공백은 지워야 한다. 실행 결과 정답에는 출력 구문 탓에
+  /// 군더더기 공백이 흔하다(예: '1 2 3 \n2 3 4' — 값마다 뒤에 공백). 유저가
+  /// 그 공백까지 똑같이 적을 이유는 없다. 정답 전체를 건너뛰는 방식으로 막으면
+  /// 바로 이 문항들이 오답 처리된다(java[36] 에서 실제로 잡혔다).
+  static String _stripSpaces(String s) =>
+      s.replaceAll(RegExp(r'(?<!\d) | (?!\d)'), '');
 
   static List<String> _tokens(String s) =>
       s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
