@@ -49,39 +49,54 @@ void main() {
     );
   }
 
+  // 파인더가 나타날 때까지 기다린다. 조용한 `if (isNotEmpty)` 가드는 금물 —
+  // 문제 로드가 느리면 시나리오 전체를 건너뛴 채 통과해서, 이 테스트가
+  // 아무것도 검증하지 않고 20번 녹색이었던 적이 있다(감사 #25).
+  Future<void> waitFor(WidgetTester tester, Finder finder, String what,
+      [Duration timeout = const Duration(seconds: 15)]) async {
+    const step = Duration(milliseconds: 200);
+    for (var elapsed = Duration.zero; elapsed < timeout; elapsed += step) {
+      await tester.pump(step);
+      if (finder.evaluate().isNotEmpty) return;
+    }
+    fail('$timeout 안에 $what 이(가) 나타나지 않았다 — 시나리오가 공회전한다');
+  }
+
   // ─── 시나리오 1: 제출 버튼 20번 연타 (비동기 충돌 체크) ───
   testWidgets('연타 테스트: 제출 버튼 20번 연속 탭해도 크래시 없음', (tester) async {
     await tester.pumpWidget(buildApp());
     await settle(tester, const Duration(seconds: 3));
 
-    // "예측 학습 시작" 버튼 찾기
     final predictionBtn = find.text('예측 학습 시작');
-    if (predictionBtn.evaluate().isNotEmpty) {
-      await tester.tap(predictionBtn);
-      await settle(tester, const Duration(seconds: 2));
+    expect(predictionBtn, findsWidgets, reason: '홈의 예측 학습 카드를 찾지 못했다');
+    await tester.tap(predictionBtn.first);
 
-      // 답안 입력 필드 찾기
-      final textField = find.byType(TextField);
-      if (textField.evaluate().isNotEmpty) {
-        await tester.enterText(textField.first, 'test');
+    // 문제 로드는 DB 상태에 따라 수 초 걸릴 수 있다. 나타날 때까지 기다리고,
+    // 안 나타나면 (건너뛰는 대신) 실패시킨다.
+    await waitFor(tester, find.byType(TextField), '답안 입력창');
+    await tester.enterText(find.byType(TextField).first, 'test');
 
-        // 제출 버튼 찾기
-        final submitBtn = find.text('제출');
-        expect(submitBtn, findsWidgets, reason: '제출 버튼을 찾지 못했다');
+    final submitBtn = find.text('제출');
+    expect(submitBtn, findsWidgets, reason: '제출 버튼을 찾지 못했다');
 
-        // 좌표를 미리 잡아두고 그 지점을 20번 연타한다.
-        // 위젯 파인더로 매번 다시 찾으면 안 된다 — 첫 제출 직후 버튼이 '다음'으로
-        // 바뀌어 사라지므로 두 번째 탭에서 테스트가 터진다. 실제 유저의 연타는
-        // '같은 화면 위치를 계속 누르는 것'이므로 좌표 탭이 현실에 가깝다.
-        final point = tester.getCenter(submitBtn.first);
-        for (int i = 0; i < 20; i++) {
-          await tester.tapAt(point);
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-        await settle(tester, const Duration(seconds: 1));
-      }
+    // 좌표를 미리 잡아두고 그 지점을 20번 연타한다.
+    // 위젯 파인더로 매번 다시 찾으면 안 된다 — 첫 제출 직후 버튼이 '다음'으로
+    // 바뀌어 사라지므로 두 번째 탭에서 테스트가 터진다. 실제 유저의 연타는
+    // '같은 화면 위치를 계속 누르는 것'이므로 좌표 탭이 현실에 가깝다.
+    final point = tester.getCenter(submitBtn.first);
+    for (int i = 0; i < 20; i++) {
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
     }
-    // 크래시 없이 여기까지 도달하면 성공
+    await settle(tester, const Duration(seconds: 1));
+
+    // 시나리오가 실제로 제출까지 도달했는지 확인한다. 이 단언이 없으면
+    // 위의 어떤 단계가 조용히 실패해도 '크래시 없음'만 보고 통과한다.
+    final context = tester.element(find.byType(MaterialApp));
+    final provider = Provider.of<StudyProvider>(context, listen: false);
+    expect(provider.sessionSolved, greaterThanOrEqualTo(1),
+        reason: '연타 시나리오가 제출에 도달하지 못했다(공회전)');
+
     expect(find.byType(MaterialApp), findsOneWidget);
     expect(tester.takeException(), isNull, reason: '연타 중 예외가 발생하면 안 된다');
   });

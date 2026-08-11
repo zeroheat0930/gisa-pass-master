@@ -345,6 +345,27 @@ class PurchaseService extends ChangeNotifier {
     }
   }
 
+  /// purchaseStream 핸들러의 테스트 진입점.
+  ///
+  /// 실제 결제가 흐르는 경로는 이 핸들러 하나뿐인데 private 이라, 지금까지
+  /// "purchased → grantPremium → (저장 성공 시에만) completePurchase" 계약을
+  /// 통째로 되돌려도 모든 테스트가 통과했다. v1.5.4 '결제 소실'이 터졌던
+  /// 바로 그 지점이다.
+  @visibleForTesting
+  void handlePurchaseUpdates(List<PurchaseDetails> purchases) =>
+      _onPurchaseUpdate(purchases);
+
+  /// 테스트에서 스토어 호출을 가로채기 위한 시임.
+  /// 테스트 환경에는 IAP 플랫폼 구현이 없어 completePurchase 가 예외를 던진다.
+  @visibleForTesting
+  Future<void> Function(PurchaseDetails)? completePurchaseForTest;
+
+  Future<void> _completePurchase(PurchaseDetails purchase) {
+    final override = completePurchaseForTest;
+    if (override != null) return override(purchase);
+    return _iap.completePurchase(purchase);
+  }
+
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
     for (final purchase in purchaseDetailsList) {
       debugPrint('구매 상태: ${purchase.status} - ${purchase.productID}');
@@ -364,7 +385,7 @@ class PurchaseService extends ChangeNotifier {
             return;
           }
           if (purchase.pendingCompletePurchase) {
-            _iap.completePurchase(purchase);
+            _completePurchase(purchase);
           }
         });
       } else if (purchase.status == PurchaseStatus.error) {
