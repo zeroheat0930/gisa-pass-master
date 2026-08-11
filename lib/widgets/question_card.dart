@@ -68,7 +68,10 @@ class QuestionCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  'AI 예측',
+                  // 문항 데이터 기준으로 표기한다. 'AI 예측' 고정 문구였을 때는
+                  // 회차별 문제집의 실제 기출까지 전부 AI 문제처럼 보여서,
+                  // '기출 기반' 배지를 보고 들어온 유저가 반대 라벨을 봤다.
+                  AppConfig.isPredictedYear(question.year) ? 'AI 예상' : '기출',
                   style: TextStyle(
                     color: Colors.grey[500],
                     fontSize: 12,

@@ -227,6 +227,86 @@ void main() {
     });
   });
 
+  // ── 'N개'·'3V' 나열 문항은 순서 무관 — 실제 데이터 short[350,357,319], sql[55]
+  group('N개·3V 나열 문항의 순서 무관 채점', () {
+    test('"알고리즘 2개" — 순서를 바꿔 써도 정답 (short[357])', () {
+      const text = '해시 함수의 대표적인 알고리즘 2개를 쓰시오.';
+      expect(
+          AnswerChecker.isCorrect('MD5, SHA-256', 'SHA-256, MD5',
+              questionType: 'short_answer', questionText: text),
+          isTrue);
+    });
+
+    test('"빅데이터의 3V" — 순서를 바꿔 써도 정답 (short[319])', () {
+      const text = '빅데이터의 3V를 쓰시오.';
+      expect(
+          AnswerChecker.isCorrect(
+              'Variety, Velocity, Volume', 'Volume, Velocity, Variety',
+              questionType: 'short_answer', questionText: text),
+          isTrue);
+    });
+
+    test('실행 결과 문제는 여전히 순서가 정답이다', () {
+      expect(
+          AnswerChecker.isCorrect('2, 1', '1, 2',
+              questionType: 'code_reading',
+              questionText: '다음 프로그램이 출력하는 값 2개를 쓰시오.'),
+          isFalse,
+          reason: 'code_reading 은 N개 표현이 있어도 출력 순서가 채점 기준이다');
+    });
+  });
+
+  // ── 괄호 안 설명 단독 답변 차단 — 실제 데이터 short[316] ─────────────────
+  group('부연 설명 괄호는 단독 답변이 될 수 없다', () {
+    final target = q(
+      type: 'short_answer',
+      text: '쿠버네티스(Kubernetes)의 주요 역할을 쓰시오.',
+      answer: '컨테이너 오케스트레이션(자동 배포, 확장, 관리)',
+    );
+
+    test('핵심 용어 없이 괄호 안 설명만 쓰면 오답', () {
+      expect(AnswerChecker.isCorrectFor(target, '자동 배포, 확장, 관리'), isFalse,
+          reason: '용어를 모르는 답이 정답 처리되면 안 된다');
+    });
+
+    test('핵심 용어만 써도 정답', () {
+      expect(AnswerChecker.isCorrectFor(target, '컨테이너 오케스트레이션'), isTrue);
+    });
+
+    test('한 단어짜리 동의어 괄호("스택(stack)")는 여전히 단독 인정', () {
+      final term = q(
+        type: 'short_answer',
+        text: 'LIFO 구조의 자료구조를 쓰시오.',
+        answer: '스택(Stack)',
+      );
+      expect(AnswerChecker.isCorrectFor(term, 'stack'), isTrue);
+    });
+  });
+
+  // ── 항목별 괄호: 직접 쓴 괄호는 내용까지 맞아야 한다 — short[354] ────────
+  group('항목별 괄호를 직접 썼으면 대응 관계도 채점한다', () {
+    final target = q(
+      type: 'short_answer',
+      text: 'REST API에서 CRUD에 대응하는 HTTP 메서드 4가지를 쓰시오.',
+      answer: 'POST(Create), GET(Read), PUT(Update), DELETE(Delete)',
+    );
+
+    test('대응 관계를 뒤바꿔 쓰면 오답', () {
+      expect(
+          AnswerChecker.isCorrectFor(
+              target, 'POST(Read), GET(Create), PUT(Delete), DELETE(Update)'),
+          isFalse,
+          reason: '괄호를 벗겨서만 비교하면 출제 의도(대응 관계)가 사라진다');
+    });
+
+    test('대응 관계를 맞게 쓰면 정답', () {
+      expect(
+          AnswerChecker.isCorrectFor(
+              target, 'POST(Create), GET(Read), PUT(Update), DELETE(Delete)'),
+          isTrue);
+    });
+  });
+
   // ── 공백 구분 다중 값 출력 — 실제 데이터 code_reading 96문항 ─────────────
   // printf("%d %d") 류에서 공백은 띄어쓰기 허용이 아니라 **값의 경계**다.
   // 공백 제거 비교가 무조건 돌면 '30 50'(두 값)과 '3050'(한 값으로 오해한

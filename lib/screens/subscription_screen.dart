@@ -197,7 +197,7 @@ class _HeroHeader extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'AI가 만드는 무제한 예측 문제 +\n광고 없이 합격에만 집중하세요',
+            'AI 실전 모의고사 무제한 +\n광고 없이 합격에만 집중하세요',
             style: TextStyle(
               color: Color(0xFF9E9E9E),
               fontSize: 13,
@@ -341,10 +341,12 @@ class _FeatureList extends StatelessWidget {
     _FeatureRow(label: '기본 문제 풀기', free: true, premium: true),
     _FeatureRow(label: '오답노트', free: true, premium: true),
     _FeatureRow(label: '기본 통계', free: true, premium: true),
+    // 실제로 게이트가 있는 것만 적는다. 'AI 무제한 예측 문제'·'기출 유형 심층
+    // 분석'을 유료 전용으로 표기했었지만 코드에 게이트가 없거나 기능 자체가
+    // 없었다 — 판매 문구와 코드가 다르면 환불 분쟁·심사 리스크가 된다.
     _FeatureRow(label: '광고 제거', free: false, premium: true),
-    _FeatureRow(label: 'AI 무제한 예측 문제', free: false, premium: true),
     _FeatureRow(label: 'AI 실전 모의고사 무제한', free: false, premium: true),
-    _FeatureRow(label: '기출 유형 심층 분석', free: false, premium: true),
+    _FeatureRow(label: '학습 플랜 Day 4 이후', free: false, premium: true),
   ];
 
   @override

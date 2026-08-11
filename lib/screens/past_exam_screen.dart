@@ -26,6 +26,7 @@ class PastExamScreen extends StatefulWidget {
 
 class _PastExamScreenState extends State<PastExamScreen> {
   bool _isLoading = false;
+  bool _openingRounds = false;
   String? _error;
 
   // 난이도 필터: null = 전체
@@ -145,11 +146,19 @@ class _PastExamScreenState extends State<PastExamScreen> {
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => RoundListScreen(db: widget.db),
-                        ),
-                      ),
+                      // 전환 애니메이션 중 두 번째 탭이 라우트를 한 장 더 쌓지
+                      // 않게 막는다 (_loadAndStart 의 _isLoading 가드와 동일 이유).
+                      onTap: () {
+                        if (_openingRounds) return;
+                        _openingRounds = true;
+                        Navigator.of(context)
+                            .push(
+                              MaterialPageRoute(
+                                builder: (_) => RoundListScreen(db: widget.db),
+                              ),
+                            )
+                            .whenComplete(() => _openingRounds = false);
+                      },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 16),

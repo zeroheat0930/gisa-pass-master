@@ -155,6 +155,13 @@ class _RootNavigatorState extends State<_RootNavigator> {
   void initState() {
     super.initState();
 
+    // 알림을 켜는 모든 경로(옵트인 다이얼로그 / 통계 화면 토글)의 후속 작업은
+    // **동기적으로, 첫 프레임 전에** 물려둔다. postFrame 체인(광고 SDK·ATT·
+    // 스토어 왕복) 끝에서 할당하면 그 수 초 동안 통계 탭에서 토글을 켠 유저의
+    // 복습 알림이 예약되지 않고, 체인이 중간에 죽으면 세션 내내 그렇다.
+    NotificationOptIn.onEnabled =
+        widget.spacedRepetitionService.rescheduleReviewNotification;
+
     // iOS ATT 권한 요청 — IDFA 접근 동의 (광고 fill rate 에 직결).
     //
     // runApp() 이전에 요청하면 앱이 아직 active 상태가 아니라 프롬프트가 그대로
@@ -188,11 +195,6 @@ class _RootNavigatorState extends State<_RootNavigator> {
 
       // 알림 초기화 + 예약 갱신. 유저가 켜둔 경우에만 실제로 예약된다.
       await NotificationService.initialize();
-
-      // 알림을 켜는 모든 경로(옵트인 다이얼로그 / 통계 화면 토글)가 켠 직후
-      // 복습 알림까지 잡도록 후속 작업을 여기서 물려준다.
-      NotificationOptIn.onEnabled =
-          widget.spacedRepetitionService.rescheduleReviewNotification;
 
       await NotificationService.scheduleExamCountdown();
       await widget.spacedRepetitionService.rescheduleReviewNotification();

@@ -48,7 +48,12 @@ class ExamQuotaDialog {
               if (globalAdService?.isRewardedReady ?? false) {
                 t.cancel();
                 setDialogState(() {});
+                return;
               }
+              // 첫 로드가 no-fill 로 실패하면 아무도 다시 로드하지 않아
+              // '광고 준비 중...'이 영구히 남는다. 2초마다 재요청한다
+              // (AdService 가 로드 중이면 중복 요청을 무시한다).
+              if (t.tick % 4 == 0) globalAdService?.loadRewardedAd();
             });
           }
           return AlertDialog(

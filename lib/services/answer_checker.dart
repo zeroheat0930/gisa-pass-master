@@ -64,14 +64,16 @@ class AnswerChecker {
     }
 
     // 3b) 항목마다 설명 괄호가 붙은 나열형 정답 — "POST(Create), GET(Read)".
-    //     여기서 괄호는 항목별 부연이지 답의 일부가 아니므로, 괄호를 벗긴
-    //     항목끼리 비교한다("POST, GET"). 일부 항목만 괄호를 생략해도 된다.
+    //     여기서 괄호는 항목별 부연이지 답의 일부가 아니므로, 괄호를 생략해도
+    //     정답으로 본다. 단 **유저가 괄호를 직접 썼다면 그 내용까지 맞아야 한다** —
+    //     "POST(Read)" 처럼 대응 관계를 틀리게 쓴 답을 괄호만 벗겨 정답 처리하면
+    //     출제 의도(대응 관계)가 사라진다.
     if (_allowsItemParenVariants(questionType, normCorrect)) {
-      final cu = _tokens(normUser).map(_stripItemParen).toList();
-      final cc = _tokens(normCorrect).map(_stripItemParen).toList();
-      if (_sameOrderedList(cu, cc)) return true;
+      final us = _tokens(normUser);
+      final cs = _tokens(normCorrect);
+      if (_itemParenListMatches(us, cs)) return true;
       if (_allowsUnorderedList(questionType, questionText) &&
-          _sameMultiset(cu, cc)) {
+          _itemParenMultisetMatches(us, cs)) {
         return true;
       }
     }
@@ -141,10 +143,14 @@ class AnswerChecker {
     final orSubstituted = normalized.replaceAllMapped(
         RegExp(r'(\S+)\s*\(\s*또는\s+([^)]+?)\s*\)'), (m) => m.group(2)!);
 
+    // 괄호 안 문구 **단독** 답변은 한 단어짜리 동의어("스택(stack)")일 때만
+    // 인정한다. "컨테이너 오케스트레이션(자동 배포, 확장, 관리)" 처럼 괄호가
+    // 부연 설명이면, 핵심 용어 없이 설명만 쓴 답이 정답이 되어버린다.
     final inside = RegExp(r'\(([^)]*)\)')
         .allMatches(normalized)
         .map((m) => m.group(1)?.trim() ?? '')
-        .where((v) => v.isNotEmpty && !v.startsWith('또는'))
+        .where((v) =>
+            v.isNotEmpty && !v.startsWith('또는') && !v.contains(' '))
         .toList();
 
     return [
@@ -180,10 +186,29 @@ class AnswerChecker {
     return stripped.isNotEmpty ? stripped : token;
   }
 
-  static bool _sameOrderedList(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
+  /// 유저 항목 하나가 정답 항목 하나와 맞는지.
+  /// 괄호를 생략했으면 이름만 비교하고, 괄호를 썼으면 통째로 맞아야 한다.
+  static bool _itemParenTokenMatches(String user, String correct) {
+    if (user.contains('(')) return user == correct;
+    return user == _stripItemParen(correct);
+  }
+
+  static bool _itemParenListMatches(List<String> us, List<String> cs) {
+    if (us.length != cs.length) return false;
+    for (var i = 0; i < us.length; i++) {
+      if (!_itemParenTokenMatches(us[i], cs[i])) return false;
+    }
+    return true;
+  }
+
+  /// 순서 무관 버전. 정답 항목을 하나씩 소모하며 짝을 찾는다 (중복 항목 보존).
+  static bool _itemParenMultisetMatches(List<String> us, List<String> cs) {
+    if (us.length != cs.length) return false;
+    final remaining = [...cs];
+    for (final u in us) {
+      final i = remaining.indexWhere((c) => _itemParenTokenMatches(u, c));
+      if (i < 0) return false;
+      remaining.removeAt(i);
     }
     return true;
   }
@@ -284,6 +309,13 @@ class AnswerChecker {
     // 반면 "각각 쓰시오"(HTTP와 HTTPS 포트를 각각)는 지문의 순서와 짝이 맞아야
     // 하므로 여기 포함하지 않는다.
     if (RegExp(r'\d+\s*가지').hasMatch(text)) return true;
+
+    // "알고리즘 2개", "빅데이터의 3V" 도 같은 나열형이다. "가지" 만 보던 시절에는
+    // 이 문항들에서 순서만 바꾼 정답이 오답 처리됐다 (실기 채점은 순서 무관).
+    // "몇 개가 출력되는가" 류 개수 문항도 걸리지만, 그 답은 항목이 하나라
+    // 다중집합 비교가 순서 비교와 동일해 무해하다.
+    if (RegExp(r'\d+\s*개').hasMatch(text)) return true;
+    if (RegExp(r'\d+\s*[vV]\b').hasMatch(text)) return true;
 
     return false;
   }

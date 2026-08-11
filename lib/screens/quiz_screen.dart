@@ -23,6 +23,7 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   final TextEditingController _answerController = TextEditingController();
   bool _showExplanation = false;
+  bool _optInScheduled = false;
   BannerAd? _bannerAd;
   bool _bannerLoaded = false;
 
@@ -199,10 +200,17 @@ class _QuizScreenState extends State<QuizScreen> {
     if (question == null) {
       // 학습을 마친 이 시점이 복습 알림을 제안하기 가장 좋은 순간이다.
       // 첫 실행에 권한을 물으면 맥락이 없어 대부분 거부한다.
-      final wrong = provider.sessionSolved - provider.sessionCorrect;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) NotificationOptIn.maybeAsk(context, wrongCount: wrong);
-      });
+      //
+      // 한 번만 예약한다. maybeAsk 의 중복 방지 기록은 다이얼로그가 닫힌 뒤에야
+      // 저장되므로, 완료 화면이 rebuild 될 때마다(배너 광고 onLoad/재시도의
+      // setState 등) 다시 예약하면 같은 다이얼로그가 위에 한 장 더 쌓인다.
+      if (!_optInScheduled) {
+        _optInScheduled = true;
+        final wrong = provider.sessionSolved - provider.sessionCorrect;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) NotificationOptIn.maybeAsk(context, wrongCount: wrong);
+        });
+      }
 
       final daysLeft = AppConfig.daysUntilExam;
       return Scaffold(

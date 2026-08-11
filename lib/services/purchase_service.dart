@@ -194,6 +194,12 @@ class PurchaseService extends ChangeNotifier {
       _isPremium = true;
       _adService?.setPremium(true);
       notifyListeners();
+
+      // owner 미기록 캐시(owner 개념 도입 전에 결제한 유저)는 여기서 백필한다.
+      // 안 하면 그 유저들에게는 백업 복제 방어가 영구히 무력하다.
+      if (owner == null && current != null) {
+        await prefs.setString(_prefsKeyPremiumOwner, current);
+      }
     } catch (e) {
       debugPrint('구매 이력 로드 실패: $e');
     }

@@ -205,8 +205,14 @@ class NotificationService {
   }
 
   static Future<void> cancelAll() async {
-    if (kIsWeb || !_ready) return;
+    if (kIsWeb) return;
     try {
+      // 초기화를 먼저 보장한다 (cancelReviewReminder 와 동일).
+      // `_ready` 만 보고 조기 return 하면, 시작 체인이 알림 초기화에 도달하기
+      // 전에 유저가 토글을 끌 경우 아무것도 취소되지 않은 채 성공한 척 되어
+      // 꺼둔 유저에게 기존 예약(D-Day 포함)이 그대로 발송된다.
+      await initialize();
+      if (!_ready) return;
       await _plugin.cancelAll();
     } catch (e) {
       debugPrint('알림 취소 실패: $e');

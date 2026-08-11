@@ -216,11 +216,16 @@ class _TodayStudyCard extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                CircularProgressIndicator(
-                  value: accuracy / 100,
-                  strokeWidth: 10,
-                  backgroundColor: AppConfig.borderColor,
-                  valueColor: AlwaysStoppedAnimation<Color>(accColor),
+                // Stack 은 자식에게 제약을 loose 로 풀어 전달하므로, 그냥 두면
+                // 링이 96px 가 아니라 프레임워크 최소 크기(36px)로 붕괴해
+                // 중앙 텍스트가 링 위를 덮는다. 꽉 채워 강제한다.
+                Positioned.fill(
+                  child: CircularProgressIndicator(
+                    value: accuracy / 100,
+                    strokeWidth: 10,
+                    backgroundColor: AppConfig.borderColor,
+                    valueColor: AlwaysStoppedAnimation<Color>(accColor),
+                  ),
                 ),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,

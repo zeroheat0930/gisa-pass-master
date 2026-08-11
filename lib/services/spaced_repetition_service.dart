@@ -45,6 +45,16 @@ class SpacedRepetitionService {
     int consecutiveCorrect = existing?['consecutive_correct'] as int? ?? 0;
 
     if (isCorrect) {
+      // 마지막 단계(14일)에서 또 맞히면 **졸업** — 큐에서 제거한다.
+      // 졸업이 없으면 한 번이라도 틀린 문항이 영구히 14일 주기로 순환해서,
+      // 오답노트를 비우는 것이 불가능하고 시험이 끝난 뒤에도 알림이 계속 온다.
+      // (큐 소진 시 알림을 취소하는 rescheduleReviewNotification 의 빈 큐 분기도
+      // 졸업이 있어야 실제로 도달한다)
+      if (currentStage >= _maxStage) {
+        await _db.deleteSpacedRepetition(questionId);
+        await rescheduleReviewNotification();
+        return;
+      }
       currentStage = (currentStage + 1).clamp(0, _maxStage);
       consecutiveCorrect += 1;
     } else {

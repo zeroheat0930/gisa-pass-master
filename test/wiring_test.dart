@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:gisa_pass_master/config.dart';
 import 'package:gisa_pass_master/models/answer_record.dart';
 import 'package:gisa_pass_master/models/question.dart';
 import 'package:gisa_pass_master/providers/study_provider.dart';
@@ -58,6 +59,12 @@ class _SpyDatabase extends DatabaseService {
   /// 이 문제가 이미 복습 큐에 있는지 (정답 시 승격 경로 재현용)
   bool tracked = false;
 
+  /// 큐에 있을 때의 현재 stage (졸업 경로 재현용)
+  int stage = 1;
+
+  int upserts = 0;
+  final List<int> deleted = [];
+
   @override
   Future<void> insertAnswerRecord(AnswerRecord record) async {
     records.add(record);
@@ -65,7 +72,7 @@ class _SpyDatabase extends DatabaseService {
 
   @override
   Future<Map<String, dynamic>?> getSpacedRepetition(int questionId) async =>
-      tracked ? {'stage': 1, 'consecutive_correct': 1} : null;
+      tracked ? {'stage': stage, 'consecutive_correct': stage} : null;
 
   @override
   Future<void> upsertSpacedRepetition({
@@ -73,7 +80,14 @@ class _SpyDatabase extends DatabaseService {
     required int stage,
     required DateTime nextReviewAt,
     required int consecutiveCorrect,
-  }) async {}
+  }) async {
+    upserts++;
+  }
+
+  @override
+  Future<void> deleteSpacedRepetition(int questionId) async {
+    deleted.add(questionId);
+  }
 }
 
 Question _question({int id = 42}) => Question(
@@ -121,6 +135,22 @@ void main() {
           reason: '정답을 걸러내면 오답노트가 영원히 졸업되지 않는다');
       expect(srs.calls.single.questionId, 42);
       expect(srs.calls.single.isCorrect, isTrue);
+    });
+
+    test('마지막 단계에서 또 맞히면 큐에서 졸업한다', () async {
+      final gdb = _SpyDatabase()
+        ..tracked = true
+        ..stage = 7;
+      final gsrs = _SpyReschedule(gdb);
+
+      await gsrs.processAnswer(9, true);
+
+      expect(gdb.deleted, [9],
+          reason: '졸업이 없으면 한 번 틀린 문항이 영구히 14일 주기로 순환하고, '
+              '오답노트를 비우는 것이 불가능하다');
+      expect(gdb.upserts, 0, reason: '졸업한 문항을 다시 큐에 넣으면 안 된다');
+      expect(gsrs.rescheduleCalls, greaterThan(0),
+          reason: '큐가 바뀌었으니 알림도 다시 잡아야 한다 (빈 큐면 취소)');
     });
 
     test('오답일 때도 복습 스케줄이 갱신된다', () async {
@@ -190,6 +220,46 @@ void main() {
       expect(rows.single['id'], id, reason: 'id 는 보존되어야 한다');
     });
 
+    test('v6 → v7 업그레이드가 UB 문항을 id 보존한 채 교체한다', () async {
+      final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+      addTearDown(db.close);
+
+      await db.execute('''
+        CREATE TABLE questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          year INTEGER NOT NULL, round INTEGER NOT NULL,
+          subject TEXT NOT NULL, question_type TEXT NOT NULL,
+          question_text TEXT NOT NULL, code_snippet TEXT, code_language TEXT,
+          answer TEXT NOT NULL, explanation TEXT NOT NULL,
+          difficulty INTEGER DEFAULT 3, frequency_weight REAL DEFAULT 0.5
+        )
+      ''');
+
+      // 구버전 유저의 UB 문항 상태 재현 (printf 인수 평가순서 미정의)
+      const oldSnippet = '#include <stdio.h>\n'
+          'int main() {\n'
+          '    int i = 5;\n'
+          '    printf("%d %d %d", i, i++, i);\n'
+          '    return 0;\n'
+          '}';
+      final id = await db.insert('questions', {
+        'year': 2021, 'round': 1, 'subject': '프로그래밍',
+        'question_type': 'code_reading',
+        'question_text': '다음 C 프로그램의 실행 결과를 쓰시오.',
+        'code_snippet': oldSnippet, 'code_language': 'c',
+        'answer': '6 5 6', 'explanation': '옛 해설',
+      });
+
+      await DatabaseService().runMigrations(db, 6, 7);
+
+      final row =
+          (await db.query('questions', where: 'id = ?', whereArgs: [id])).single;
+      expect(row['answer'], '5 6',
+          reason: 'UB 문항이 잘 정의된 문항으로 교체되어야 한다');
+      expect(row['code_snippet'], contains('int a = i++;'));
+      expect(row['id'], id, reason: '학습 이력이 붙는 id 는 보존되어야 한다');
+    });
+
     test('v3 → v6 업그레이드도 duplicate column 없이 통과한다', () async {
       final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
       addTearDown(db.close);
@@ -241,6 +311,19 @@ void main() {
       final exam = source('lib/screens/ai_prediction_screen.dart');
       expect(exam.contains('AiExamQuota.consume'), isTrue,
           reason: '확인만 하고 소모하지 않으면 제한이 무의미하다');
+    });
+
+    test('쿼터 소진 시 리워드 다이얼로그가 실제로 배선되어 있다', () {
+      // 리워드 광고는 이 다이얼로그가 유일한 노출 지점이다. 이 배선이 끊기면
+      // 무료 유저의 재응시 버튼이 죽고 리워드 수익이 조용히 0 이 된다.
+      // (다이얼로그 내부의 시청→지급은 exam_quota_dialog_test 가 지킨다)
+      for (final path in [
+        'lib/screens/home_screen.dart',
+        'lib/screens/ai_prediction_screen.dart',
+      ]) {
+        expect(source(path).contains('ExamQuotaDialog.show('), isTrue,
+            reason: '$path 가 쿼터 소진 안내(광고 보상 진입점)를 띄우지 않는다');
+      }
     });
   });
 
@@ -398,10 +481,34 @@ void main() {
   // 이 재조회가 빠지면 문제를 풀어도 홈·통계 화면이 앱 재시작 전까지 옛 값을
   // 붙들고 있는다 — 과거 실제로 터졌던 회귀인데 어떤 테스트도 지키지 않았다.
   group('통계 재조회 배선', () {
-    test('통계를 보여주는 탭으로 전환하면 다시 읽는다', () {
+    test('통계를 보여주는 탭(홈·통계)으로 전환하면 다시 읽는다', () {
       final main = _activeSource('lib/main.dart');
       expect(main.contains('StatsProvider>().loadStats()'), isTrue,
           reason: '탭 전환 시 loadStats 호출이 빠지면 통계가 앱 재시작 전까지 멈춘다');
+      // 홈 탭(합격 예측 카드가 있는 곳)까지 갱신 대상이어야 한다.
+      // 통계 탭만으로 좁히는 되돌림도 과거 실제 터졌던 회귀와 같은 결과다.
+      expect(main.contains('index == 0 || index == 3'), isTrue,
+          reason: '홈 탭이 갱신 대상에서 빠지면 합격 예측·스트릭이 옛 값에 고정된다');
+    });
+
+    test('홈 화면의 퀴즈·모의고사 복귀 경로도 다시 읽는다', () {
+      // 홈→퀴즈→뒤로 는 가장 흔한 주 경로다. 탭 전환 갱신만으로는
+      // 이 경로가 잡히지 않아, 문제를 풀고 돌아와도 홈이 옛 값이었다.
+      final home = _activeSource('lib/screens/home_screen.dart');
+      final calls = RegExp(r'\.\s*loadStats\s*\(\)').allMatches(home).length;
+      expect(calls, greaterThanOrEqualTo(2),
+          reason: '퀴즈 복귀·AI 모의고사 복귀 두 경로 모두 loadStats 를 불러야 한다 '
+              '(현재 호출 $calls곳)');
+    });
+  });
+
+  // ── 8) 기출/예상 경계 ────────────────────────────────────────────────────
+  // 이 경계가 >= 로 되돌아가면 2025년 기출 전체가 'AI 예상'으로 표기되어
+  // 유료 유저 기만이 된다. 어떤 테스트도 지키지 않던 값이다.
+  group('기출/AI 예상 경계', () {
+    test('lastRealExamYear 까지는 기출, 그 뒤는 예상이다', () {
+      expect(AppConfig.isPredictedYear(AppConfig.lastRealExamYear), isFalse);
+      expect(AppConfig.isPredictedYear(AppConfig.lastRealExamYear + 1), isTrue);
     });
   });
 }

@@ -29,8 +29,11 @@ class AdService {
   static const String _iosRewardedId = 'ca-app-pub-3940256099942544/1712485313';
 
   /// 리워드 광고 ID 가 아직 테스트 ID 인지. 설정 화면 등에서 안내에 쓸 수 있다.
+  /// **두 플랫폼을 모두** 본다 — Android 만 검사하면 Android ID 만 실 ID 로
+  /// 바꾼 뒤 iOS 가 테스트 ID 로 남아 있어도 '실 ID 사용 중'이라고 거짓 보고한다.
   static bool get isRewardedUsingTestId =>
-      _androidRewardedId.startsWith('ca-app-pub-3940256099942544');
+      _androidRewardedId.startsWith('ca-app-pub-3940256099942544') ||
+      _iosRewardedId.startsWith('ca-app-pub-3940256099942544');
 
   static String get interstitialAdUnitId {
     if (kIsWeb) return '';

@@ -49,7 +49,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: runMigrations,
     );
@@ -69,7 +69,8 @@ class DatabaseService {
   ///
   /// rev 1: v1.5.4 정답 오류 6건 수정
   /// rev 2: sql_questions[135] 정답 3 -> 2
-  static const int questionDataRevision = 2;
+  /// rev 3: c_questions[106] UB 문항 교체에 따른 정답·해설 갱신 (본문은 DB v7 이 처리)
+  static const int questionDataRevision = 3;
 
   static const String _metaTable = 'app_meta';
   static const String _metaKeyRevision = 'question_data_revision';
@@ -136,7 +137,52 @@ class DatabaseService {
         debugPrint('v6 문제 동기화 실패 (리비전 검사가 재시도): $e');
       }
     }
+    if (oldVersion < 7) {
+      // 본문(codeSnippet) 수정은 리비전 동기화로 불가능하다 — 본문이 매칭 키라서
+      // 옛 행이 방치되고 새 행이 중복 INSERT 된다. 그래서 여기서 UPDATE 한다.
+      try {
+        await fixUndefinedBehaviorQuestion(db);
+      } catch (e) {
+        debugPrint('v7 문항 교체 실패: $e');
+      }
+    }
   }
+
+  /// DB v7: c_questions[106] — `printf("%d %d %d", i, i++, i)` 는 C 표준상
+  /// 미정의 동작이라 컴파일러마다 출력이 다르고(clang 실측 '5 5 6' vs 등록 정답
+  /// '6 5 6'), 같은 파일 87·119번과 정반대의 평가순서를 가정해 서로 모순이었다.
+  /// 잘 정의된 후위 증가 문항으로 교체한다. id 보존을 위해 UPDATE 만 한다.
+  @visibleForTesting
+  static Future<void> fixUndefinedBehaviorQuestion(Database db) async {
+    const oldSnippet = '#include <stdio.h>\n'
+        'int main() {\n'
+        '    int i = 5;\n'
+        '    printf("%d %d %d", i, i++, i);\n'
+        '    return 0;\n'
+        '}';
+    await db.update(
+      'questions',
+      {
+        'code_snippet': _c106NewSnippet,
+        'answer': _c106NewAnswer,
+        'explanation': _c106NewExplanation,
+      },
+      where: 'code_snippet = ?',
+      whereArgs: [oldSnippet],
+    );
+  }
+
+  static const String _c106NewSnippet = '#include <stdio.h>\n'
+      'int main() {\n'
+      '    int i = 5;\n'
+      '    int a = i++;\n'
+      '    printf("%d %d", a, i);\n'
+      '    return 0;\n'
+      '}';
+  static const String _c106NewAnswer = '5 6';
+  static const String _c106NewExplanation =
+      '후위 증가(i++)는 현재 값을 먼저 사용한 뒤 1 증가시킨다. '
+      'a 에는 증가 전 값 5 가 대입되고, 그 직후 i 는 6 이 된다. 출력: 5 6.';
 
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
@@ -283,13 +329,19 @@ class DatabaseService {
     final dueAt = DateTime.tryParse(raw);
     if (dueAt == null) return null;
 
+    // 30분 유예는 이 분기에도 적용한다. stage 0(1분) 문제를 방금 틀린 유저는
+    // 아직 해설을 읽거나 다음 문제를 푸는 중이다 — 1분 뒤 헤드업 알림이
+    // 학습 화면 위로 뜨면 overdue 분기가 막으려던 바로 그 상황이 재현된다.
+    final minDue = now.add(_overdueReminderDelay);
+    final effectiveDue = dueAt.isBefore(minDue) ? minDue : dueAt;
+
     // 그 시각까지 기한이 도래하는 문항 수 (알림 문구에 쓴다).
     // 예전에는 MIN 값 자신만 세어 항상 1 이 나왔다.
     final countRows = await db.rawQuery(
       'SELECT COUNT(*) FROM spaced_repetition WHERE next_review_at <= ?',
-      [raw],
+      [effectiveDue.toIso8601String()],
     );
-    return (dueAt: dueAt, count: _firstInt(countRows));
+    return (dueAt: effectiveDue, count: _firstInt(countRows));
   }
 
   /// 밀린 복습을 알릴 때 두는 여유. 방금 문제를 푼 직후 알림이 겹치지 않게 한다.
@@ -922,6 +974,13 @@ class DatabaseService {
       'INSERT OR REPLACE INTO spaced_repetition (question_id, stage, next_review_at, consecutive_correct, last_reviewed_at) VALUES (?, ?, ?, ?, ?)',
       [questionId, stage, nextReviewAt.toIso8601String(), consecutiveCorrect, DateTime.now().toIso8601String()],
     );
+  }
+
+  /// 복습 큐에서 제거한다 (졸업). answer_records 의 풀이 이력은 남는다.
+  Future<void> deleteSpacedRepetition(int questionId) async {
+    final db = await database;
+    await db.delete('spaced_repetition',
+        where: 'question_id = ?', whereArgs: [questionId]);
   }
 
   Future<List<Map<String, dynamic>>> getDueReviews() async {
