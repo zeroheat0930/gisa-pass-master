@@ -116,7 +116,20 @@ class PurchaseService extends ChangeNotifier {
       }
 
       await _loadProducts();
-      await _autoRestoreOnce();
+
+      // Android 는 **매 실행** 복원(queryPurchases)을 돈다.
+      // StoreKit 과 달리 Android 결제 플러그인은 미종결(acknowledge 안 된)
+      // 구매를 다음 실행에 purchaseStream 으로 재전달해 주지 않는다. 이 재조회가
+      // 없으면 저장 실패나 프로세스 종료로 acknowledge 를 놓친 구매가 재시도될
+      // 길이 없고, Google Play 는 3일 내 미확인 구매를 자동 환불해 버린다.
+      // (편의점 결제 등 pending 이 앱 종료 후 승인되는 경우도 이 경로로만 수신된다)
+      // Android 의 queryPurchases 는 iOS 와 달리 로그인 팝업을 띄우지 않으므로
+      // 매 실행 돌려도 유저에게 보이는 부작용이 없다.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        await _iap.restorePurchases();
+      } else {
+        await _autoRestoreOnce();
+      }
     } catch (e) {
       debugPrint('IAP 초기화 실패: $e');
       _error = '스토어 초기화 실패';

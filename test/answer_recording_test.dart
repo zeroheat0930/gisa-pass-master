@@ -14,6 +14,14 @@ import 'package:flutter_test/flutter_test.dart';
 ///   "답을 채점하는 곳은 반드시 그 결과를 기록해야 한다"
 ///
 /// 새 퀴즈 화면을 추가하면서 기록을 빠뜨리면 여기서 걸린다.
+/// 라인 주석(`// ...`)을 제거한 소스를 돌려준다.
+String _withoutLineComments(String source) {
+  return source.split('\n').map((line) {
+    final i = line.indexOf('//');
+    return i < 0 ? line : line.substring(0, i);
+  }).join('\n');
+}
+
 void main() {
   test('채점하는 모든 화면은 풀이 결과를 기록해야 한다', () {
     final offenders = <String>[];
@@ -24,7 +32,9 @@ void main() {
         .where((f) => f.path.endsWith('.dart'));
 
     for (final file in dartFiles) {
-      final source = file.readAsStringSync();
+      // 주석을 걷어낸다. 원본 그대로 grep 하면 호출을 주석 처리해 되돌려도
+      // 주석 속 문자열에 매칭되어 통과한다.
+      final source = _withoutLineComments(file.readAsStringSync());
 
       // 채점기를 호출한다 = 유저의 답을 정오답 판정한다
       final grades = source.contains('AnswerChecker.isCorrectFor') ||
@@ -34,9 +44,13 @@ void main() {
       // 채점기 정본 파일 자신은 제외
       if (file.path.endsWith('answer_checker.dart')) continue;
 
-      // 기록 경로를 타는가 (StudyProvider.recordAnswer 또는 내부 저장 경로)
-      final records = source.contains('recordAnswer') ||
-          source.contains('_persistAnswer');
+      // 기록 경로를 **호출식**으로 확인한다. 단순 contains 는
+      // `Future<void> _persistAnswer(...)` 선언문에도 매칭되어, 호출을 전부
+      // 지워도(채점-무기록 회귀) 선언만 남아 있으면 통과해버린다.
+      //  - `.recordAnswer(`     : provider 를 통한 기록 (선언문에는 앞에 점이 없다)
+      //  - `await _persistAnswer(` : provider 내부의 직접 저장 호출
+      final records = RegExp(r'\.\s*recordAnswer\s*\(').hasMatch(source) ||
+          RegExp(r'await\s+_persistAnswer\s*\(').hasMatch(source);
 
       if (!records) offenders.add(file.path);
     }

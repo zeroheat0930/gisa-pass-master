@@ -1,13 +1,20 @@
-# Fable 5 재감사 원시 발견 (2026-08-11) — 검증 전
+# Fable 5 재감사 원시 발견 (2026-08-11, 2차 갱신)
 
-재감사 워크플로우(wf_70f6c22e-2f6) 재개분. 감사 단계 13/16 영역 완료 시점에
-세션 한도로 다시 중단됐다(감사 3개 영역·검증 전체·종합 미실행).
-**아래는 교차 검증(반박) 전 원시 발견이므로 오탐 가능성이 있다.**
+워크플로우 wf_70f6c22e-2f6. 감사 16/16 영역 완료, 총 발견 41건.
+검증(반박+피해 2인)은 4건 확정 후 세션 한도로 중단 — **나머지는 검증 전 원시 발견**.
 
-- 검증 재개(5:20am 한도 해제 후): `Workflow({scriptPath: '/Users/djj/.claude/projects/-Users-djj-projects-gisa-pass-master/de492df6-15d1-4e84-a5a7-3b7b400eb250/workflows/scripts/gisa-fable5-full-reaudit-wf_70f6c22e-2f6.js', resumeFromRunId: 'wf_70f6c22e-2f6'})`
-- 총 25건: high 4 / medium 9 / low 12
+## 확정 4건 → **v1.6.2 에서 전부 수정 완료** (뮤테이션 검증 포함)
 
-## 1. [high] Android: 미종결 구매 재전달 없음 — acknowledge 누락 구매는 3일 후 Google 자동 환불
+- [x] Android: 미종결 구매 재전달 없음 — acknowledge 누락 구매는 3일 후 Google 자동 환불
+- [x] 공백 제거 비교로 띄어쓰기 구분 숫자 출력의 오답 96문항이 정답 처리됨
+- [x] answer_recording_test의 기록 배선 가드가 '_persistAnswer 선언문'에 매칭되어 무력화 — 문제은행 채점-무기록 회귀(v1.5.4 재판)가 통과한다
+- [x] 회차별 문제집(round_list_screen) 신규 기능이 테스트 0건 — DB 조회 인자를 뒤바꿔 화면 전체가 죽어도 155건 전부 통과
+
+- 잔여 검증 재개: `Workflow({scriptPath: '/Users/djj/.claude/projects/-Users-djj-projects-gisa-pass-master/de492df6-15d1-4e84-a5a7-3b7b400eb250/workflows/scripts/gisa-fable5-full-reaudit-wf_70f6c22e-2f6.js', resumeFromRunId: 'wf_70f6c22e-2f6'})`
+
+---
+
+## 1. [high] ✅수정됨(v1.6.2) Android: 미종결 구매 재전달 없음 — acknowledge 누락 구매는 3일 후 Google 자동 환불
 
 **위치:** lib/services/purchase_service.dart:342
 
@@ -20,7 +27,7 @@ _onPurchaseUpdate 는 grantPremium 저장 실패 시 completePurchase(=Android a
 purchase_service.dart:342-346 「// 미종결로 두면 다음 실행에 스트림으로 다시 내려와 재시도된다. if (!_lastSaveSucceeded) { ... return; }」 / _onPurchaseUpdate 에 PurchaseStatus.pending 분기 부재(329-359) / in_app_purchase_android-0.4.0+10 in_app_purchase_android_platform.dart:43-45 「billingClientManager.purchasesUpdatedStream .asyncMap(...).listen(_purchaseUpdatedController.add);」 — 시작 시 queryPurchases 호출은 restorePurchases()(230-238)에만 존재
 ```
 
-## 2. [high] 공백 제거 비교로 띄어쓰기 구분 숫자 출력의 오답 96문항이 정답 처리됨
+## 2. [high] ✅수정됨(v1.6.2) 공백 제거 비교로 띄어쓰기 구분 숫자 출력의 오답 96문항이 정답 처리됨
 
 **위치:** /Users/djj/projects/gisa_pass_master/lib/services/answer_checker.dart:46
 
@@ -69,7 +76,49 @@ lib/services/ad_service.dart:27-29
 보상 지급 경로: lib/widgets/exam_quota_dialog.dart:138-155 showRewardedAd() → watched true → return AiExamQuota.grantBonus();
 ```
 
-## 5. [medium] 리워드 광고가 프로덕션에서 Google 샘플 테스트 ID로 동작 — 수익 0 + 실유저에게 'Test Ad' 노출
+## 5. [high] ✅수정됨(v1.6.2) answer_recording_test의 기록 배선 가드가 '_persistAnswer 선언문'에 매칭되어 무력화 — 문제은행 채점-무기록 회귀(v1.5.4 재판)가 통과한다
+
+**위치:** test/answer_recording_test.dart:38
+
+이 테스트의 존재 이유는 "채점은 하는데 DB 기록은 안 하는" v1.5.4 실제 출시 사고의 재발 방지다. 그러나 가드가 source.contains('_persistAnswer') 문자열 매칭이라, StudyProvider.submitAnswer 안의 호출부(study_provider.dart:188 'await _persistAnswer(...)')를 지워도 같은 파일에 남아 있는 _persistAnswer 메서드 '선언문'에 매칭되어 통과한다. wiring_test의 스파이 테스트는 별도 메서드인 recordAnswer(회차별/AI 화면 경로)만 검증하고, app_test의 'submitAnswer 20번' 테스트는 문제를 로드하지 않아 line 178의 null 조기 반환만 실행한다. 즉 퀴즈 탭의 채점→기록 배선은 어떤 테스트도 지키지 않는다.
+
+**실패 시나리오:** 재현(프로브 F 실행함): lib/providers/study_provider.dart:188의 'await _persistAnswer(question.id!, trimmedAnswer, correct);' 한 줄을 삭제 → flutter test 155건 전부 녹색. 실제 앱에서는 홈/문제은행 퀴즈를 아무리 풀어도 통계·오답노트·스트릭·AI 예측이 0으로 고정 — 과거 스토어 리뷰로 접수됐던 바로 그 결함이 무검출로 재출시된다.
+
+**근거:**
+```
+test/answer_recording_test.dart:38-39 'final records = source.contains(\'recordAnswer\') || source.contains(\'_persistAnswer\');' — 호출식이 아니라 임의 문자열 매칭. 같은 파일 wiring_test.dart:384-385는 database_service에 대해 '선언문이 아니라 **호출식**을 확인한다'며 이 함정을 이미 알고 있었으나 이 테스트에는 적용하지 않았다.
+```
+
+## 6. [high] ✅수정됨(v1.6.2) 회차별 문제집(round_list_screen) 신규 기능이 테스트 0건 — DB 조회 인자를 뒤바꿔 화면 전체가 죽어도 155건 전부 통과
+
+**위치:** lib/screens/round_list_screen.dart:50
+
+커밋 f6eb26a로 추가된 회차별 문제집은 어떤 테스트도 참조하지 않는다(test/에서 RoundListScreen·getRoundSummary·getQuestionsByRound grep 결과 0건). getRoundSummary/getQuestionsByRound는 kIsWeb JSON 경로와 SQL 경로가 복붙 이중화되어 있어(이 코드베이스의 알려진 실패 패턴 a) 한쪽만 고장 나는 회귀에 특히 취약한데, 두 경로 모두 무보호다. PastExamQuizScreen→buildPastExamQuiz 재사용 배선도 마찬가지다.
+
+**실패 시나리오:** 재현(프로브 A 실행함): lib/services/database_service.dart:346 whereArgs를 [year, round]→[round, year]로 뒤바꿈 → 155건 전부 녹색. 실제 앱에서는 모든 회차 타일이 '해당 회차에 문제가 없습니다' 스낵바만 띄우거나(예: 2025년 3회 → year=3 AND round=2025 → 0행) 엉뚱한 문항을 로드 — 신규 주력 기능이 통째로 죽어도 무검출.
+
+**근거:**
+```
+lib/services/database_service.dart:343-347 'final maps = await db.query(\'questions\', where: \'year = ? AND round = ?\', whereArgs: [year, round],' — 이 쿼리·getRoundSummary(300-334)·RoundListScreen._open(round_list_screen.dart:46-73)을 참조하는 테스트가 test/ 에 하나도 없음.
+```
+
+## 7. [high] 리워드 광고가 Google 테스트 광고 단위 ID로 배포됨 — 리워드 수익 0원 + 유저에게 'Test Ad' 노출
+
+**위치:** lib/services/ad_service.dart:27
+
+리워드 광고 단위 ID가 Android/iOS 모두 Google 공식 샘플 게시자(ca-app-pub-3940256099942544)의 테스트 ID다. 전면·배너는 실제 게시자 ID(5911237489066113)를 쓰는데 리워드만 테스트 ID라, 커밋 4dee6ac이 '새 수익원'이라 주장하는 리워드 흐름 전체가 AdMob 수익 0원으로 동작한다. 더 나쁜 점은 이 흐름이 공짜가 아니라는 것 — 무료 유저는 이 무수익 광고를 보고 하루 최대 2회의 AI 모의고사 추가 응시권(maxBonusPerDay=2)을 받아가므로, 프리미엄(4,900원) 구매 동인인 '하루 1회 제한'이 수익 상쇄 없이 희석된다. 또한 실사용자 화면에 'Test Ad' 라벨이 붙은 데모 영상이 재생되어 기능이 고장난 것처럼 보인다. 코드 주석 스스로 '테스트 ID 그대로 배포해도 수익은 0'이라고 인정하고 있으며, 이 상태가 미푸시 릴리즈(v1.6.1+25)에 포함되어 있다.
+
+**실패 시나리오:** 무료 유저가 AI 모의고사 1회를 소진 → 홈에서 재시도 → ExamQuotaDialog에서 '광고 보고 1회 더' 탭 → showRewardedAd()가 rewardedAdUnitId(ca-app-pub-3940256099942544/5224354917 또는 /1712485313)로 광고를 표시 → 유저는 'Test Ad' 영상을 끝까지 보고 응시권 1회를 획득 → AdMob 콘솔에는 이 노출·시청에 대한 수익이 전혀 기록되지 않는다. 하루 최대 2회 반복 가능. 결과: 광고 시청이라는 유저 비용과 응시권이라는 앱의 보상이 모두 지출되는데 수익 유입은 0.
+
+**근거:**
+```
+static const String _androidRewardedId =
+    'ca-app-pub-3940256099942544/5224354917';
+static const String _iosRewardedId = 'ca-app-pub-3940256099942544/1712485313';
+(주석: "테스트 ID 그대로 배포해도 앱은 정상 동작하지만 수익은 0 이다") — 반면 전면·배너는 실제 ID: _androidInterstitialId = 'ca-app-pub-5911237489066113/6189482948'
+```
+
+## 8. [medium] 리워드 광고가 프로덕션에서 Google 샘플 테스트 ID로 동작 — 수익 0 + 실유저에게 'Test Ad' 노출
 
 **위치:** /Users/djj/projects/gisa_pass_master/lib/services/ad_service.dart:27
 
@@ -87,7 +136,7 @@ static bool get isRewardedUsingTestId =>
     _androidRewardedId.startsWith('ca-app-pub-3940256099942544');  // iOS 상수는 검사 안 함
 ```
 
-## 6. [medium] 오답 직후 1분 뒤 알림이 30분 충돌 방지 유예를 우회해 학습 중인 유저 화면 위로 발화
+## 9. [medium] 오답 직후 1분 뒤 알림이 30분 충돌 방지 유예를 우회해 학습 중인 유저 화면 위로 발화
 
 **위치:** lib/services/database_service.dart:274
 
@@ -100,7 +149,7 @@ getNextReviewSchedule의 30분 유예(_overdueReminderDelay)는 '이미 밀린(o
 database_service.dart:268-272 `if (overdue > 0) { return (dueAt: now.add(_overdueReminderDelay), ...); }` — 유예는 overdue 분기에만 있고, 분기 2는 `final dueAt = DateTime.tryParse(raw); ... return (dueAt: dueAt, count: ...)` 로 now+1분을 그대로 반환. spaced_repetition_service.dart:55-60 `currentStage = 0; ... final nextReviewAt = DateTime.now().add(Duration(minutes: intervalMinutes));` (stage 0 = 1분)
 ```
 
-## 7. [medium] cancelAll이 _ready=false면 조용히 no-op — 알림 OFF 후에도 기존 예약(D-Day 포함)이 살아남아 발화
+## 10. [medium] cancelAll이 _ready=false면 조용히 no-op — 알림 OFF 후에도 기존 예약(D-Day 포함)이 살아남아 발화
 
 **위치:** lib/services/notification_service.dart:208
 
@@ -113,7 +162,7 @@ setEnabled(false)의 예약 정리는 cancelAll 하나에 의존하는데, cance
 notification_service.dart:207-214 `static Future<void> cancelAll() async { if (kIsWeb || !_ready) return; ... }` vs :152-157 `cancelReviewReminder ... await initialize(); if (!_ready) return; await _plugin.cancel(_reviewId);` / main.dart:190 `await NotificationService.initialize();` (AdService·ATT·Purchase await 이후)
 ```
 
-## 8. [medium] 'N개'·'3V' 등 순서 무관 나열 문항에서 순서만 바꾼 정답이 오답 처리됨
+## 11. [medium] 'N개'·'3V' 등 순서 무관 나열 문항에서 순서만 바꾼 정답이 오답 처리됨
 
 **위치:** /Users/djj/projects/gisa_pass_master/lib/services/answer_checker.dart:275
 
@@ -128,7 +177,7 @@ if (RegExp(r'\d+\s*가지').hasMatch(text)) return true;
 ('N개', '3V', '원인을 쓰시오' 류는 매칭되지 않아 기본값 false=순서 강제)
 ```
 
-## 9. [medium] exam_schedule_test의 '확정 일정 소진 후 추정' 그룹이 추정 로직을 전혀 실행하지 못한다 — 그룹명만 있는 통과용 테스트
+## 12. [medium] exam_schedule_test의 '확정 일정 소진 후 추정' 그룹이 추정 로직을 전혀 실행하지 못한다 — 그룹명만 있는 통과용 테스트
 
 **위치:** test/exam_schedule_test.dart:30
 
@@ -141,7 +190,7 @@ f6eb26a 커밋의 'D-Day 무한 전환' 수정(확정 일정이 모두 지나면
 test/exam_schedule_test.dart:31-40 — `expect(AppConfig.nextExam.date.year, greaterThanOrEqualTo(DateTime.now().year));`와 `expect(AppConfig.isExamDateConfirmed, isTrue)` 뿐. config.dart:39-42 `for (final exam in _examSchedule) { if (!exam.date.isBefore(today)) return exam; } return _projectNextExam(today);` — 오늘 기준 루프에서 항상 반환되어 추정 분기 도달 불가
 ```
 
-## 10. [medium] 신규 기능 '회차별 문제집' 화면이 테스트 0건 — 특히 기출/AI예상 구분 표시가 무방비
+## 13. [medium] 신규 기능 '회차별 문제집' 화면이 테스트 0건 — 특히 기출/AI예상 구분 표시가 무방비
 
 **위치:** lib/screens/round_list_screen.dart:126
 
@@ -154,7 +203,7 @@ f6eb26a에서 추가된 RoundListScreen과 그 데이터 경로(DatabaseService.
 grep -rn 'RoundListScreen|getRoundSummary|getQuestionsByRound|buildPastExamQuiz|isPredictedYear' test/ → 0건. round_list_screen.dart:126 `final predicted = AppConfig.isPredictedYear(year);`, :211-213 `predicted ? '${r.count}문항 · 시행 전 회차라 AI 예상문제입니다' : '${r.count}문항'`
 ```
 
-## 11. [medium] wiring_test '통계 재조회 배선' grep이 호출 위치를 구분하지 못해, 문서화된 원래 회귀(initState 이동)가 그대로 통과한다
+## 14. [medium] wiring_test '통계 재조회 배선' grep이 호출 위치를 구분하지 못해, 문서화된 원래 회귀(initState 이동)가 그대로 통과한다
 
 **위치:** test/wiring_test.dart:400
 
@@ -167,7 +216,7 @@ grep -rn 'RoundListScreen|getRoundSummary|getQuestionsByRound|buildPastExamQuiz|
 wiring_test.dart:401-405 `final main = _activeSource('lib/main.dart'); expect(main.contains('StatsProvider>().loadStats()'), isTrue, ...)` — main.dart 어디에 있든 매칭. 지키려는 실제 배선은 main.dart:253-257의 onDestinationSelected 내부 조건부 호출(현재 main.dart에서 유일한 호출이지만 위치·조건은 미검증)
 ```
 
-## 12. [medium] 결제 직후 프리미엄 유저에게 배너 광고가 계속 노출 — AI 모의고사 화면이 프리미엄 전환을 반영하지 않음
+## 15. [medium] 결제 직후 프리미엄 유저에게 배너 광고가 계속 노출 — AI 모의고사 화면이 프리미엄 전환을 반영하지 않음
 
 **위치:** lib/screens/ai_prediction_screen.dart:57
 
@@ -183,7 +232,7 @@ lib/services/ad_service.dart:78-89 setPremium은 _interstitialAd/_rewardedAd만 
 결제 진입 경로: ai_prediction_screen.dart:186-193 ExamQuotaDialog.show(..., onSeePremium: () => Navigator.push(... SubscriptionScreen ...))
 ```
 
-## 13. [medium] 알림 OFF 시 cancelAll이 초기화 전엔 무음 no-op — 꺼둔 유저에게 예약된 D-Day·복습 알림이 그대로 발송
+## 16. [medium] 알림 OFF 시 cancelAll이 초기화 전엔 무음 no-op — 꺼둔 유저에게 예약된 D-Day·복습 알림이 그대로 발송
 
 **위치:** lib/services/notification_service.dart:208
 
@@ -196,7 +245,125 @@ cancelAll()은 `if (kIsWeb || !_ready) return;`으로 플러그인 초기화 전
 notification_service.dart:207-214 `static Future<void> cancelAll() async { if (kIsWeb || !_ready) return; ... await _plugin.cancelAll(); }` — 반면 152-157의 cancelReviewReminder는 `await initialize(); if (!_ready) return; await _plugin.cancel(_reviewId);` 로 초기화를 먼저 수행. 호출부: notification_service.dart:88 `if (!value) await cancelAll();`, 창을 만드는 시작 순서: main.dart:163-190 (AdService.initialize → _requestTracking → 스토어 initialize → 그 뒤에야 NotificationService.initialize).
 ```
 
-## 14. [low] database getter의 실패 처리에서 _opening을 무조건 null로 리셋해 남의 진행 중 초기화를 지울 수 있음
+## 17. [medium] NSPrivacyTracking=true인데 NSPrivacyTrackingDomains가 빈 배열 — Apple 스펙 위반
+
+**위치:** /Users/djj/projects/gisa_pass_master/ios/Runner/PrivacyInfo.xcprivacy:15
+
+Apple의 Privacy manifest files 스펙은 'If you set NSPrivacyTracking to true then you need to provide at least one internet domain in NSPrivacyTrackingDomains; otherwise, you can provide zero or more domains'라고 명시한다. 이 매니페스트는 NSPrivacyTracking을 true로 선언하면서 NSPrivacyTrackingDomains를 빈 배열로 두었다. 파일 주석은 'Google Mobile Ads SDK가 자체 프라이버시 매니페스트로 도메인을 선언한다'고 정당화하지만, SDK 매니페스트의 선언은 SDK 번들에만 적용되며 앱 레벨 매니페스트가 true를 선언한 이상 앱 매니페스트 자체에 최소 1개 도메인이 요구된다는 것이 스펙의 문언이다. 심사에서 프라이버시 매니페스트 불일치(추적 선언은 있는데 추적 도메인 없음)로 지적될 수 있고, 현재 Apple의 자동 검사(ITMS-91xxx)가 이 조합을 일관되게 차단하지는 않아 실제 리젝 확률은 낮은 편이나 스펙 비준수 상태다. 수정: 앱이 SDK를 통해 실질적으로 접속하는 추적 도메인(예: AdMob의 googleads.g.doubleclick.net 등 Google이 공표한 추적 도메인)을 1개 이상 명시하거나, Apple 스펙 해석상 앱 자체 추적 도메인이 정말 없다면 그 근거를 심사 노트에 준비해야 한다. 나머지 형식(수집 데이터 타입 3종, AccessedAPITypes CA92.1)은 plistlib 파싱 기준 유효했다.
+
+**실패 시나리오:** v1.6.1+25 빌드를 App Store Connect에 업로드 → 심사관 또는 향후 강화될 자동 검증이 앱 레벨 PrivacyInfo.xcprivacy를 검사 → NSPrivacyTracking=true인데 NSPrivacyTrackingDomains가 비어 있어 'Privacy manifest 불완전' 사유로 리젝 또는 수정 요구. 재현: plutil -p ios/Runner/PrivacyInfo.xcprivacy 로 NSPrivacyTracking=1, NSPrivacyTrackingDomains=[] 확인 후 Apple 문서 developer.apple.com/documentation/bundleresources/privacy_manifest_files의 NSPrivacyTrackingDomains 항목 요구사항과 대조.
+
+**근거:**
+```
+<key>NSPrivacyTracking</key>
+<true/>
+<!-- 추적에 쓰이는 도메인은 Google Mobile Ads SDK 가 자체 프라이버시 매니페스트로
+     선언한다. 앱이 직접 추적 목적으로 접속하는 도메인은 없다. -->
+<key>NSPrivacyTrackingDomains</key>
+<array/>
+```
+
+## 18. [medium] 리워드 보상 지급의 화면 배선 미보호 — 홈에서 쿼터 다이얼로그 진입을 통째로 제거해도 전부 통과
+
+**위치:** lib/screens/home_screen.dart:139
+
+exam_quota_dialog_test는 ExamQuotaDialog를 테스트가 직접 띄워 '시청→grantBonus' 연결만 검증하고, wiring_test 그룹 3은 화면 소스에 'AiExamQuota.canStart'/'consume' 문자열 존재만 grep 한다. 그래서 쿼터 소진 시 다이얼로그를 실제로 띄우고, earned=true면 이어서 응시시키는 화면 쪽 연결(홈 137-150, ai_prediction_screen 184-196)은 아무도 지키지 않는다. 리워드 광고는 이 다이얼로그가 유일한 노출 지점이라, 배선이 끊기면 신규 수익원이 조용히 0이 된다.
+
+**실패 시나리오:** 재현(프로브 C 실행함): home_screen.dart:139-146의 ExamQuotaDialog.show(...) 호출을 'const earned = false;'로 대체(canStart 확인은 유지) → 155건 전부 녹색. 실제 앱에서는 무료 유저가 하루 1회 소진 후 홈의 AI 모의고사 버튼이 아무 반응 없이 죽고, 리워드 광고 시청 기회 자체가 사라진다.
+
+**근거:**
+```
+test/wiring_test.dart:228-231 'expect(home.contains(\'AiExamQuota.canStart\'), isTrue' — canStart 문자열만 확인, 실패 분기(다이얼로그 노출→earned→_launchAiPrediction 진행)는 미검증. exam_quota_dialog_test.dart:53은 테스트가 ExamQuotaDialog.show를 직접 호출.
+```
+
+## 19. [medium] 통계 복귀 갱신 배선 미보호 — 홈→퀴즈→뒤로 복귀 loadStats 2곳을 삭제해도, 탭 갱신을 통계탭만으로 좁혀도 전부 통과
+
+**위치:** lib/screens/home_screen.dart:119
+
+wiring_test 그룹 7('통계 재조회 배선')은 main.dart에 'StatsProvider>().loadStats()' 문자열이 하나라도 있으면 통과한다. 실제 갱신 배선은 세 곳인데(main.dart:255 탭 전환 index 0||3, home_screen.dart:119 퀴즈 복귀, home_screen.dart:183 AI 모의고사 복귀) 테스트는 main.dart 한 곳의 존재만 본다. 주석 스스로 '홈→퀴즈→뒤로→홈 주 경로가 통째로 빠지면 문제를 풀어도 홈이 옛 값'이라 밝힌, 과거 실제 터졌던 회귀다.
+
+**실패 시나리오:** 재현(프로브 B·E 실행함): (B) home_screen.dart:119와 183의 'await context.read<StatsProvider>().loadStats();' 2곳 삭제 → 155건 녹색. (E) main.dart:255 'if (index == 0 || index == 3)'을 'if (index == 3)'으로 축소 → 155건 녹색. 두 경우 모두 실제 앱에서는 문제를 풀고 홈에 돌아와도 합격 예측 점수·스트릭·오늘 정답률이 앱 재시작(또는 다른 탭 왕복) 전까지 옛 값에 고정된다.
+
+**근거:**
+```
+test/wiring_test.dart:401-405 'final main = _activeSource(\'lib/main.dart\'); expect(main.contains(\'StatsProvider>().loadStats()\'), isTrue' — main.dart 내 임의 위치 1회 출현만 확인, 홈 복귀 경로와 탭 조건은 미검증.
+```
+
+## 20. [medium] 구독 화면이 유료 전용으로 광고하는 'AI 무제한 예측 문제'·'기출 유형 심층 분석'에 게이트가 전혀 없음 — 무료 유저에게 전부 개방
+
+**위치:** lib/screens/subscription_screen.dart:345
+
+구독 화면의 무료/프리미엄 비교표는 'AI 무제한 예측 문제'(free:false)와 '기출 유형 심층 분석'(free:false)을 프리미엄 전용으로 판매한다. 그러나 실제 코드에는 두 기능 모두 프리미엄 체크가 한 줄도 없다. 예측 학습(홈 → '예측 학습 시작' → _startMode → StudyProvider.loadQuestions, PredictionEngine 기반)은 무료 유저가 무제한으로 쓸 수 있고, 통계 화면의 유형별/과목별/난이도별/약점 분석(stats_screen.dart — PurchaseService import 자체가 없음)도 전부 무료다. 이는 이번 커밋들이 AI 실전 모의고사에 대해 '유료 전용으로 광고하는데 게이트가 전혀 없었다'며 수정한 것과 정확히 같은 부류의 결함인데, 4개 유료 차별점 중 2개가 여전히 같은 상태로 남아 있다. 결제 유저는 4,900원 대가의 절반을 이미 무료인 기능으로 받는 셈이고, 비교표가 사실과 다르므로 App Store 심사·환불 분쟁 리스크도 있다.
+
+**실패 시나리오:** 무료 유저(프리미엄 미구매)가 홈 화면에서 '예측 학습 시작'을 탭 → home_screen._startMode()에 PurchaseService 조회가 전혀 없어 즉시 PredictionEngine 기반 예측 문제 50문항 세션 시작, 횟수 제한 없이 하루 종일 반복 가능. 같은 유저가 통계 탭 → 유형별 분석/약점 분석 섹션이 조건 없이 렌더링. 그 직후 구독 화면을 열면 방금 쓴 두 기능이 '무료: ✕ / 프리미엄: ✓'로 표시된다. 결제한 유저 관점: 광고 제거와 모의고사 무제한 외에는 산 것이 없다.
+
+**근거:**
+```
+subscription_screen.dart: _FeatureRow(label: 'AI 무제한 예측 문제', free: false, premium: true), _FeatureRow(label: '기출 유형 심층 분석', free: false, premium: true) — 반면 home_screen.dart _startMode()에는 isPremium 조회가 없고(grep 결과 프리미엄 체크는 AI 모의고사·학습플랜에만 존재), stats_screen.dart에는 PurchaseService/isPremium 참조가 0건.
+```
+
+## 21. [medium] C 106번(0-기준 idx): printf 인수 평가순서 UB — 정답 '6 5 6'이 실측과 불일치하고 같은 파일 87·119번과 정반대 가정
+
+**위치:** assets/questions/c_questions.json:1388
+
+idx 106 문항 `printf("%d %d %d", i, i++, i)`는 C 표준상 미정의 동작(비순서화 부수효과)이다. 등록된 정답 '6 5 6'은 오른쪽→왼쪽 평가(gcc 관행)를 전제로 하는데, 같은 파일의 idx 87(`printf("%d %d", a++, ++a)` 정답 '5 7')과 idx 119(`printf("%d %d", *p++, *p)` 정답 '2 4')는 정확히 반대인 왼쪽→오른쪽 평가(clang 동작)를 전제로 한다. 세 문항이 서로 모순된 평가순서를 가정하므로 어떤 단일 컴파일러/규칙을 기준으로 삼아도 최소 1문항은 반드시 오답이 된다. 실측(macOS clang): idx 106은 '5 5 6'(등록 정답과 불일치), idx 87·119는 정답과 일치. gcc/Linux 기준으로는 반대로 idx 87('6 6')·idx 119('2 2')가 불일치하게 된다.
+
+**실패 시나리오:** clang 계열 환경(macOS, 온라인 컴파일러 다수)에서 학습자가 idx 106 코드를 그대로 실행하면 '5 5 6'이 출력되어 앱 정답 '6 5 6'과 다르다. 재현: 해당 codeSnippet을 t.c로 저장 후 `cc t.c && ./a.out` → '5 5 6'. 반대로 87번 해설이 가르치는 '오른쪽→왼쪽' 규칙을 그대로 106번에 적용해 배운 학습자는 87번(정답 '5 7'은 왼쪽→오른쪽 결과)과 충돌하는 규칙을 동시에 암기하게 됨 — 1000문항 전수 실행 검증에서 유일하게 실측 불일치한 문항.
+
+**근거:**
+```
+idx 106 (line 1386-1388): "codeSnippet": "printf(\"%d %d %d\", i, i++, i);" / "answer": "6 5 6" / 해설 "printf 인수 평가는 오른쪽에서 왼쪽" ↔ idx 119 (line 1557): "printf(\"%d %d\", *p++, *p)" / "answer": "2 4" (왼쪽→오른쪽 전제, gcc면 '2 2')
+```
+
+## 22. [medium] 통계 화면 정답률 링이 96px가 아닌 36px로 렌더링 — Stack이 제약을 loose로 풀어 CircularProgressIndicator가 최소 크기로 붕괴
+
+**위치:** /Users/djj/projects/gisa_pass_master/lib/screens/stats_screen.dart:219
+
+_TodayStudyCard가 SizedBox(96×96) 안에 Stack을 두고 그 직계 자식으로 CircularProgressIndicator를 놓았다. Stack은 기본 fit(StackFit.loose)에서 비-Positioned 자식에게 제약을 loosen해서 전달하므로, CPI는 96×96 tight 제약을 받지 못하고 프레임워크 최소 크기인 36×36으로 그려진다. 실제 위젯 테스트로 확인한 결과 PROBE_CPI_SIZE=Size(36.0, 36.0). 그 위에 겹치는 텍스트 컬럼('NN%' fontSize 20 + '정답률')은 36px 링보다 커서 링 스트로크(strokeWidth 10)와 겹쳐 그려진다. 의도한 96px 링 안에 텍스트가 들어가는 디자인이 모든 유저에게 항상 깨진 상태로 표시된다. 수정은 CPI를 SizedBox.expand 또는 Positioned.fill로 감싸면 된다.
+
+**실패 시나리오:** 재현: 통계 탭 진입 → '오늘의 학습' 카드. 정답률 링이 36px 소형 도넛으로 그려지고 중앙 텍스트('100% 정답률' 등, 폭 ~47px)가 링 위를 덮는다. 접근성 글씨 배율을 키우면 겹침이 더 심해진다. 위젯 테스트로 실측 확인됨(동일 서브트리에서 CPI 크기 36×36).
+
+**근거:**
+```
+SizedBox(
+  width: 96,
+  height: 96,
+  child: Stack(
+    alignment: Alignment.center,
+    children: [
+      CircularProgressIndicator(
+        value: accuracy / 100,
+        strokeWidth: 10, ...
+      ),
+      Column( ... '${accuracy.toStringAsFixed(0)}%' fontSize: 20 ... ),
+    ],
+  ),
+)  // 테스트 실측: PROBE_CPI_SIZE=Size(36.0, 36.0)
+```
+
+## 23. [medium] 학습 완료 화면이 rebuild될 때마다 복습 알림 옵트인 다이얼로그가 중복으로 겹쳐 뜰 수 있음 — build 안 addPostFrameCallback + 비동기 가드 레이스
+
+**위치:** /Users/djj/projects/gisa_pass_master/lib/screens/quiz_screen.dart:203
+
+완료 화면 분기(currentQuestion == null)의 build 본문에서 매번 addPostFrameCallback으로 NotificationOptIn.maybeAsk를 예약한다. maybeAsk의 중복 방지 기록(_markAsked)은 '다이얼로그가 닫힌 뒤'에야 저장되므로(notification_opt_in.dart:82), 첫 다이얼로그가 떠 있는 동안 완료 화면이 한 번이라도 rebuild되면 두 번째 maybeAsk가 _alreadyAsked()=false를 통과해 같은 다이얼로그를 위에 한 장 더 쌓는다. 완료 화면 rebuild 트리거는 실제로 존재한다: 같은 State의 배너 광고 onLoad/onRetry 콜백이 setState를 호출하며(quiz_screen.dart:34,47), 배너는 지수 백오프로 최대 3회 재시도해 화면 진입 후 수십 초 뒤에도 setState가 발생할 수 있다(ad_service.dart:205-215). '한 번 제안하고 다시 묻지 않는다'는 정책이 깨지고, 유저는 같은 권한 제안을 연속 두 번 닫아야 한다.
+
+**실패 시나리오:** 재현: 알림 미설정 최초 유저가 짧은 세션(예: 오답노트에 1문제)을 오답 포함으로 완료 → 완료 화면 도달, 옵트인 다이얼로그#1 표시 → 네트워크 지연으로 배너 로드가 그 뒤에 성공(또는 실패 후 4/8초 백오프 재시도 성공) → onLoad/onRetry의 setState로 완료 화면 rebuild → postFrame에서 maybeAsk 재실행, _markAsked 아직 미기록이라 다이얼로그#2가 #1 위에 겹침 → 유저가 '나중에'를 두 번 눌러야 한다.
+
+**근거:**
+```
+quiz_screen.dart:202-205
+final wrong = provider.sessionSolved - provider.sessionCorrect;
+WidgetsBinding.instance.addPostFrameCallback((_) {
+  if (mounted) NotificationOptIn.maybeAsk(context, wrongCount: wrong);
+});
+
+notification_opt_in.dart:38,82
+if (await _alreadyAsked()) return;  // 기록은 아래에서, 다이얼로그가 '닫힌 뒤'
+...
+await _markAsked();
+```
+
+## 24. [low] database getter의 실패 처리에서 _opening을 무조건 null로 리셋해 남의 진행 중 초기화를 지울 수 있음
 
 **위치:** lib/services/database_service.dart:36
 
@@ -217,7 +384,7 @@ final opening = _opening ??= _initDB();
     }
 ```
 
-## 15. [low] 리워드 광고 로드 실패 시 쿼터 다이얼로그가 영구 '광고 준비 중...' — 다이얼로그 내 재시도 경로 없음
+## 25. [low] 리워드 광고 로드 실패 시 쿼터 다이얼로그가 영구 '광고 준비 중...' — 다이얼로그 내 재시도 경로 없음
 
 **위치:** /Users/djj/projects/gisa_pass_master/lib/widgets/exam_quota_dialog.dart:44
 
@@ -235,7 +402,7 @@ if (canEarn && !(globalAdService?.isRewardedReady ?? false)) {
 // ad_service.dart onAdFailedToLoad: _isLoadingRewarded = false;  ← 재시도 없음, 폴링만 계속
 ```
 
-## 16. [low] iOS 13–14(StoreKit1 폴백): 취소·실패 트랜잭션을 completePurchase 하지 않아 결제 큐에 영구 잔류·매 실행 재전달
+## 26. [low] iOS 13–14(StoreKit1 폴백): 취소·실패 트랜잭션을 completePurchase 하지 않아 결제 큐에 영구 잔류·매 실행 재전달
 
 **위치:** lib/services/purchase_service.dart:351
 
@@ -248,7 +415,7 @@ _onPurchaseUpdate 는 purchased/restored 상태에서만 completePurchase 를 �
 purchase_service.dart:351-357 — error/canceled 분기에 completePurchase 부재: 「} else if (purchase.status == PurchaseStatus.error) { ... _error = ...; } else if (purchase.status == PurchaseStatus.canceled) { debugPrint('구매 취소됨'); }」 / in_app_purchase_storekit-0.4.8+1 app_store_purchase_details.dart:75 「_pendingCompletePurchase = status != PurchaseStatus.pending;」 (SK1 경로)
 ```
 
-## 17. [low] spaced_repetition 행이 영구 잔존해 '졸업' 상태가 존재하지 않음 — 큐 소진 시 알림 취소 경로가 도달 불가 데드 코드
+## 27. [low] spaced_repetition 행이 영구 잔존해 '졸업' 상태가 존재하지 않음 — 큐 소진 시 알림 취소 경로가 도달 불가 데드 코드
 
 **위치:** lib/services/spaced_repetition_service.dart:78
 
@@ -261,7 +428,7 @@ purchase_service.dart:351-357 — error/canceled 분기에 completePurchase 부�
 spaced_repetition_service.dart:48 `currentStage = (currentStage + 1).clamp(0, _maxStage);` (삭제 없음) / database_service.dart 전체에서 spaced_repetition 대상 delete 부재(grep 결과 delete는 478행 bookmarks 뿐) / notification_service.dart:150-151 주석 '마지막 문제를 졸업한 뒤에도' — 코드상 졸업 불가
 ```
 
-## 18. [low] 앱 시작 직후 통계 탭에서 알림을 켜면 onEnabled가 아직 null이라 복습 알림이 예약되지 않음
+## 28. [low] 앱 시작 직후 통계 탭에서 알림을 켜면 onEnabled가 아직 null이라 복습 알림이 예약되지 않음
 
 **위치:** lib/main.dart:194
 
@@ -274,7 +441,7 @@ NotificationOptIn.onEnabled(복습 알림 재예약 콜백)는 main.dart postFra
 main.dart:194-195 `NotificationOptIn.onEnabled = widget.spacedRepetitionService.rescheduleReviewNotification;` (AdService·ATT·Purchase await 이후에야 실행) / stats_screen.dart:55 `onEnableNotifications: NotificationOptIn.onEnabled,` / notification_settings_tile.dart:54-56 `if (granted) { await NotificationService.scheduleExamCountdown(); await widget.onEnabled?.call(); }`
 ```
 
-## 19. [low] 괄호 대체표기 규칙이 용어 없이 괄호 안 설명만 쓴 답을 정답 처리
+## 29. [low] 괄호 대체표기 규칙이 용어 없이 괄호 안 설명만 쓴 답을 정답 처리
 
 **위치:** /Users/djj/projects/gisa_pass_master/lib/services/answer_checker.dart:53
 
@@ -292,7 +459,7 @@ final inside = RegExp(r'\(([^)]*)\)')
 return [ if (withoutParens.isNotEmpty) withoutParens, ..., ...inside ];
 ```
 
-## 20. [low] 항목별 괄호 벗기기가 CRUD 대응 관계가 틀린 답을 정답 처리
+## 30. [low] 항목별 괄호 벗기기가 CRUD 대응 관계가 틀린 답을 정답 처리
 
 **위치:** /Users/djj/projects/gisa_pass_master/lib/services/answer_checker.dart:63
 
@@ -308,7 +475,7 @@ if (_allowsItemParenVariants(questionType, normCorrect)) {
   if (_sameOrderedList(cu, cc)) return true;
 ```
 
-## 21. [low] NSPrivacyTracking=true인데 NSPrivacyTrackingDomains가 빈 배열 — Apple 스펙 문구와 불일치
+## 31. [low] NSPrivacyTracking=true인데 NSPrivacyTrackingDomains가 빈 배열 — Apple 스펙 문구와 불일치
 
 **위치:** /Users/djj/projects/gisa_pass_master/ios/Runner/PrivacyInfo.xcprivacy:14
 
@@ -321,7 +488,7 @@ Apple 공식 스펙(Privacy manifest files 문서, JSON API로 원문 확인)은
 PrivacyInfo.xcprivacy 10-15행: <key>NSPrivacyTracking</key>\n  <true/>\n  ...\n  <key>NSPrivacyTrackingDomains</key>\n  <array/> — Apple 스펙 원문(developer.apple.com/documentation/bundleresources/privacy-manifest-files): "When set to true you need to provide a list of internet domains in NSPrivacyTrackingDomains." / Podfile.lock 9행: "Google-Mobile-Ads-SDK (11.13.0)" (11.2.0+ 자체 프라이버시 매니페스트 포함)
 ```
 
-## 22. [low] 기출 회차 풀이 중 모든 문제 카드에 'AI 예측' 라벨이 고정 표시되어 기출/예상 구분 계약과 모순
+## 32. [low] 기출 회차 풀이 중 모든 문제 카드에 'AI 예측' 라벨이 고정 표시되어 기출/예상 구분 계약과 모순
 
 **위치:** lib/widgets/question_card.dart:71
 
@@ -334,7 +501,7 @@ PrivacyInfo.xcprivacy 10-15행: <key>NSPrivacyTracking</key>\n  <true/>\n  ...\n
 question_card.dart 70-77행: `const Spacer(), Text('AI 예측', style: TextStyle(color: Colors.grey[500], fontSize: 12,),),` — 문항의 year/round와 무관하게 무조건 렌더링. round_list_screen.dart의 배지(`predicted ? 'AI 예상' : '기출 기반'`)와 모순.
 ```
 
-## 23. [low] '회차별 문제집' 진입 카드에 중복 탭 가드가 없어 빠른 연타 시 RoundListScreen이 두 번 push됨
+## 33. [low] '회차별 문제집' 진입 카드에 중복 탭 가드가 없어 빠른 연타 시 RoundListScreen이 두 번 push됨
 
 **위치:** lib/screens/past_exam_screen.dart:148
 
@@ -347,7 +514,7 @@ question_card.dart 70-77행: `const Spacer(), Text('AI 예측', style: TextStyle
 past_exam_screen.dart 148-152행: `onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RoundListScreen(db: widget.db),),),` — 가드 없음. 대조: 같은 파일 73행 `if (_isLoading) return;`, round_list_screen.dart 47-48행 `if (_opening) return; _opening = true;`
 ```
 
-## 24. [low] 구독 화면이 무료로 이미 전부 열려 있는 기능('AI 무제한 예측 문제')과 게이트가 존재하지 않는 기능('기출 유형 심층 분석')을 프리미엄 전용으로 판매
+## 34. [low] 구독 화면이 무료로 이미 전부 열려 있는 기능('AI 무제한 예측 문제')과 게이트가 존재하지 않는 기능('기출 유형 심층 분석')을 프리미엄 전용으로 판매
 
 **위치:** lib/screens/subscription_screen.dart:345
 
@@ -365,7 +532,7 @@ lib/screens/subscription_screen.dart:345-347
 '심층 분석' 게이트 부재: grep isPremium — stats_screen.dart·round_list_screen.dart·cheat_sheet_screen.dart 매치 0건
 ```
 
-## 25. [low] StatsScreen이 NotificationOptIn.onEnabled 정적 값을 build 시점에 캡처 — 할당 전에 열린 통계 탭에선 토글 ON이 복습 알림을 예약하지 못함
+## 35. [low] StatsScreen이 NotificationOptIn.onEnabled 정적 값을 build 시점에 캡처 — 할당 전에 열린 통계 탭에선 토글 ON이 복습 알림을 예약하지 못함
 
 **위치:** lib/screens/stats_screen.dart:55
 
@@ -376,5 +543,105 @@ NotificationOptIn.onEnabled(정적 필드)는 시작 postFrame 체인 끝부분(
 **근거:**
 ```
 stats_screen.dart:52-56 `: _StatsDashboard(stats: stats, onEnableNotifications: NotificationOptIn.onEnabled,)` — build 시점의 정적 값 캡처. 할당 시점: main.dart:194-195 `NotificationOptIn.onEnabled = widget.spacedRepetitionService.rescheduleReviewNotification;` (AdService.initialize·ATT·PurchaseService.initialize await 이후). 소비처: notification_settings_tile.dart:54-56 `if (granted) { await NotificationService.scheduleExamCountdown(); await widget.onEnabled?.call(); }`.
+```
+
+## 36. [low] 기출/AI예상 구분(isPredictedYear)이 무보호 — 경계를 >= 로 되돌려 2025년 기출 전체가 'AI 예상'으로 표기돼도 전부 통과
+
+**위치:** lib/config.dart:105
+
+회차별 화면은 '아직 시행되지 않은 회차의 문항을 기출로 보여주면 유저를 속이는 것'이라고 주석으로 못박고 AppConfig.isPredictedYear로 '기출 기반'/'AI 예상' 뱃지를 가르지만(round_list_screen.dart:126, 153-168), 이 경계 함수와 뱃지 표기를 검증하는 테스트가 없다. 2026년 122문항이 예상문제라는 도메인 핵심 사실(그리고 반대로 2025 이하가 기출이라는 사실)이 코드 한 글자 회귀에 무방비다.
+
+**실패 시나리오:** 재현(프로브 D 실행함): lib/config.dart:105 'year > lastRealExamYear'를 'year >= lastRealExamYear'로 변경 → 155건 전부 녹색. 실제 앱에서는 2025년 실제 기출 회차 전부에 'AI 예상' 뱃지와 '시행 전 회차라 AI 예상문제입니다' 문구가 붙는다. 반대 방향 회귀(2026을 기출로 표기)면 시험 전 수험생을 직접 오도한다.
+
+**근거:**
+```
+lib/config.dart:105 'static bool isPredictedYear(int year) => year > lastRealExamYear;' — test/ 전체에서 isPredictedYear 참조 0건. exam_schedule_test는 시험 일정만 다루고 문항 연도 구분은 다루지 않는다.
+```
+
+## 37. [low] DB v1 유저는 업그레이드 시 학습 이력·오답노트가 전부 삭제된다
+
+**위치:** lib/services/database_service.dart:108
+
+runMigrations의 oldVersion<2 분기가 questions뿐 아니라 answer_records와 spaced_repetition까지 DROP한 뒤 _onCreate로 재시딩한다. questions를 같은 에셋·같은 순서로 다시 심으면 id가 동일하게 재생성되므로 answer_records/spaced_repetition은 보존이 기술적으로 가능한데도 무조건 버린다. origin/main에도 동일하게 존재하는 상속 코드라 이번 28개 커밋의 회귀는 아니고, v1 잔존 유저는 극소수로 추정되지만, '학습 이력 보존' 관점에서 현재 코드가 실제로 데이터를 파괴하는 유일한 경로다.
+
+**실패 시나리오:** DB v1(최초 릴리즈) 상태의 기기가 이 빌드로 업데이트 → openDatabase(version:6) → onUpgrade oldVersion=1 → DROP TABLE answer_records / spaced_repetition 실행 → 유저의 전체 풀이 기록·오답노트·스트릭이 0으로 초기화된 채 앱이 정상 기동한다. 통계 화면과 합격 예측이 전부 신규 유저 상태로 나온다.
+
+**근거:**
+```
+if (oldVersion < 2) {
+  await db.execute('DROP TABLE IF EXISTS spaced_repetition');
+  await db.execute('DROP TABLE IF EXISTS answer_records');
+  await db.execute('DROP TABLE IF EXISTS questions');
+  await _onCreate(db, newVersion);
+}
+```
+
+## 38. [low] owner 키 없는 기존 결제 유저에게 백업 복제 방어가 영구히 무력하다 (owner 미백필)
+
+**위치:** lib/services/purchase_service.dart:170
+
+premium_owner_device 키는 grantPremium(신규 구매/복원 확정)에서만 기록된다. owner 도입 이전 빌드(v1.5.4+23 초기)에서 결제해 premium_purchased=true만 가진 기존 유저는 _loadCachedPremium의 owner==null 분기로 프리미엄이 유지되지만(이 자체는 올바른 동작), 이후 어떤 정상 실행 경로도 owner를 백필하지 않는다. 따라서 백업 복제 감지라는 owner 키의 존재 목적이 바로 그 대상인 기존 결제 유저 집단에는 영원히 적용되지 않는다. 유저를 깨뜨리진 않고 수익 보호만 약화되는 방향이라 low.
+
+**실패 시나리오:** owner 키 없이 premium_purchased=true인 기기 A의 SharedPreferences가 iCloud/기기이전으로 기기 B(미결제)에 복제 → B에서 _loadCachedPremium 실행 → owner=null이므로 `owner != null && ...` 조건이 false → 결제하지 않은 기기 B에서 프리미엄이 켜지고, grantPremium이 호출될 일이 없어 이 상태가 계속 복제 가능하다.
+
+**근거:**
+```
+final owner = prefs.getString(_prefsKeyPremiumOwner);
+final current = await _deviceFingerprint();
+if (owner != null && current != null && owner != current) { ... return; }
+
+_isPremium = true;  // owner==null 이면 검사 없이 통과하며, 이후 어디서도 owner 를 기록하지 않는다
+```
+
+## 39. [low] C 87번(0-기준 idx): 해설이 '오른쪽→왼쪽 평가'를 주장하지만 정답 '5 7'은 왼쪽→오른쪽에서만 나옴 — 해설 자체 모순
+
+**위치:** assets/questions/c_questions.json:1141
+
+idx 87 `int a=5; printf("%d %d", a++, ++a)`의 정답 '5 7'은 왼쪽→오른쪽 평가(a++→5, a=6; ++a→7)에서만 나온다. 그런데 해설은 "printf 인수 평가 순서는 오른쪽에서 왼쪽. ++a로 a=6, a++(사용 후 증가)로 5 출력 후 a=7"이라고 쓰여 있다. 오른쪽→왼쪽이라면 ++a 이후 a=6이므로 a++는 6을 내놓아 '6 6'이 되어야 하며, 해설 스스로 'a가 이미 6인데 a++가 5를 출력한다'는 불가능한 서술을 하고 있다. 정답 문자열 자체는 clang 실측('5 7')과 일치하지만, 해설의 논리로는 그 정답이 도출되지 않는다(설명과 정답의 모순).
+
+**실패 시나리오:** 학습자가 해설대로 '오른쪽→왼쪽' 규칙을 적용해 풀면 '6 6'이 나와 앱 정답 '5 7'과 어긋나고, 이 규칙을 idx 106에 적용하면 그쪽 정답('6 5 6')과는 일치하는 등 해설-정답 체계가 문항마다 뒤집힌다. 재현: 해설 서술 순서대로 손으로 추적(++a→a=6 → a++→6 반환) 시 '6 6' ≠ 등록 정답 '5 7'.
+
+**근거:**
+```
+line 1139-1142: "codeSnippet": "... printf(\"%d %d\", a++, ++a); ..." / "answer": "5 7" / "explanation": "printf 인수 평가 순서는 오른쪽에서 왼쪽. ++a로 a=6, a++(사용 후 증가)로 5 출력 후 a=7. 결과: 5 7."
+```
+
+## 40. [low] 족보 검색 시 펼침 상태가 무관한 다른 섹션으로 전이 — 필터링된 ListView의 _SectionCard에 key 부재
+
+**위치:** /Users/djj/projects/gisa_pass_master/lib/screens/cheat_sheet_screen.dart:94
+
+검색어로 섹션을 필터링하는 ListView.builder가 _SectionCard(StatefulWidget)를 key 없이 생성한다. 필터 결과가 바뀌면 Flutter가 같은 위치의 Element/State(_expanded와 ExpansionTile 내부 펼침 상태)를 재사용하므로, 이전에 펼쳐 둔 섹션의 상태가 전혀 다른 섹션으로 옮겨 붙는다. 위젯 테스트로 확인: 첫 섹션('소프트웨어 개발 방법론')을 펼친 뒤 'solid' 검색 → 결과 1건('SOLID 원칙')이 탭하지 않았는데 이미 펼쳐진 상태(PROBE_AFTER_FILTER_FIRST_EXPANDED=true)로 나타났고 강조 테두리(_expanded)도 함께 전이됐다. 반대로 검색을 지우면 유저가 펼쳐둔 섹션이 아닌 엉뚱한 위치가 펼쳐진 채 복원된다. _SectionCard에 ValueKey(section.title)를 주면 해결된다.
+
+**실패 시나리오:** 재현(테스트로 확정): 족보 탭 → 첫 섹션 탭해서 펼침 → 검색창에 'solid' 입력 → 'SOLID 원칙 (객체지향)' 섹션이 사용자가 연 적 없는데 펼쳐진 상태 + 강조 테두리로 표시됨. 검색어를 지우면 펼침 상태가 원래 섹션이 아닌 index 0 위치로 남는다.
+
+**근거:**
+```
+itemBuilder: (context, index) =>
+    _SectionCard(section: filtered[index]),  // key 없음
+...
+class _SectionCardState extends State<_SectionCard> {
+  bool _expanded = false;  // 위치 기준으로 재사용되어 다른 섹션에 전이
+  // 테스트 실측: PROBE_TITLE_BEFORE=소프트웨어 개발 방법론 AFTER=SOLID 원칙 (객체지향), PROBE_AFTER_FILTER_FIRST_EXPANDED=true
+```
+
+## 41. [low] 통계·구독 화면의 RichText가 시스템 글씨 배율을 무시 — 접근성 확대 시 라벨만 커지고 수치는 그대로
+
+**위치:** /Users/djj/projects/gisa_pass_master/lib/screens/stats_screen.dart:311
+
+RichText는 Text와 달리 MediaQuery의 textScaler를 자동 적용하지 않는다(기본 textScaler: TextScaler.noScaling). stats_screen의 _InfoRow(라인 311)와 _BigStatTile(라인 456), subscription_screen의 _PlanTile 가격 표기(라인 307)가 RichText를 직접 쓰고 있어, 시스템 글씨 크기를 키운 유저에게 주변 라벨('풀이 수', '총 풀이' 등 Text 위젯)은 확대되는데 정작 핵심 수치(풀이 수·정답률·가격 ₩4,900)는 확대되지 않는다. 저시력 유저가 키운 화면에서 가장 중요한 숫자만 작게 남는다. Text.rich로 바꾸거나 textScaler: MediaQuery.textScalerOf(context)를 전달해야 한다.
+
+**실패 시나리오:** 재현: iOS 설정 > 손쉬운 사용 > 더 큰 텍스트를 최대(310%)로 → 앱 통계 탭. '풀이 수'/'총 풀이' 라벨은 3배 확대되는데 옆의 숫자(18~26pt RichText)는 1배 그대로라 라벨보다 수치가 작아지는 역전이 발생. 구독 화면 가격 '₩4,900'도 동일하게 확대되지 않는다.
+
+**근거:**
+```
+stats_screen.dart:311-330
+RichText(
+  text: TextSpan(
+    children: [
+      TextSpan(text: value, style: TextStyle(fontSize: 18, ...)),
+      TextSpan(text: ' $unit', ...),
+    ],
+  ),
+)  // textScaler 미전달 → 배율 미적용. 동일 패턴: stats_screen.dart:456, subscription_screen.dart:307
 ```
 

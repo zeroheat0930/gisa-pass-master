@@ -43,7 +43,13 @@ class AnswerChecker {
     // 2) 공백만 제거해 비교 (상호배제 vs 상호 배제).
     //    쉼표는 남긴다. 쉼표까지 지우면 항목 경계가 사라져 "3,5"(두 줄 출력)와
     //    "35"(한 값)가 서로 정답 처리되는 오탐이 생긴다.
-    if (_stripSpaces(normUser) == _stripSpaces(normCorrect)) return true;
+    //    같은 이유로, 숫자가 공백으로 구분된 정답("30 50" — printf("%d %d") 류
+    //    96문항)은 공백이 값의 경계라서 지우면 "3050"(한 값으로 오해한 오답)이
+    //    정답 처리된다. 그때는 이 단계를 건너뛴다.
+    if (_spaceCollapseSafe(normCorrect) &&
+        _stripSpaces(normUser) == _stripSpaces(normCorrect)) {
+      return true;
+    }
 
     // 3) 괄호 안 대체표기 허용 — 용어 문항에 한정한다.
     //    정답이 "스택(Stack)" 일 때 "스택" 이나 "Stack" 만 써도 맞는 답이다.
@@ -232,6 +238,11 @@ class AnswerChecker {
   }
 
   static String _stripSpaces(String s) => s.replaceAll(' ', '');
+
+  /// 공백 제거 비교를 해도 되는 정답인지. 숫자가 공백으로 구분되어 있으면
+  /// 그 공백은 띄어쓰기 허용이 아니라 **값의 경계**다.
+  static bool _spaceCollapseSafe(String normCorrect) =>
+      !RegExp(r'\d\s+\d').hasMatch(normCorrect);
 
   static List<String> _tokens(String s) =>
       s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();

@@ -227,6 +227,33 @@ void main() {
     });
   });
 
+  // ── 공백 구분 다중 값 출력 — 실제 데이터 code_reading 96문항 ─────────────
+  // printf("%d %d") 류에서 공백은 띄어쓰기 허용이 아니라 **값의 경계**다.
+  // 공백 제거 비교가 무조건 돌면 '30 50'(두 값)과 '3050'(한 값으로 오해한
+  // 오답)이 같아진다. 전수 대입에서 96문항이 이 경로로 오답을 정답 처리했다.
+  group('공백으로 구분된 숫자 출력', () {
+    final target = q(
+      type: 'code_reading',
+      text: '다음 C 프로그램의 실행 결과를 쓰시오.',
+      answer: '30 50',
+    );
+
+    test('값을 붙여 쓴 오답은 오답이다', () {
+      expect(AnswerChecker.isCorrectFor(target, '3050'), isFalse,
+          reason: '포인터 연산을 잘못 이해한 오답이 정답 처리되면 안 된다');
+    });
+
+    test('정확한 출력은 정답이다', () {
+      expect(AnswerChecker.isCorrectFor(target, '30 50'), isTrue);
+      expect(AnswerChecker.isCorrectFor(target, ' 30  50 '), isTrue,
+          reason: '여분 공백은 정규화가 흡수한다');
+    });
+
+    test('숫자가 없는 정답은 여전히 띄어쓰기를 관대하게 본다', () {
+      expect(AnswerChecker.isCorrect('상호배제', '상호 배제'), isTrue);
+    });
+  });
+
   // ── 항목별 설명 괄호 — 실제 데이터 short[343,353,354], sql[108,163] ──────
   // "POST(Create), GET(Read)" 의 괄호는 항목별 부연이지 답의 일부가 아니다.
   // 기존 괄호 게이트는 '괄호 정확히 1쌍 + 답 끝'만 허용해서, 항목마다 괄호가
