@@ -10,8 +10,11 @@ import 'past_exam_screen.dart';
 /// 수험생이 가장 원하는 접근 방식이다. "2025년 3회만 풀어보고 싶다" 는 요구가
 /// 유형별 필터로는 충족되지 않는다.
 ///
-/// **기출과 예상문제를 반드시 구분해서 표시한다.** 아직 시행되지 않은 회차의
-/// 문항을 기출로 보여주면 유저를 속이는 것이다.
+/// **이 앱의 문항은 전부 AI 가 만든 예상문제다. 기출 시험지가 아니다.**
+/// 연도·회차는 "그 회차를 본떴다" 는 뜻이지 "그 회차에 나온 문제" 가 아니다.
+/// (실제 정보처리기사 실기는 회차당 20문항인데 이 데이터는 회차당 40~60문항이다)
+/// 한때 2025년 이하를 '기출 기반' 으로 표시했으나 사실과 달라 걷어냈다.
+/// **어떤 화면에서도 기출이라고 주장하지 말 것.**
 class RoundListScreen extends StatefulWidget {
   final DatabaseService db;
 
@@ -120,10 +123,12 @@ class _RoundListScreenState extends State<RoundListScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      itemCount: sortedYears.length,
+      itemCount: sortedYears.length + 1,
       itemBuilder: (context, index) {
-        final year = sortedYears[index];
-        final predicted = AppConfig.isPredictedYear(year);
+        // 첫 항목은 "전부 AI 예상문제" 고지. 목록 위에 항상 보이게 둔다.
+        if (index == 0) return _notice();
+
+        final year = sortedYears[index - 1];
         final items = years[year]!;
 
         return Column(
@@ -139,19 +144,21 @@ class _RoundListScreenState extends State<RoundListScreen> {
                           fontSize: 17,
                           fontWeight: FontWeight.w800)),
                   const SizedBox(width: 8),
-                  _badge(predicted),
+                  _badge(),
                 ],
               ),
             ),
-            ...items.map((r) => _roundTile(r, predicted)),
+            ...items.map(_roundTile),
           ],
         );
       },
     );
   }
 
-  Widget _badge(bool predicted) {
-    final color = predicted ? AppConfig.warningColor : AppConfig.correctColor;
+  /// 모든 회차가 AI 예상문제다. 연도별로 다른 배지를 달면 "이 연도는 기출"
+  /// 이라는 인상을 주므로 전부 같은 배지를 쓴다.
+  Widget _badge() {
+    const color = AppConfig.warningColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -159,15 +166,44 @@ class _RoundListScreenState extends State<RoundListScreen> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
-      child: Text(
-        predicted ? 'AI 예상' : '기출 기반',
+      child: const Text(
+        'AI 예상',
         style: TextStyle(
             color: color, fontSize: 11, fontWeight: FontWeight.w700),
       ),
     );
   }
 
-  Widget _roundTile(({int year, int round, int count}) r, bool predicted) {
+  /// 화면 맨 위 고지. 회차명이 "그 회차 시험지" 로 읽히지 않도록 못박는다.
+  Widget _notice() {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppConfig.warningColor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppConfig.warningColor.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline,
+              color: AppConfig.warningColor, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '모든 문항은 기출 유형을 학습한 AI 가 만든 예상문제입니다.\n'
+              '실제 기출 시험지가 아니며, 연도·회차는 출제 경향의 기준입니다.',
+              style: TextStyle(
+                  color: Colors.grey[300], fontSize: 12, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _roundTile(({int year, int round, int count}) r) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -201,16 +237,16 @@ class _RoundListScreenState extends State<RoundListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${r.year}년 ${r.round}회',
+                      // "2023년 2회" 가 아니라 "2023년 2회 유형" 이다.
+                      // 회차명만 달면 그 회차 시험지로 읽힌다.
+                      Text('${r.year}년 ${r.round}회 유형',
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
                               fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(
-                        predicted
-                            ? '${r.count}문항 · 시행 전 회차라 AI 예상문제입니다'
-                            : '${r.count}문항',
+                        '${r.count}문항 · AI 예상문제',
                         style:
                             TextStyle(color: Colors.grey[500], fontSize: 12),
                       ),

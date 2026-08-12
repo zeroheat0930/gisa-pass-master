@@ -9,6 +9,12 @@
 # packages, and plugins designed to encourage good coding practices.
 # Flutter recommended lints
 
+analyzer:
+  exclude:
+    # SPM 을 켠 뒤로 build/ios/SourcePackages 아래에 외부 패키지 소스(테스트 포함)가
+    # 체크아웃되어 analyze 가 남의 코드 오류 240여 건을 우리 것처럼 보고했다.
+    - build/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

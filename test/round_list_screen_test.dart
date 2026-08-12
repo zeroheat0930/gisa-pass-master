@@ -43,22 +43,37 @@ void main() {
     return db;
   }
 
-  testWidgets('기출 연도와 AI 예상 연도를 구분해 표시한다', (tester) async {
+  testWidgets('어떤 연도도 기출이라고 주장하지 않는다', (tester) async {
     await pump(tester);
 
-    // 2026 은 시행 전(lastRealExamYear=2025 초과)이므로 AI 예상이어야 한다.
-    expect(find.text('AI 예상'), findsOneWidget,
-        reason: '시행 전 회차를 기출로 표시하면 유저를 속이는 것이다');
-    expect(find.text('기출 기반'), findsOneWidget,
-        reason: '2025년 그룹은 기출 배지가 있어야 한다');
-    expect(find.textContaining('AI 예상문제입니다'), findsOneWidget,
-        reason: '예상 회차 타일에는 문항 수 옆에 안내 문구가 붙는다');
+    // 이 앱의 문항은 전부 AI 생성 예상문제다. 실제 실기는 회차당 20문항인데
+    // 데이터는 회차당 40~60문항이라 기출 시험지일 수 없다.
+    // '기출' 이 들어간 표기가 하나라도 살아나면 유저를 속이는 것이다.
+    // "기출을 부정하는 고지" 는 기출이라는 단어를 쓸 수밖에 없으므로,
+    // **기출이라고 주장하는 표기**만 잡는다.
+    expect(find.textContaining('기출 기반'), findsNothing,
+        reason: 'AI 생성 문항을 기출이라고 표시하면 안 된다');
+    expect(find.text('기출'), findsNothing,
+        reason: '기출 배지가 되살아나면 안 된다');
+
+    // 2025년(과거)과 2026년(미래) 모두 같은 배지여야 한다.
+    // 연도별로 배지가 다르면 "이 연도는 기출" 이라는 인상을 준다.
+    expect(find.text('AI 예상'), findsNWidgets(2),
+        reason: '2025·2026 두 연도 그룹 모두 같은 AI 예상 배지를 달아야 한다');
+  });
+
+  testWidgets('전부 AI 예상문제라는 고지가 목록 위에 보인다', (tester) async {
+    await pump(tester);
+
+    expect(find.textContaining('AI 가 만든 예상문제'), findsOneWidget,
+        reason: '회차명이 "그 회차 시험지" 로 읽히지 않도록 고지가 필요하다');
+    expect(find.textContaining('실제 기출 시험지가 아니'), findsOneWidget);
   });
 
   testWidgets('회차를 탭하면 그 (연도, 회차)를 그대로 DB에 요청한다', (tester) async {
     final db = await pump(tester);
 
-    await tester.tap(find.text('2025년 3회'));
+    await tester.tap(find.text('2025년 3회 유형'));
     await tester.pumpAndSettle();
 
     expect(db.requested, [(2025, 3)],

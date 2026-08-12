@@ -67,14 +67,20 @@ class QuestionCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  // 문항 데이터 기준으로 표기한다. 'AI 예측' 고정 문구였을 때는
-                  // 회차별 문제집의 실제 기출까지 전부 AI 문제처럼 보여서,
-                  // '기출 기반' 배지를 보고 들어온 유저가 반대 라벨을 봤다.
-                  AppConfig.isPredictedYear(question.year) ? 'AI 예상' : '기출',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
+                Flexible(
+                  child: Text(
+                    // **모든 문항이 AI 생성 예상문제다.** 연도·회차는 그 회차를
+                    // 본떴다는 뜻이지 그 회차에 실제로 나온 문제라는 뜻이 아니다.
+                    // 한때 2025년 이하를 '기출' 로 표시한 적이 있는데, 실제 실기는
+                    // 회차당 20문항인 반면 이 데이터는 회차당 40~60문항이라
+                    // 기출 시험지일 수 없다. 유저를 속이는 표기이므로 되돌렸다.
+                    'AI 예상',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
