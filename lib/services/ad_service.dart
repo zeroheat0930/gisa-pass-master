@@ -20,20 +20,33 @@ class AdService {
   static const String _androidBannerId = 'ca-app-pub-5911237489066113/3631497162';
   static const String _iosBannerId = 'ca-app-pub-5911237489066113/2286625905';
 
-  // ⚠️ 리워드 광고 ID — 현재 Google 공식 **테스트 ID** 다.
-  // AdMob 콘솔에서 리워드 광고 단위를 Android/iOS 각각 만들고 이 두 줄만 바꾸면
-  // 실제 수익이 잡힌다. 테스트 ID 그대로 배포해도 앱은 정상 동작하지만
-  // 수익은 0 이다. (실 ID 로 바꾸기 전까지 이 주석을 지우지 말 것)
+  // 리워드 광고 ID (실 단위, 2026-08-12 교체).
+  // v1.6.4 까지는 Google 테스트 ID 였고 그동안 리워드 노출 수익이 0 이었다.
+  // 되돌리면 수익이 다시 0 이 되므로 ad_id_test.dart 가 테스트 ID 복귀를 막는다.
   static const String _androidRewardedId =
-      'ca-app-pub-3940256099942544/5224354917';
-  static const String _iosRewardedId = 'ca-app-pub-3940256099942544/1712485313';
+      'ca-app-pub-5911237489066113/4234668134';
+  static const String _iosRewardedId = 'ca-app-pub-5911237489066113/4862826277';
+
+  /// Google 공식 테스트 계정의 퍼블리셔 번호. 이걸로 시작하는 단위는 수익이 0 이다.
+  static const String testPublisherPrefix = 'ca-app-pub-3940256099942544';
 
   /// 리워드 광고 ID 가 아직 테스트 ID 인지. 설정 화면 등에서 안내에 쓸 수 있다.
   /// **두 플랫폼을 모두** 본다 — Android 만 검사하면 Android ID 만 실 ID 로
   /// 바꾼 뒤 iOS 가 테스트 ID 로 남아 있어도 '실 ID 사용 중'이라고 거짓 보고한다.
   static bool get isRewardedUsingTestId =>
-      _androidRewardedId.startsWith('ca-app-pub-3940256099942544') ||
-      _iosRewardedId.startsWith('ca-app-pub-3940256099942544');
+      _androidRewardedId.startsWith(testPublisherPrefix) ||
+      _iosRewardedId.startsWith(testPublisherPrefix);
+
+  /// 검증용 — 테스트에서 전 광고 단위를 훑어보기 위해 노출한다.
+  @visibleForTesting
+  static const Map<String, String> allAdUnitIds = {
+    'android/interstitial': _androidInterstitialId,
+    'ios/interstitial': _iosInterstitialId,
+    'android/banner': _androidBannerId,
+    'ios/banner': _iosBannerId,
+    'android/rewarded': _androidRewardedId,
+    'ios/rewarded': _iosRewardedId,
+  };
 
   static String get interstitialAdUnitId {
     if (kIsWeb) return '';

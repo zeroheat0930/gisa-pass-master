@@ -4,9 +4,10 @@
 기각 1 · 미검증 3 (종합 리포트 단계만 세션 한도로 미실행).
 
 ## 처리 현황
-- **확정 23건 → v1.6.2~v1.6.3 에서 전부 수정** (단, 리워드 광고 실 ID 교체는
-  코드로 불가능한 **사람 작업**: AdMob 콘솔에서 단위 생성 후 `ad_service.dart`
-  의 `_androidRewardedId`/`_iosRewardedId` 교체. 현재 수익 0 + 'Test Ad' 노출)
+- **확정 23건 전부 수정 완료** (v1.6.2 ~ v1.6.5).
+  마지막까지 남아 있던 리워드 광고 실 ID 교체는 **v1.6.5 에서 완료** —
+  AdMob 콘솔에서 만든 실 단위로 교체하고, 테스트 ID 복귀를 막는
+  `test/ad_id_test.dart` 를 함께 넣었다
 - **가능성 2건**: past_exam 연타 가드는 v1.6.3 에서 수정. PrivacyInfo
   NSPrivacyTrackingDomains 빈 배열은 보류(SDK 매니페스트가 실질 커버, 심사 문의 시 대응)
 - **미검증 3건**: isPredictedYear 경계는 v1.6.3 에서 테스트로 보호.
