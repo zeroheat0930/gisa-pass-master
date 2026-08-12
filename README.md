@@ -240,6 +240,18 @@ class AppConfig {
 
 ## 변경 이력
 
+### v1.6.6+30 (2026-08-12)
+
+**Google Play 결제 라이브러리 8.0.0 대응** — 2026-08-31 부터 Billing 8.0.0 미만을
+쓰는 APK 는 업데이트 업로드가 거부된다. 기한 내 대응.
+
+- `in_app_purchase` 3.2.3 → 3.3.0 (Android 구현 0.4.0+10 → 0.5.0,
+  **Billing Library 7.1.1 → 8.0.0**)
+- 0.5.0 의 유일한 breaking change 는 `queryPurchaseHistory` 제거인데, 이 앱은
+  플랫폼 공통 API 만 쓰므로 영향 없음 (`analyze` 0건 · 테스트 184건으로 확인)
+- Android/iOS **클린 릴리즈 빌드**로 검증 — 증분 빌드는 Billing 7 캐시가 남아
+  한 번 실패했다. 의존성 교체 후에는 `flutter clean` 부터 할 것
+
 ### v1.6.5+29 (2026-08-12)
 
 **리워드 광고가 드디어 수익을 만든다.** 도입(v1.6.0) 이후 줄곧 Google 테스트
