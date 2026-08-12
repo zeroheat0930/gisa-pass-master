@@ -10,8 +10,15 @@ import '../models/answer_record.dart';
 class DatabaseService {
   static Database? _database;
 
-  /// 문제 데이터 에셋. 최초 시딩(_onCreate)과 갱신(syncQuestionsFromAssets)이
-  /// 같은 목록을 봐야 하므로 한 곳에서만 정의한다.
+  /// 문제 데이터 에셋의 **단일 정본 목록**.
+  ///
+  /// 최초 시딩(_onCreate)·갱신(syncQuestionsFromAssets)·웹 로드(_loadFromJson)가
+  /// 모두 이걸 본다. **테스트도 반드시 이 목록을 쓸 것** — 테스트가 파일 목록을
+  /// 따로 적어두면 새 파일을 추가했을 때 검증 밖으로 새어나간다
+  /// (실제로 restored_exam_questions.json 20문항이 그렇게 빠질 뻔했다).
+  @visibleForTesting
+  static const List<String> questionAssetFiles = _questionAssetFiles;
+
   static const List<String> _questionAssetFiles = [
     'assets/questions/c_questions.json',
     'assets/questions/java_questions.json',

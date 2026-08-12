@@ -358,14 +358,7 @@ int? _firstInt(List<Map<String, Object?>> rows) =>
 /// 무관한 테스트가 깨져서, 진짜 회귀와 구분이 안 된다.
 Future<int> _assetQuestionCount() async {
   var total = 0;
-  for (final f in const [
-    'assets/questions/c_questions.json',
-    'assets/questions/java_questions.json',
-    'assets/questions/python_questions.json',
-    'assets/questions/sql_questions.json',
-    'assets/questions/short_answer_questions.json',
-    'assets/questions/restored_exam_questions.json',
-  ]) {
+  for (final f in DatabaseService.questionAssetFiles) {
     total += (json.decode(await rootBundle.loadString(f)) as List).length;
   }
   return total;
