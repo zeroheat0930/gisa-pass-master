@@ -1,5 +1,9 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# 최소 iOS 15.0.
+# 2027년 봄부터 App Store Connect 는 MinimumOSVersion 15.0 미만 앱의 업로드를
+# 받지 않는다(경고 90068). Xcode 프로젝트의 IPHONEOS_DEPLOYMENT_TARGET 과
+# **반드시 같은 값**으로 유지할 것 — 한쪽만 고치면 pod 과 앱 타깃의 최소 버전이
+# 어긋나 빌드가 깨진다.
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

@@ -122,6 +122,11 @@ test/
 ### 요구사항
 - Flutter 3.44 이상
 - Dart 3.12 이상
+- iOS 최소 15.0 / Android minSdk 24
+
+> iOS 최소 버전을 바꿀 때는 **`ios/Podfile` 의 `platform :ios` 와
+> `project.pbxproj` 의 `IPHONEOS_DEPLOYMENT_TARGET` 을 같은 값으로** 고칠 것.
+> 한쪽만 바꾸면 pod 과 앱 타깃의 최소 버전이 어긋난다.
 
 > **Swift Package Manager 를 켠 상태로 유지한다**
 > (`flutter config --enable-swift-package-manager`). `google_mobile_ads` 9.x 는
@@ -259,6 +264,17 @@ class AppConfig {
 엉뚱한 문제에 붙지 않는다.
 
 ## 변경 이력
+
+### v1.6.8+32 — iOS 최소 버전 15.0 (2026-08-12)
+
+App Store Connect 업로드에서 경고 90068 이 떴다: **2027년 봄부터 최소 iOS 15.0
+미만 앱은 업로드가 거부된다.** 지금은 경고지만 어차피 강제되므로 미리 올린다.
+
+- `IPHONEOS_DEPLOYMENT_TARGET` 13.0 → 15.0 (3곳), `ios/Podfile` 에도
+  `platform :ios, '15.0'` 명시. 둘은 반드시 같은 값이어야 한다
+- iOS 15 는 iPhone 6s(2015) 까지 지원하므로 실제 영향받는 사용자는 거의 없다.
+  다만 iOS 13·14 기기는 이 버전부터 업데이트를 받지 못한다
+- 빌드 산출물에서 `MinimumOSVersion=15.0` 을 직접 확인함
 
 ### v1.6.8+32 (2026-08-12)
 
