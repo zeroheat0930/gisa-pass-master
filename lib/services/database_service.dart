@@ -81,7 +81,7 @@ class DatabaseService {
   /// rev 2: sql_questions[135] 정답 3 -> 2
   /// rev 3: c_questions[106] UB 문항 교체에 따른 정답·해설 갱신 (본문은 DB v7 이 처리)
   /// rev 4: 복원 기출(restored_exam_questions.json) 추가 — 기존 유저에게도 내려간다
-  static const int questionDataRevision = 4;
+  static const int questionDataRevision = 5;
 
   static const String _metaTable = 'app_meta';
   static const String _metaKeyRevision = 'question_data_revision';
