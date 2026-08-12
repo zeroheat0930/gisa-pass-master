@@ -120,8 +120,18 @@ test/
 ## 시작하기
 
 ### 요구사항
-- Flutter 3.41 이상
-- Dart 3.11 이상
+- Flutter 3.44 이상
+- Dart 3.12 이상
+
+> **Swift Package Manager 를 끈 상태로 유지한다** (`flutter config
+> --no-enable-swift-package-manager`). Flutter 3.44 는 SPM 을 기본으로 켜는데,
+> 그러면 `webview_flutter_wkwebview` 가 pod 대신 SPM 으로 설치되고,
+> 아직 SPM 을 지원하지 않는 `google_mobile_ads` 가 그 pod 에 의존하다 실패한다
+> (`Unable to find a specification for webview_flutter_wkwebview`).
+> `google_mobile_ads` 를 SPM 지원 버전으로 올리면 다시 켤 수 있다.
+
+> 빌드 중에 다른 `flutter` 명령(analyze·test)을 겹쳐 돌리지 말 것.
+> 실제로 Gradle 빌드가 두 번 실패했고, 단독 재실행하면 그대로 성공했다.
 
 ### 설치 및 실행
 
@@ -239,6 +249,26 @@ class AppConfig {
 엉뚱한 문제에 붙지 않는다.
 
 ## 변경 이력
+
+### v1.6.7+31 (2026-08-12)
+
+**Flutter 3.41.6 → 3.44.9 업그레이드.** 결제 플러그인을 최신(0.5.2)까지 올리기
+위해 SDK 를 함께 올렸다. 다만 **Billing 은 여전히 8.0.0** 이다 — 0.5.2 도 8.0.0
+을 쓴다. 구글이 권장한 9 는 아직 공식 Flutter 플러그인에 없다(필수 요건은 8.0.0+
+이므로 마감 요건은 충족).
+
+- `in_app_purchase_android` 0.5.0 → 0.5.2, `in_app_purchase_storekit` → 0.4.11
+- **`CupertinoPageTransitionsBuilder` 가 `material` 에서 재수출되지 않게 바뀜** →
+  `main.dart` 에 `package:flutter/cupertino.dart` import 추가
+- **SPM 을 끈다** — 3.44 는 SPM 을 기본으로 켜는데, 그러면
+  `webview_flutter_wkwebview` 가 pod 에서 빠지고 SPM 미지원인
+  `google_mobile_ads` 가 그 pod 에 의존하다 iOS 빌드가 죽는다. 요구사항 절 참조
+- **알림 설정 타일의 터치 리플이 보이지 않던 문제** — 배경색을 가진
+  `Container` 가 `SwitchListTile` 의 잉크 스플래시를 덮고 있었다. 3.44 가 이를
+  어서션으로 잡아냈다. 배경을 `Material` 이 칠하도록 바꿔 리플이 보인다
+
+검증: 테스트 184건, `analyze` 0건, iOS/Android 클린 릴리즈 빌드,
+시뮬레이터 통합 테스트 4건.
 
 ### v1.6.6+30 (2026-08-12)
 

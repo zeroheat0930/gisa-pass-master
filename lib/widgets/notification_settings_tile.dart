@@ -61,8 +61,9 @@ class _NotificationSettingsTileState extends State<NotificationSettingsTile> {
             content: const Text('기기 설정에서 이 앱의 알림을 허용해주세요.'),
             backgroundColor: AppConfig.cardColor,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -73,26 +74,36 @@ class _NotificationSettingsTileState extends State<NotificationSettingsTile> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppConfig.cardColor,
+    // 배경을 Container 의 decoration 이 아니라 Material 이 칠한다.
+    // 사이에 배경색을 가진 DecoratedBox 가 끼면 SwitchListTile 의 잉크 스플래시가
+    // 그 아래에 그려져 **터치 피드백이 보이지 않는다** (Flutter 3.44 가 이를
+    // 어서션으로 잡아낸다). 테두리는 Material 의 shape 로 옮긴다.
+    return Material(
+      color: AppConfig.cardColor,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppConfig.borderColor),
+        side: const BorderSide(color: AppConfig.borderColor),
       ),
-      child: SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: _enabled,
-        onChanged: _busy ? null : _toggle,
-        activeThumbColor: AppConfig.primaryColor,
-        title: const Text(
-          '복습 알림',
-          style: TextStyle(
-              color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
-        ),
-        subtitle: Text(
-          '복습 시기와 시험 D-30 / D-7 / D-1 을 알려드려요',
-          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _enabled,
+          onChanged: _busy ? null : _toggle,
+          activeThumbColor: AppConfig.primaryColor,
+          title: const Text(
+            '복습 알림',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: Text(
+            '복습 시기와 시험 D-30 / D-7 / D-1 을 알려드려요',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          ),
         ),
       ),
     );
