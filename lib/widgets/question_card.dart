@@ -69,17 +69,20 @@ class QuestionCard extends StatelessWidget {
                 const Spacer(),
                 Flexible(
                   child: Text(
-                    // **모든 문항이 AI 생성 예상문제다.** 연도·회차는 그 회차를
-                    // 본떴다는 뜻이지 그 회차에 실제로 나온 문제라는 뜻이 아니다.
+                    // **문항 데이터의 source 만 믿는다.** 연도로 추측하면 안 된다.
                     // 한때 2025년 이하를 '기출' 로 표시한 적이 있는데, 실제 실기는
-                    // 회차당 20문항인 반면 이 데이터는 회차당 40~60문항이라
-                    // 기출 시험지일 수 없다. 유저를 속이는 표기이므로 되돌렸다.
-                    'AI 예상',
+                    // 회차당 20문항인 반면 AI 데이터는 회차당 40~60문항이라
+                    // 기출일 수 없었다. 유저를 속이는 표기였다.
+                    question.isRestored ? '복원 기출' : 'AI 예상',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.grey[500],
+                      color: question.isRestored
+                          ? AppConfig.correctColor
+                          : Colors.grey[500],
                       fontSize: 12,
+                      fontWeight:
+                          question.isRestored ? FontWeight.w700 : null,
                     ),
                   ),
                 ),

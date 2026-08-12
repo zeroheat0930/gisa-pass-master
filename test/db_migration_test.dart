@@ -148,7 +148,8 @@ void main() {
         answer TEXT NOT NULL,
         explanation TEXT NOT NULL,
         difficulty INTEGER DEFAULT 3,
-        frequency_weight REAL DEFAULT 0.5
+        frequency_weight REAL DEFAULT 0.5,
+        source TEXT NOT NULL DEFAULT 'ai'
       )
     ''');
 
@@ -238,7 +239,8 @@ void main() {
 
       final count = _firstInt(
           await db.rawQuery('SELECT COUNT(*) FROM questions'));
-      expect(count, 1000, reason: '에셋의 전체 문항이 들어와야 한다');
+      expect(count, await _assetQuestionCount(),
+          reason: '에셋의 전체 문항이 들어와야 한다');
     });
 
     test('두 번 실행해도 문항이 중복되지 않는다 (멱등)', () async {
@@ -251,7 +253,8 @@ void main() {
 
       final count = _firstInt(
           await db.rawQuery('SELECT COUNT(*) FROM questions'));
-      expect(count, 1000, reason: '재실행이 문항을 복제하면 안 된다');
+      expect(count, await _assetQuestionCount(),
+          reason: '재실행이 문항을 복제하면 안 된다');
     });
 
     test('감사에서 확정된 정답 오류가 실제로 고쳐져 있다', () async {
@@ -284,7 +287,8 @@ void main() {
           subject TEXT NOT NULL, question_type TEXT NOT NULL,
           question_text TEXT NOT NULL, code_snippet TEXT, code_language TEXT,
           answer TEXT NOT NULL, explanation TEXT NOT NULL,
-          difficulty INTEGER DEFAULT 3, frequency_weight REAL DEFAULT 0.5
+          difficulty INTEGER DEFAULT 3, frequency_weight REAL DEFAULT 0.5,
+          source TEXT NOT NULL DEFAULT 'ai'
         )
       """);
       final raw = await rootBundle.loadString('assets/questions/c_questions.json');
@@ -349,3 +353,20 @@ void main() {
 
 int? _firstInt(List<Map<String, Object?>> rows) =>
     rows.isEmpty ? null : rows.first.values.first as int?;
+
+/// 에셋 JSON 의 전체 문항 수. 숫자를 하드코딩하면 문항을 추가할 때마다
+/// 무관한 테스트가 깨져서, 진짜 회귀와 구분이 안 된다.
+Future<int> _assetQuestionCount() async {
+  var total = 0;
+  for (final f in const [
+    'assets/questions/c_questions.json',
+    'assets/questions/java_questions.json',
+    'assets/questions/python_questions.json',
+    'assets/questions/sql_questions.json',
+    'assets/questions/short_answer_questions.json',
+    'assets/questions/restored_exam_questions.json',
+  ]) {
+    total += (json.decode(await rootBundle.loadString(f)) as List).length;
+  }
+  return total;
+}

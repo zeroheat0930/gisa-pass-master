@@ -18,6 +18,9 @@ class DatabaseService {
     'assets/questions/python_questions.json',
     'assets/questions/sql_questions.json',
     'assets/questions/short_answer_questions.json',
+    // 실제 시험을 응시자들이 복원한 기출. 위 파일들과 달리 AI 생성이 아니다.
+    // 각 항목의 "source": "restored" 가 그 구분을 담는다.
+    'assets/questions/restored_exam_questions.json',
   ];
 
   static Future<Database>? _opening;
@@ -49,7 +52,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: runMigrations,
     );
@@ -70,7 +73,8 @@ class DatabaseService {
   /// rev 1: v1.5.4 정답 오류 6건 수정
   /// rev 2: sql_questions[135] 정답 3 -> 2
   /// rev 3: c_questions[106] UB 문항 교체에 따른 정답·해설 갱신 (본문은 DB v7 이 처리)
-  static const int questionDataRevision = 3;
+  /// rev 4: 복원 기출(restored_exam_questions.json) 추가 — 기존 유저에게도 내려간다
+  static const int questionDataRevision = 4;
 
   static const String _metaTable = 'app_meta';
   static const String _metaKeyRevision = 'question_data_revision';
@@ -132,6 +136,12 @@ class DatabaseService {
     if (oldVersion < 5) {
       await ensurePlanTypeColumn(db);
     }
+    // **버전 순서대로 두면 안 된다.** v6 동기화의 INSERT 가 source 컬럼을 쓰므로
+    // 컬럼 추가가 그보다 먼저 실행돼야 한다. 뒤에 두면 v5 이하 유저가 업그레이드할 때
+    // "no such column: source" 로 동기화가 통째로 실패한다.
+    if (oldVersion < 8) {
+      await ensureSourceColumn(db);
+    }
     if (oldVersion < 6) {
       // v6 마이그레이션 시점의 동기화. 이후의 데이터 수정 반영은
       // questionDataRevision (매 실행 비교) 이 담당한다 — DB 버전에 묶어두면
@@ -157,6 +167,17 @@ class DatabaseService {
         debugPrint('v7 문항 교체 실패: $e');
       }
     }
+  }
+
+  /// questions.source 컬럼을 보장한다. **멱등이어야 한다** — v1·v2 시절
+  /// `ALTER TABLE ADD COLUMN` 을 무조건 실행했다가 duplicate column 예외로
+  /// openDatabase 전체가 죽어 앱이 영영 열리지 않던 사고가 있었다.
+  @visibleForTesting
+  static Future<void> ensureSourceColumn(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(questions)');
+    if (cols.any((c) => c['name'] == 'source')) return;
+    await db.execute(
+        "ALTER TABLE questions ADD COLUMN source TEXT NOT NULL DEFAULT 'ai'");
   }
 
   /// DB v7: c_questions[106] — `printf("%d %d %d", i, i++, i)` 는 C 표준상
@@ -209,7 +230,8 @@ class DatabaseService {
         answer TEXT NOT NULL,
         explanation TEXT NOT NULL,
         difficulty INTEGER DEFAULT 3,
-        frequency_weight REAL DEFAULT 0.5
+        frequency_weight REAL DEFAULT 0.5,
+        source TEXT NOT NULL DEFAULT 'ai'
       )
     ''');
 
@@ -259,8 +281,8 @@ class DatabaseService {
           final batch = db.batch();
           for (final item in items) {
             batch.execute(
-              'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [item['year'], item['round'], item['subject'], item['questionType'], item['questionText'], item['codeSnippet'], item['codeLanguage'], item['answer'], item['explanation'], item['difficulty'] ?? 3, (item['frequencyWeight'] ?? 0.5)],
+              'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [item['year'], item['round'], item['subject'], item['questionType'], item['questionText'], item['codeSnippet'], item['codeLanguage'], item['answer'], item['explanation'], item['difficulty'] ?? 3, (item['frequencyWeight'] ?? 0.5), item['source'] ?? 'ai'],
             );
           }
           await batch.commit(noResult: true);
@@ -359,54 +381,77 @@ class DatabaseService {
   static const Duration _overdueReminderDelay = Duration(minutes: 30);
 
   /// 회차별 문항 수 (연도·회차 내림차순).
-  /// 회차별 문제집 화면에서 목록을 만드는 데 쓴다.
-  Future<List<({int year, int round, int count})>> getRoundSummary() async {
+  ///
+  /// **출처(source)까지 묶음 단위에 넣는다.** 같은 "2026년 2회" 안에 복원 기출과
+  /// AI 예상문제가 함께 있는데, 합쳐서 세면 화면에서 둘이 섞여버린다.
+  Future<List<({int year, int round, String source, int count})>>
+      getRoundSummary() async {
     if (kIsWeb) {
       final all = await _loadFromJson();
       final map = <String, int>{};
       for (final q in all) {
-        final key = '${q.year}-${q.round}';
-        map[key] = (map[key] ?? 0) + 1;
+        map['${q.year}|${q.round}|${q.source}'] =
+            (map['${q.year}|${q.round}|${q.source}'] ?? 0) + 1;
       }
       final out = map.entries.map((e) {
-        final parts = e.key.split('-');
+        final p = e.key.split('|');
         return (
-          year: int.parse(parts[0]),
-          round: int.parse(parts[1]),
+          year: int.parse(p[0]),
+          round: int.parse(p[1]),
+          source: p[2],
           count: e.value
         );
       }).toList();
-      out.sort((a, b) => a.year != b.year
-          ? b.year.compareTo(a.year)
-          : b.round.compareTo(a.round));
+      out.sort(_byRoundDesc);
       return out;
     }
 
     final db = await database;
     final rows = await db.rawQuery(
-      'SELECT year, round, COUNT(*) AS cnt FROM questions '
-      'GROUP BY year, round ORDER BY year DESC, round DESC',
+      'SELECT year, round, source, COUNT(*) AS cnt FROM questions '
+      'GROUP BY year, round, source ORDER BY year DESC, round DESC',
     );
-    return rows
+    final out = rows
         .map((r) => (
               year: r['year'] as int,
               round: r['round'] as int,
+              source: (r['source'] as String?) ?? Question.sourceAi,
               count: (r['cnt'] as int?) ?? 0,
             ))
         .toList();
+    out.sort(_byRoundDesc);
+    return out;
   }
 
-  /// 특정 회차의 문항 전부
-  Future<List<Question>> getQuestionsByRound(int year, int round) async {
+  /// 최신 연도·회차 먼저, 같은 회차 안에서는 복원 기출을 앞에 둔다.
+  static int _byRoundDesc(
+      ({int year, int round, String source, int count}) a,
+      ({int year, int round, String source, int count}) b) {
+    if (a.year != b.year) return b.year.compareTo(a.year);
+    if (a.round != b.round) return b.round.compareTo(a.round);
+    if (a.source == b.source) return 0;
+    return a.source == Question.sourceRestored ? -1 : 1;
+  }
+
+  /// 특정 회차의 문항. [source] 를 주면 그 출처의 문항만 돌려준다.
+  Future<List<Question>> getQuestionsByRound(int year, int round,
+      {String? source}) async {
     if (kIsWeb) {
       final all = await _loadFromJson();
-      return all.where((q) => q.year == year && q.round == round).toList();
+      return all
+          .where((q) =>
+              q.year == year &&
+              q.round == round &&
+              (source == null || q.source == source))
+          .toList();
     }
     final db = await database;
     final maps = await db.query(
       'questions',
-      where: 'year = ? AND round = ?',
-      whereArgs: [year, round],
+      where: source == null
+          ? 'year = ? AND round = ?'
+          : 'year = ? AND round = ? AND source = ?',
+      whereArgs: source == null ? [year, round] : [year, round, source],
       orderBy: 'id ASC',
     );
     return maps.map((m) => Question.fromMap(m)).toList();
@@ -466,20 +511,21 @@ class DatabaseService {
             // 정답·해설·난이도만 갱신. id 는 건드리지 않는다.
             batch.rawUpdate(
               'UPDATE questions SET answer = ?, explanation = ?, difficulty = ?, '
-              'frequency_weight = ? '
+              'frequency_weight = ?, source = ? '
               "WHERE question_text = ? AND IFNULL(code_snippet, '') = IFNULL(?, '')",
               [
                 item['answer'],
                 item['explanation'],
                 item['difficulty'] ?? 3,
                 item['frequencyWeight'] ?? 0.5,
+                item['source'] ?? 'ai',
                 text,
                 code,
               ],
             );
           } else {
             batch.execute(
-              'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              'INSERT INTO questions (year, round, subject, question_type, question_text, code_snippet, code_language, answer, explanation, difficulty, frequency_weight, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
               [
                 item['year'],
                 item['round'],
@@ -492,6 +538,7 @@ class DatabaseService {
                 item['explanation'],
                 item['difficulty'] ?? 3,
                 item['frequencyWeight'] ?? 0.5,
+                item['source'] ?? 'ai',
               ],
             );
           }
@@ -676,6 +723,7 @@ class DatabaseService {
             explanation: item['explanation'] as String,
             difficulty: item['difficulty'] as int? ?? 3,
             frequencyWeight: (item['frequencyWeight'] as num?)?.toDouble() ?? 0.5,
+            source: item['source'] as String? ?? Question.sourceAi,
           ));
         }
       } catch (e) {

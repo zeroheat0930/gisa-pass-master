@@ -25,7 +25,7 @@ class RoundListScreen extends StatefulWidget {
 }
 
 class _RoundListScreenState extends State<RoundListScreen> {
-  List<({int year, int round, int count})>? _rounds;
+  List<({int year, int round, String source, int count})>? _rounds;
   String? _error;
   bool _opening = false;
 
@@ -46,11 +46,12 @@ class _RoundListScreenState extends State<RoundListScreen> {
     }
   }
 
-  Future<void> _open(int year, int round) async {
+  Future<void> _open(int year, int round, String source) async {
     if (_opening) return;
     _opening = true;
     try {
-      final questions = await widget.db.getQuestionsByRound(year, round);
+      final questions =
+          await widget.db.getQuestionsByRound(year, round, source: source);
       if (!mounted) return;
       if (questions.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -62,7 +63,9 @@ class _RoundListScreenState extends State<RoundListScreen> {
         MaterialPageRoute(
           builder: (_) => PastExamQuizScreen(
             questions: questions,
-            title: '$year년 $round회',
+            title: source == Question.sourceRestored
+                ? '$year년 $round회 복원 기출'
+                : '$year년 $round회 유형',
           ),
         ),
       );
@@ -115,7 +118,8 @@ class _RoundListScreenState extends State<RoundListScreen> {
     }
 
     // 연도별로 묶어서 보여준다
-    final years = <int, List<({int year, int round, int count})>>{};
+    final years =
+        <int, List<({int year, int round, String source, int count})>>{};
     for (final r in rounds) {
       years.putIfAbsent(r.year, () => []).add(r);
     }
@@ -125,28 +129,24 @@ class _RoundListScreenState extends State<RoundListScreen> {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       itemCount: sortedYears.length + 1,
       itemBuilder: (context, index) {
-        // 첫 항목은 "전부 AI 예상문제" 고지. 목록 위에 항상 보이게 둔다.
+        // 첫 항목은 출처 고지. 목록 위에 항상 보이게 둔다.
         if (index == 0) return _notice();
 
         final year = sortedYears[index - 1];
         final items = years[year]!;
 
+        // 연도별 배지는 달지 않는다. 한 연도 안에 복원 기출과 AI 예상이
+        // 함께 있을 수 있어서, 배지는 회차 타일마다 붙인다.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 16, bottom: 10),
-              child: Row(
-                children: [
-                  Text('$year년',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 8),
-                  _badge(),
-                ],
-              ),
+              child: Text('$year년',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800)),
             ),
             ...items.map(_roundTile),
           ],
@@ -155,10 +155,11 @@ class _RoundListScreenState extends State<RoundListScreen> {
     );
   }
 
-  /// 모든 회차가 AI 예상문제다. 연도별로 다른 배지를 달면 "이 연도는 기출"
-  /// 이라는 인상을 주므로 전부 같은 배지를 쓴다.
-  Widget _badge() {
-    const color = AppConfig.warningColor;
+  /// 출처 배지. 복원 기출과 AI 예상문제는 성격이 완전히 다르므로 색까지 나눈다.
+  Widget _badge(String source) {
+    final restored = source == Question.sourceRestored;
+    final color =
+        restored ? AppConfig.correctColor : AppConfig.warningColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -166,44 +167,71 @@ class _RoundListScreenState extends State<RoundListScreen> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
-      child: const Text(
-        'AI 예상',
+      child: Text(
+        restored ? '복원 기출' : 'AI 예상',
         style: TextStyle(
             color: color, fontSize: 11, fontWeight: FontWeight.w700),
       ),
     );
   }
 
-  /// 화면 맨 위 고지. 회차명이 "그 회차 시험지" 로 읽히지 않도록 못박는다.
+  /// 화면 맨 위 고지 + 출처 표기.
+  ///
+  /// 회차명이 "그 회차 시험지" 로 읽히지 않게 못박고, 복원 기출의 출처를 밝힌다.
+  /// **CC BY 4.0 의 유일한 의무가 저작자 표시이므로 이 안내는 지우면 안 된다.**
   Widget _notice() {
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppConfig.warningColor.withValues(alpha: 0.10),
+        color: AppConfig.surfaceColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppConfig.warningColor.withValues(alpha: 0.35)),
+        border: Border.all(color: AppConfig.borderColor),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline,
-              color: AppConfig.warningColor, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '모든 문항은 기출 유형을 학습한 AI 가 만든 예상문제입니다.\n'
-              '실제 기출 시험지가 아니며, 연도·회차는 출제 경향의 기준입니다.',
-              style: TextStyle(
-                  color: Colors.grey[300], fontSize: 12, height: 1.5),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.verified_outlined,
+                  color: AppConfig.correctColor, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '복원 기출 — 실제 시험을 응시자들이 복원한 문제입니다.\n'
+                  '유료 잠금 없이 전체 공개합니다.\n'
+                  '출처: Life-Journey 블로그 (CC BY 4.0)',
+                  style: TextStyle(
+                      color: Colors.grey[300], fontSize: 12, height: 1.5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline,
+                  color: AppConfig.warningColor, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'AI 예상 — 기출 유형을 학습한 AI 가 만든 문제입니다.\n'
+                  '실제 기출 시험지가 아니며, 연도·회차는 출제 경향의 기준입니다.',
+                  style: TextStyle(
+                      color: Colors.grey[300], fontSize: 12, height: 1.5),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _roundTile(({int year, int round, int count}) r) {
+  Widget _roundTile(({int year, int round, String source, int count}) r) {
+    final restored = r.source == Question.sourceRestored;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -211,7 +239,7 @@ class _RoundListScreenState extends State<RoundListScreen> {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _open(r.year, r.round),
+          onTap: () => _open(r.year, r.round, r.source),
           child: Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -237,16 +265,31 @@ class _RoundListScreenState extends State<RoundListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // "2023년 2회" 가 아니라 "2023년 2회 유형" 이다.
+                      // AI 문항은 "2023년 2회" 가 아니라 "2023년 2회 유형" 이다.
                       // 회차명만 달면 그 회차 시험지로 읽힌다.
-                      Text('${r.year}년 ${r.round}회 유형',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700)),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                                restored
+                                    ? '${r.year}년 ${r.round}회 복원 기출'
+                                    : '${r.year}년 ${r.round}회 유형',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                          const SizedBox(width: 8),
+                          _badge(r.source),
+                        ],
+                      ),
                       const SizedBox(height: 2),
                       Text(
-                        '${r.count}문항 · AI 예상문제',
+                        restored
+                            ? '${r.count}문항 · 실제 시험 복원 · 전체 공개'
+                            : '${r.count}문항 · AI 예상문제',
                         style:
                             TextStyle(color: Colors.grey[500], fontSize: 12),
                       ),
