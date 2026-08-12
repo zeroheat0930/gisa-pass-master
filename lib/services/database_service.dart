@@ -83,7 +83,8 @@ class DatabaseService {
   /// rev 4: 복원 기출(restored_exam_questions.json) 추가 — 기존 유저에게도 내려간다
   /// rev 5: 복원 기출 2026년 1회 20문항 추가
   /// rev 6: 복원 기출 2025년 3회 20문항 추가
-  static const int questionDataRevision = 6;
+  /// rev 7: 복원 기출 2025년 2회 20문항 추가
+  static const int questionDataRevision = 7;
 
   static const String _metaTable = 'app_meta';
   static const String _metaKeyRevision = 'question_data_revision';
