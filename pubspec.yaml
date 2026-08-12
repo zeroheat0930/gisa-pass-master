@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.6.7+31
+version: 1.6.8+32
 
 environment:
   sdk: ^3.11.4
@@ -37,7 +37,7 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.5
   intl: ^0.20.2
-  google_mobile_ads: ^5.3.0
+  google_mobile_ads: ^9.1.0
   # Google Play 정책: 2026-08-31 부터 Billing Library 8.0.0 미만은 업데이트가
   # 거부된다. 3.3.0 이 in_app_purchase_android 0.5.x(Billing 8)를 끌어온다.
   # 내려잡으면 스토어 업데이트가 막히므로 하한을 낮추지 말 것.

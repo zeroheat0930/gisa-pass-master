@@ -123,12 +123,16 @@ test/
 - Flutter 3.44 이상
 - Dart 3.12 이상
 
-> **Swift Package Manager 를 끈 상태로 유지한다** (`flutter config
-> --no-enable-swift-package-manager`). Flutter 3.44 는 SPM 을 기본으로 켜는데,
-> 그러면 `webview_flutter_wkwebview` 가 pod 대신 SPM 으로 설치되고,
-> 아직 SPM 을 지원하지 않는 `google_mobile_ads` 가 그 pod 에 의존하다 실패한다
-> (`Unable to find a specification for webview_flutter_wkwebview`).
-> `google_mobile_ads` 를 SPM 지원 버전으로 올리면 다시 켤 수 있다.
+> **Swift Package Manager 를 켠 상태로 유지한다**
+> (`flutter config --enable-swift-package-manager`). `google_mobile_ads` 9.x 는
+> CocoaPods 의 `use_frameworks!` 아래에서 비모듈 헤더 문제로 iOS 빌드가 깨지고,
+> SPM 으로는 정상 빌드된다. `flutter_local_notifications` 만 아직 SPM 미지원이라
+> pod 으로 설치되는데, 이건 다른 플러그인이 의존하지 않아 문제되지 않는다.
+
+> `pod install` 이 `higher minimum deployment target` 이나
+> `could not find compatible versions` 를 뱉으면 대개 **스펙 색인이 낡은 것**이다.
+> iOS 최소 버전을 올리기 전에 `pod install --repo-update` 부터 해볼 것
+> (실제로 이 메시지 때문에 최소 버전을 올릴 뻔했는데, 색인 갱신만으로 해결됐다).
 
 > 빌드 중에 다른 `flutter` 명령(analyze·test)을 겹쳐 돌리지 말 것.
 > 실제로 Gradle 빌드가 두 번 실패했고, 단독 재실행하면 그대로 성공했다.
@@ -249,6 +253,25 @@ class AppConfig {
 엉뚱한 문제에 붙지 않는다.
 
 ## 변경 이력
+
+### v1.6.8+32 (2026-08-12)
+
+**광고 SDK 를 4개 메이저 건너뛰어 최신화** — `google_mobile_ads` 5.3.1 → 9.1.0
+(네이티브 SDK: iOS 11.13 → 13.7, Android play-services-ads → 25.4.0).
+앱 코드 수정은 **0줄**이었다. 이 앱이 쓰는 광고 API 10종이 전부 코어 클래스라
+4개 메이저를 지나도 그대로 컴파일된다(`analyze` 0건으로 확인).
+
+- **SPM 재활성화** — 9.1.0 은 CocoaPods `use_frameworks!` 아래에서 비모듈 헤더
+  오류로 iOS 빌드가 깨지지만 SPM 으로는 정상 빌드된다. 9.1.0 이 SPM 을 지원하게
+  되면서 v1.6.7 에서 SPM 을 꺼야 했던 이유(ads 가 webview pod 에 의존)도 사라졌다
+- **iOS 최소 버전은 13.0 그대로** — 중간에 `pod install` 이 "higher minimum
+  deployment target" 을 뱉어 최소 버전을 올릴 뻔했으나, 원인은 **낡은 스펙 색인**
+  이었다. `--repo-update` 한 번으로 iOS 13.0 에서 정상 설치된다.
+  구형 기기 사용자를 끊지 않았다
+
+검증: 테스트 184건, `analyze` 0건, iOS/Android 클린 릴리즈 빌드,
+시뮬레이터 통합 테스트 4건. `PrivacyInfo.xcprivacy` 등록이 SPM 전환 후에도
+`project.pbxproj` 에 남아 있는지 확인함.
 
 ### v1.6.7+31 (2026-08-12)
 
