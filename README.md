@@ -129,6 +129,12 @@ test/
 > SPM 으로는 정상 빌드된다. `flutter_local_notifications` 만 아직 SPM 미지원이라
 > pod 으로 설치되는데, 이건 다른 플러그인이 의존하지 않아 문제되지 않는다.
 
+> Play 업로드용 AAB(`flutter build appbundle --release`)를 만들려면 Android SDK 에
+> **cmdline-tools** 가 설치돼 있어야 한다. 없으면 빌드 끝에
+> `Release app bundle failed to strip debug symbols` 가 뜬다 — 이건 스트립이 아니라
+> **최종 AAB 를 검사하는 단계**가 `apkanalyzer` 를 못 찾아서 나는 것이고,
+> 생성된 AAB 자체는 정상이다(설치 전후 산출물이 바이트 크기까지 동일했다).
+
 > `pod install` 이 `higher minimum deployment target` 이나
 > `could not find compatible versions` 를 뱉으면 대개 **스펙 색인이 낡은 것**이다.
 > iOS 최소 버전을 올리기 전에 `pod install --repo-update` 부터 해볼 것
