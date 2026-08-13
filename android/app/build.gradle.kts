@@ -50,6 +50,20 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+
+            // Play Console 이 "최적화된 리소스 축소가 사용 설정되지 않음" 으로
+            // 지적한 부분. 코드 축소를 켜야 리소스 축소도 켤 수 있다.
+            //
+            // Flutter 는 자체 ProGuard 규칙(engine·plugin 유지)을 기본으로
+            // 넣어주므로 별도 규칙 파일 없이도 동작한다. 다만 리플렉션을 쓰는
+            // 플러그인이 있으면 릴리즈에서만 깨질 수 있어 **AAB 를 올리기 전에
+            // 실기기/에뮬레이터에서 반드시 한 번 실행해 볼 것.**
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

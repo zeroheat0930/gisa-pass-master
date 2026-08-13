@@ -30,9 +30,6 @@ void main() async {
     databaseFactory = databaseFactoryFfiWeb;
   }
 
-  // 문항 데이터의 출처·라이선스를 Flutter 라이선스 목록에 등록한다.
-  // 패키지가 아닌 저작물은 Flutter 가 자동으로 모아주지 않는다.
-  LicenseNotices.register();
 
   // 서비스 생성 (앱 수명 동안 한 번만)
   final db = DatabaseService();
@@ -89,6 +86,15 @@ class GisaPassMasterApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 문항 출처·라이선스를 Flutter 라이선스 목록에 등록한다. 패키지가 아닌
+    // 저작물은 Flutter 가 자동으로 모아주지 않으므로 직접 넣어야 한다.
+    //
+    // **main() 이 아니라 여기서 한다.** main() 에 두었더니 앱 위젯을 직접
+    // 띄우는 통합 테스트에서는 등록이 안 됐고, 라이선스 화면이 열리는데도
+    // 우리 고지만 빠진 상태가 됐다. 고지는 이 위젯이 뜨는 모든 경로에
+    // 붙어 있어야 한다. `register()` 는 빗장이 있어 몇 번 불려도 한 번만 든다.
+    LicenseNotices.register();
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(

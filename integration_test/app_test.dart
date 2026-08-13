@@ -195,4 +195,28 @@ void main() {
     expect(find.byType(MaterialApp), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);
   });
+
+  // ─── 시나리오 5: 저작권 고지가 실제로 앱에 있다 ───
+  //
+  // 위젯 테스트는 이 위젯들을 따로 떼어 검사한다. 여기서 보는 것은
+  // **조립된 진짜 앱에서 그 화면까지 실제로 도달하는가** 다. 배선이 빠지면
+  // 부품 테스트는 전부 초록인데 앱에는 고지가 없는 상태가 된다.
+  //
+  // pub 패키지(BSD·MIT·Apache 2.0)가 배포물에 저작권 고지를 포함하라고
+  // 요구하므로, 이 경로가 끊기면 라이선스 조건 미이행이다.
+  testWidgets('홈에서 라이선스 고지 화면까지 실제로 갈 수 있다', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await settle(tester, const Duration(seconds: 3));
+
+    await tapVisible(tester, find.textContaining('오픈소스 라이선스'), '라이선스 고지 줄');
+    await settle(tester, const Duration(seconds: 2));
+
+    expect(find.byType(LicensePage), findsOneWidget,
+        reason: '고지 화면이 열리지 않으면 오픈소스 라이선스 조건을 못 지킨 것이다');
+
+    // 등록해둔 문항 출처 고지가 목록에 실제로 올라와 있는지 본다.
+    await settle(tester, const Duration(seconds: 3));
+    expect(find.textContaining('복원 기출'), findsWidgets,
+        reason: 'CC BY 고지가 라이선스 목록에 등록되지 않았다');
+  });
 }
