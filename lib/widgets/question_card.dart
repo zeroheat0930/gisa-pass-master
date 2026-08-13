@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../config.dart';
 import '../models/question.dart';
 import 'code_viewer.dart';
+import 'question_text.dart';
 
 class QuestionCard extends StatelessWidget {
   final Question question;
@@ -105,8 +106,8 @@ class QuestionCard extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Question text
-            Text(
-              question.questionText,
+            QuestionText(
+              text: question.questionText,
               style: const TextStyle(
                 color: Color(0xFFE0E0E0),
                 fontSize: 16,
