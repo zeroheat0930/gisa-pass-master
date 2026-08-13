@@ -73,11 +73,22 @@ SQL·서브넷) 420문항 모두 원문과 일치했다. 원문 표·그림은 �
 - [x] `flutter test` 전체 통과 (269건)
 - [x] 복원 기출 데이터 검증 — 21회차 × 20문항 = 420, 이상치 0
 - [x] TODO·미구현 스텁·건너뛴 테스트 없음
-- [ ] `flutter build ipa --release`
+- [x] 시뮬레이터 통합 테스트 4건 통과 (iPhone 17 Pro)
+- [x] `flutter build ipa --release` — 25MB, 번들 안 420문항/21회차 확인
+- [x] `flutter build appbundle --release` — 62MB, versionCode 36 확인
 - [ ] Transporter 또는 Xcode Organizer 로 업로드
 - [ ] App Store Connect 에서 "새로운 기능" 문안 입력 후 심사 제출
-- [ ] `flutter build appbundle --release`
-- [ ] Play Console 업로드
+- [ ] Play Console 업로드 → **게시 개요 → 변경사항 게시**
+
+## 알아둘 것 — 홈 첫 화면에서 AI 모의고사 버튼이 밀렸다
+
+합격률 버튼을 D-Day 아래에 넣은 만큼 아래가 밀려서, iPhone 17 Pro(높이 874)
+기준 '예측 학습 시작' 이 화면 밖 41px 로 나간다. 스크롤하면 보이므로 고장은
+아니지만 **유료 기능으로 이어지는 버튼이 첫 화면에서 사라진 것**이라 기록해
+둔다. 요청받은 배치를 그대로 지킨 결과이므로 순서는 바꾸지 않았다.
+
+줄이려면 선택지는 셋이다 — 합격률을 합격 예측 점수 아래로 한 칸 내리거나,
+합격률을 D-Day 카드 안에 합치거나, 버튼 사이 여백(24/12)을 줄인다.
 
 ## Play 주의
 
