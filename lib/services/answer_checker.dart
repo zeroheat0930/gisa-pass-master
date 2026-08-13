@@ -1,4 +1,5 @@
 import '../models/question.dart';
+import 'answer_parts.dart';
 
 /// 주관식 답안 채점 로직 (단일 정본).
 ///
@@ -89,15 +90,104 @@ class AnswerChecker {
       if (_sameMultiset(_tokens(normUser), _tokens(normCorrect))) return true;
     }
 
+    // 6) 서술형 — 핵심어 포함으로 채점.
+    //    "스니핑에 대해 서술하시오" 같은 문항은 모범답안을 글자까지 똑같이 쓸 수
+    //    없다. 실제 실기도 사람이 부분점수로 채점한다. 그래서 정답에서 뽑은
+    //    핵심어가 충분히 들어있으면 맞은 것으로 본다.
+    if (isDescriptive(questionText)) {
+      if (descriptiveCoverage(userAnswer, correctAnswer) >=
+          descriptiveThreshold) {
+        return true;
+      }
+    }
+
     return false;
   }
+
+  /// 서술형(문장으로 답하는) 문항인가.
+  static bool isDescriptive(String? questionText) {
+    final t = questionText ?? '';
+    return t.contains('서술하시오') ||
+        t.contains('설명하시오') ||
+        t.contains('약술') ||
+        t.contains('서술하십시오') ||
+        t.contains('설명하십시오');
+  }
+
+  /// 정답 핵심어 중 유저 답안이 담고 있는 비율. 이 값 이상이면 정답으로 본다.
+  ///
+  /// 0.7 은 실측으로 정했다. 더 낮추면 핵심어 두어 개만 스친 부실한 답이
+  /// 통과하고, 더 올리면 제대로 쓴 의역이 떨어진다
+  /// (`test/answer_checker_descriptive_test.dart` 가 양쪽을 다 지킨다).
+  static const double descriptiveThreshold = 0.7;
+
+  /// 정답 핵심어 대비 유저 답안의 포함 비율(0~1).
+  static double descriptiveCoverage(String userAnswer, String correctAnswer) {
+    final want = _keywords(correctAnswer);
+    if (want.isEmpty) return 0;
+
+    final userText = _keywordSpace(userAnswer);
+    final hit = want.where((k) => userText.contains(k)).length;
+    return hit / want.length;
+  }
+
+  /// 조사·어미를 떼고 핵심어만 남긴다.
+  ///
+  /// 한국어 형태소 분석기를 쓰지 않는다. 앱에 그만한 의존성을 넣을 이유가 없고,
+  /// 여기서 필요한 것은 "핵심 낱말이 답안에 등장하는가" 뿐이다.
+  static List<String> _keywords(String s) {
+    final seen = <String>{};
+    for (final raw in _keywordSpace(s).split(' ')) {
+      final w = _trimSuffix(raw);
+      if (w.length < 2) continue;
+      if (_stopwords.contains(w)) continue;
+      seen.add(w);
+    }
+    return seen.toList();
+  }
+
+  /// 비교용으로 문장부호를 공백으로 바꾸고 소문자로 접는다.
+  static String _keywordSpace(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^0-9a-z가-힣]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// 낱말 끝의 조사·어미를 짧은 것부터 떼어본다. 어간이 2글자 미만이 되면 두지 않는다.
+  static String _trimSuffix(String w) {
+    for (final suffix in _suffixes) {
+      if (w.length - suffix.length >= 2 && w.endsWith(suffix)) {
+        return w.substring(0, w.length - suffix.length);
+      }
+    }
+    return w;
+  }
+
+  static const List<String> _suffixes = [
+    '으로써', '에서의', '에서는', '이라는', '라는',
+    '으로', '에서', '까지', '부터', '에게', '이나', '한다', '된다', '하는', '되는',
+    '하여', '되어', '하고', '되고', '이며', '하며', '되며', '이다', '있는', '없는',
+    '들이', '들을', '들의',
+    '은', '는', '이', '가', '을', '를', '의', '에', '와', '과', '로', '도', '만',
+  ];
+
+  /// 어느 답안에나 들어가는 말은 핵심어로 세지 않는다.
+  /// 이런 말까지 세면 내용이 빈 답도 비율이 올라간다.
+  static const Set<String> _stopwords = {
+    '것은', '것을', '것이', '그것', '이것',
+    '대한', '대해', '위한', '위해', '통해', '통한', '따라', '관한', '관해',
+    '경우', '때문', '이런', '그런', '저런', '어떤', '모든', '여러', '각각',
+    '수행', '사용', '이용', '가지', '하나', '또는', '그리고', '하지',
+    '있다', '없다', '한다', '된다', '이다', '아니', '같은', '다른',
+  };
 
   static bool _hasOrderBy(String? codeSnippet) =>
       (codeSnippet ?? '').toUpperCase().contains('ORDER BY');
 
   /// 답안을 '행' 단위로 쪼갠다. 행 안의 컬럼 순서는 그대로 보존한다.
   static List<String> _rows(String s, {bool caseSensitive = false}) {
-    final t = s.trim().replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final t = AnswerParts.stripLabels(
+        s.trim().replaceAll('\r\n', '\n').replaceAll('\r', '\n'));
     return t
         .split('\n')
         .map((r) => r.replaceAll(RegExp(r'\s+'), ' ').trim())
@@ -209,13 +299,26 @@ class AnswerChecker {
 
   /// 줄바꿈을 쉼표로 바꿔 여러 줄 정답과 한 줄 나열 답안을 같은 형태로 만든다.
   /// (전체 1000문항 중 125문항은 정답이 여러 줄이다.)
+  ///
+  /// **줄머리 번호는 떼고 비교한다.** 복원 기출에는 `"1. 문장\n2. 분기\n3. 조건"`
+  /// 처럼 번호가 붙은 정답이 많은데, 유저가 번호를 빼고 쓰면 예전에는 전부
+  /// 오답이었다(그런 답안 97건이 97건 모두 틀린 것으로 실측됐다).
+  /// 정답 쪽에서도 떼므로 유저가 번호를 쓰든 말든 같은 답으로 본다.
   static String _normalize(String s, {bool caseSensitive = false}) {
-    final t = s
+    final joined = s
         .trim()
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n')
-        .replaceAll('\n', ', ')
-        .replaceAll(RegExp(r'\s+'), ' ');
+        .replaceAll('\n', ', ');
+
+    // 번호는 **쉼표 항목마다** 뗀다. 줄 단위로만 떼면, 유저가 여러 답을 한 줄에
+    // "1. 50, 2. 50" 처럼 이어 썼을 때 두 번째부터 번호가 남아 정답과 어긋난다.
+    final t = joined
+        .split(',')
+        .map((item) => AnswerParts.stripLabels(item.trim()))
+        .join(', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
     return caseSensitive ? t : t.toLowerCase();
   }
 

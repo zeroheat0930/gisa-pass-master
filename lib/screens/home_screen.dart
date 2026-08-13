@@ -221,6 +221,22 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 16),
 
+              // 1.2 — 회차별 합격률 (D-Day 바로 아래)
+              _staggered(
+                1,
+                _PassRateButton(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                          builder: (_) => const PassRateScreen()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // 1.5 — 합격 예측 점수
               _staggered(
                 2,
@@ -356,21 +372,6 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 24),
 
-              // 4.5 — 회차별 합격률
-              _staggered(
-                4,
-                _PassRateButton(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.push(
-                      context,
-                      CupertinoPageRoute(
-                          builder: (_) => const PassRateScreen()),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
 
               // 5 — Quick stats
               _staggered(5, _QuickStats(stats: stats)),
