@@ -15,6 +15,8 @@ import '../widgets/pass_score_card.dart';
 import 'quiz_screen.dart';
 import 'ai_prediction_screen.dart';
 import 'subscription_screen.dart';
+import '../data/pass_rate_data.dart';
+import 'pass_rate_screen.dart';
 import 'stats_screen.dart';
 import 'study_plan_screen.dart';
 
@@ -350,6 +352,22 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // 4.5 — 회차별 합격률
+              _staggered(
+                4,
+                _PassRateButton(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                          builder: (_) => const PassRateScreen()),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 24),
@@ -1321,6 +1339,74 @@ class _DevMessageCardState extends State<_DevMessageCard>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 회차별 합격률 ───────────────────────────────────────────────────────────
+
+/// 합격률 화면으로 가는 입구. 최근 실기 합격률을 미리 보여줘서, 눌러볼 이유를
+/// 버튼 자체가 들고 있게 한다.
+class _PassRateButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _PassRateButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = PassRateData.latest(ExamKind.practical);
+    final average = PassRateData.roundAverage(ExamKind.practical);
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppConfig.cardColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppConfig.borderColor),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFF569CD6).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.bar_chart_rounded,
+                  color: Color(0xFF569CD6), size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '회차별 합격률',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '실기 평균 ${average.toStringAsFixed(1)}% · '
+                    '${latest.label} ${latest.rate.toStringAsFixed(1)}%',
+                    style: const TextStyle(
+                        color: Color(0xFF8A8A8A), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                color: Color(0xFF6B6B6B), size: 20),
+          ],
         ),
       ),
     );
