@@ -86,7 +86,8 @@ class DatabaseService {
   /// rev 7: 복원 기출 2025년 2회 20문항 추가
   /// rev 8: 복원 기출 2025년 1회 20문항 추가
   /// rev 9: 복원 기출 2024년 3·2·1회 60문항 추가
-  static const int questionDataRevision = 9;
+  /// rev 10: 복원 기출 2023년 3·2·1회 60문항 추가
+  static const int questionDataRevision = 10;
 
   static const String _metaTable = 'app_meta';
   static const String _metaKeyRevision = 'question_data_revision';
