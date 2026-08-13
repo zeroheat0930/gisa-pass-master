@@ -9,6 +9,7 @@ import '../providers/study_provider.dart';
 import '../providers/stats_provider.dart';
 import '../services/ai_exam_quota.dart';
 import '../services/purchase_service.dart';
+import '../widgets/copy_email_row.dart';
 import '../widgets/dday_timer.dart';
 import '../widgets/exam_quota_dialog.dart';
 import '../widgets/pass_score_card.dart';
@@ -1323,6 +1324,23 @@ class _DevMessageCardState extends State<_DevMessageCard>
                     letterSpacing: 0.1,
                   ),
                 ),
+                const SizedBox(height: 10),
+                Text(
+                  '자주 업데이트하진 못하지만, 시간 날 때마다 피드백 받아서 '
+                  '계속 고쳐나가고 있어요. 별점이나 리뷰 남겨주시면 큰 힘이 됩니다. '
+                  '불편한 점이나 문제 오류는 메일로 알려주세요!',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12.5,
+                    height: 1.6,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // 카드 전체가 구독 화면으로 가는 탭이라, 메일 줄은 안쪽에서
+                // 탭을 가로채 주소만 복사한다. url_launcher 를 넣지 않은 것은
+                // 메일 하나 때문에 의존성을 늘릴 이유가 없어서다.
+                const CopyEmailRow(email: AppConfig.contactEmail),
                 const SizedBox(height: 12),
                 AnimatedBuilder(
                   animation: _pulseAnim,

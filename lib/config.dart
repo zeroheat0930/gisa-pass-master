@@ -120,6 +120,9 @@ class AppConfig {
   static const Color warningColor = Color(0xFFFF6D00);
 
   // === 데이터베이스 ===
+  /// 문의 메일. 앱 안에서 이 주소를 노출하는 곳은 여기 하나만 본다.
+  static const String contactEmail = 'zeroheat0930@gmail.com';
+
   static const String dbName = 'gisa_pass_master.db';
 
   // === 광고 설정 ===
