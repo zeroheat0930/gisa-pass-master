@@ -257,6 +257,65 @@ void main() {
           reason: '재실행이 문항을 복제하면 안 된다');
     });
 
+    test('재출제된 동일 본문 문항이 서로의 해설을 덮어쓰지 않는다', () async {
+      // 실제 시험은 지난 회차 문제를 글자 그대로 다시 낸다.
+      // 2020년 4회 8번과 2023년 3회 12번(NAT)이 그 사례다.
+      //
+      // 매칭 키·UPDATE 조건이 본문+코드뿐이던 시절에는 재동기화 때
+      // `WHERE question_text = ?` 가 **두 행을 한꺼번에** 갱신해서, 파일에서
+      // 나중에 나오는 항목의 해설이 앞 회차 문항까지 덮어썼다.
+      // 첫 동기화만으로는 드러나지 않는다(둘 다 INSERT 되므로) — 반드시 2회 돌린다.
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+
+      await DatabaseService.syncQuestionsFromAssets(db);
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      const natText = 'IP 패킷에서 외부의 공인 IP주소와 포트 주소에 해당하는 내부 IP주소를 '
+          '재기록하여 라우터를 통해 네트워크 트래픽을 주고받는 기술은 무엇인가?';
+      final rows = await db.query('questions',
+          columns: ['year', 'round', 'explanation'],
+          where: 'question_text = ?',
+          whereArgs: [natText],
+          orderBy: 'year');
+
+      expect(rows.length, 2, reason: '본문이 같아도 회차가 다르면 별개 문항이다');
+      expect(rows.map((r) => '${r['year']}-${r['round']}').toList(),
+          ['2020-4', '2023-3']);
+
+      // 각 행은 자기 회차의 에셋 해설을 그대로 갖고 있어야 한다.
+      final raw = await rootBundle
+          .loadString('assets/questions/restored_exam_questions.json');
+      final items = (json.decode(raw) as List)
+          .cast<Map<String, dynamic>>()
+          .where((e) => e['questionText'] == natText)
+          .toList();
+      expect(items.length, 2, reason: '에셋에도 두 회차가 다 있어야 한다');
+
+      for (final row in rows) {
+        final asset = items.firstWhere(
+            (e) => e['year'] == row['year'] && e['round'] == row['round']);
+        expect(row['explanation'], asset['explanation'],
+            reason: '${row['year']}년 ${row['round']}회 해설이 다른 회차 것으로 덮였다');
+      }
+    });
+
+    test('모든 회차가 20문항을 온전히 갖는다', () async {
+      // 실기는 회차당 20문항이다. 키 충돌로 문항이 삼켜지면 여기서 드러난다.
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      final rows = await db.rawQuery(
+          "SELECT year, round, COUNT(*) c FROM questions WHERE source = 'restored' "
+          'GROUP BY year, round HAVING c <> 20');
+      expect(rows, isEmpty,
+          reason: '복원 기출은 회차당 정확히 20문항이어야 한다: $rows');
+    });
+
     test('감사에서 확정된 정답 오류가 실제로 고쳐져 있다', () async {
       Future<Map<String, dynamic>> item(String file, int i) async {
         final raw = await rootBundle.loadString('assets/questions/$file');

@@ -89,7 +89,8 @@ class DatabaseService {
   /// rev 10: 복원 기출 2023년 3·2·1회 60문항 추가
   /// rev 11: 복원 기출 2022년 3·2·1회 60문항 추가
   /// rev 12: 복원 기출 2021년 3·2·1회 60문항 추가
-  static const int questionDataRevision = 12;
+  /// rev 13: 복원 기출 2020년 4·3·2·1회 80문항 추가 — 21개 회차 420문항 전량 완료
+  static const int questionDataRevision = 13;
 
   static const String _metaTable = 'app_meta';
   static const String _metaKeyRevision = 'question_data_revision';
@@ -332,13 +333,22 @@ class DatabaseService {
     );
   }
 
-  /// 문항 식별 키. 본문과 코드가 모두 같아야 같은 문항으로 본다.
+  /// 문항 식별 키. 연도·회차·본문·코드가 모두 같아야 같은 문항으로 본다.
   ///
   /// 구분자로 본문에 나올 수 없는 NUL 문자를 쓴다. 공백이나 개행을 쓰면
   /// "본문 A + 코드 B" 와 "본문 A B + 코드 없음" 이 같은 키가 될 수 있다.
   /// (소스에 raw NUL 을 넣으면 파일이 바이너리로 취급되므로 반드시 이스케이프로 쓸 것)
-  static String _questionKey(String? questionText, String? codeSnippet) =>
-      '${questionText ?? ''}\u0000${codeSnippet ?? ''}';
+  ///
+  /// 연도와 회차를 넣는 이유: 실제 시험은 지난 회차 문제를 **글자 그대로**
+  /// 재출제한다 (2020년 4회 8번 = 2023년 3회 12번 NAT 문항). 본문+코드만으로는
+  /// 두 문항이 한 칸을 다투게 되어 한쪽 정답 수정이 다른 회차까지 번진다.
+  ///
+  /// 키를 넓혀도 기존 유저는 안전하다. 색인은 DB 행의 year/round 로, 비교 대상은
+  /// 에셋 항목의 year/round 로 만드는데 둘 다 같은 에셋에서 나온 값이라 그대로
+  /// 맞물린다 (모든 에셋 문항이 year/round 를 갖는지는 테스트가 지킨다).
+  static String _questionKey(
+          Object? year, Object? round, String? questionText, String? codeSnippet) =>
+      '$year\u0000$round\u0000${questionText ?? ''}\u0000${codeSnippet ?? ''}';
 
   /// 다음 복습 예정 시각과 그 시점까지 쌓이는 대기 건수.
   /// 복습 알림을 예약하는 데 쓴다. 복습 대상이 없으면 null.
@@ -503,11 +513,10 @@ class DatabaseService {
   static Future<void> syncQuestionsFromAssets(Database db) async {
     // 기존 문항을 (본문 + 코드) 키로 색인
     final existing = <String, bool>{};
-    for (final row
-        in await db.query('questions', columns: ['question_text', 'code_snippet'])) {
-      existing[_questionKey(
-              row['question_text'] as String?, row['code_snippet'] as String?)] =
-          true;
+    for (final row in await db.query('questions',
+        columns: ['year', 'round', 'question_text', 'code_snippet'])) {
+      existing[_questionKey(row['year'], row['round'],
+          row['question_text'] as String?, row['code_snippet'] as String?)] = true;
     }
 
     final failedFiles = <String>[];
@@ -520,20 +529,27 @@ class DatabaseService {
         for (final item in items) {
           final text = item['questionText'];
           final code = item['codeSnippet'];
-          final key = _questionKey(text as String?, code as String?);
+          final year = item['year'];
+          final round = item['round'];
+          final key = _questionKey(year, round, text as String?, code as String?);
 
           if (existing.containsKey(key)) {
             // 정답·해설·난이도만 갱신. id 는 건드리지 않는다.
+            // WHERE 도 키와 똑같이 연도·회차까지 좁혀야 한다. 본문만으로 좁히면
+            // 재출제된 동일 문항(2020년 4회 8번 = 2023년 3회 12번)이 함께 갱신된다.
             batch.rawUpdate(
               'UPDATE questions SET answer = ?, explanation = ?, difficulty = ?, '
               'frequency_weight = ?, source = ? '
-              "WHERE question_text = ? AND IFNULL(code_snippet, '') = IFNULL(?, '')",
+              'WHERE year = ? AND round = ? AND question_text = ? '
+              "AND IFNULL(code_snippet, '') = IFNULL(?, '')",
               [
                 item['answer'],
                 item['explanation'],
                 item['difficulty'] ?? 3,
                 item['frequencyWeight'] ?? 0.5,
                 item['source'] ?? 'ai',
+                year,
+                round,
                 text,
                 code,
               ],
