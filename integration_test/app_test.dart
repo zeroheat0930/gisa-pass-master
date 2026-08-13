@@ -28,6 +28,11 @@ Future<void> settle(WidgetTester tester,
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // 닿지 않은 탭을 **실패로 만든다.** 기본값은 경고만 찍고 통과시키는데,
+  // 그 탓에 화면 밖으로 밀려난 버튼을 누른 시나리오가 아무것도 하지 않은 채
+  // 한참 뒤 엉뚱한 단언에서 터졌다. 레이아웃이 바뀌면 여기서 즉시 걸린다.
+  WidgetController.hitTestWarningShouldBeFatal = true;
+
   late DatabaseService db;
   late AdService adService;
   late PurchaseService purchaseService;
@@ -62,14 +67,25 @@ void main() {
     fail('$timeout 안에 $what 이(가) 나타나지 않았다 — 시나리오가 공회전한다');
   }
 
+  // 홈은 스크롤 화면이다. 위젯이 트리에 있다고 화면 안에 있는 것은 아니다.
+  // 홈에 버튼이 하나 늘어나자 '예측 학습 시작' 이 화면 밖 41px 로 밀려났고,
+  // `tap()` 은 아무 데도 닿지 않은 채 **경고만 찍고 조용히 성공했다.**
+  // 그 뒤 단계가 전부 공회전해서야 실패가 드러났다.
+  // 그러므로 홈에서 무언가를 누를 때는 반드시 이 함수로 누른다.
+  Future<void> tapVisible(
+      WidgetTester tester, Finder finder, String what) async {
+    expect(finder, findsWidgets, reason: '$what 을(를) 찾지 못했다');
+    await tester.ensureVisible(finder.first);
+    await settle(tester);
+    await tester.tap(finder.first);
+  }
+
   // ─── 시나리오 1: 제출 버튼 20번 연타 (비동기 충돌 체크) ───
   testWidgets('연타 테스트: 제출 버튼 20번 연속 탭해도 크래시 없음', (tester) async {
     await tester.pumpWidget(buildApp());
     await settle(tester, const Duration(seconds: 3));
 
-    final predictionBtn = find.text('예측 학습 시작');
-    expect(predictionBtn, findsWidgets, reason: '홈의 예측 학습 카드를 찾지 못했다');
-    await tester.tap(predictionBtn.first);
+    await tapVisible(tester, find.text('예측 학습 시작'), '홈의 예측 학습 카드');
 
     // 문제 로드는 DB 상태에 따라 수 초 걸릴 수 있다. 나타날 때까지 기다리고,
     // 안 나타나면 (건너뛰는 대신) 실패시킨다.
@@ -134,27 +150,24 @@ void main() {
     await tester.pumpWidget(buildApp());
     await settle(tester, const Duration(seconds: 3));
 
-    // 예측 학습 시작
-    final predictionBtn = find.text('예측 학습 시작');
-    if (predictionBtn.evaluate().isNotEmpty) {
-      await tester.tap(predictionBtn);
-      await settle(tester, const Duration(seconds: 2));
+    await tapVisible(tester, find.text('예측 학습 시작'), '홈의 예측 학습 카드');
 
-      // 뒤로가기 (AppBar back button)
-      final backBtn = find.byType(BackButton);
-      if (backBtn.evaluate().isNotEmpty) {
-        await tester.tap(backBtn.first);
-        await settle(tester);
-      } else {
-        // Navigator pop 직접 실행
-        final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
-        navigator.pop();
-        await settle(tester);
-      }
+    // 정말로 퀴즈까지 들어갔는지 확인하고 나서 되돌아온다. 이걸 안 보면
+    // 화면 전환이 실패해도 '크래시 없음' 만 보고 통과한다.
+    await waitFor(tester, find.byType(TextField), '답안 입력창');
+
+    final backBtn = find.byType(BackButton);
+    if (backBtn.evaluate().isNotEmpty) {
+      await tester.tap(backBtn.first);
+    } else {
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     }
+    await settle(tester, const Duration(seconds: 2));
 
-    // 홈 화면으로 복귀 확인
-    expect(find.byType(MaterialApp), findsOneWidget);
+    // 홈으로 실제로 돌아왔는지 — MaterialApp 존재는 아무것도 증명하지 않는다.
+    expect(find.text('예측 학습 시작'), findsWidgets,
+        reason: '뒤로가기 후 홈으로 돌아오지 못했다');
+    expect(tester.takeException(), isNull, reason: '뒤로가기에서 예외가 났다');
   });
 
   // ─── 시나리오 4: 탭 왕복 50회 메모리 릭 체크 ───
