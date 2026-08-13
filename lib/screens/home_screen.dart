@@ -16,6 +16,9 @@ import 'quiz_screen.dart';
 import 'ai_prediction_screen.dart';
 import 'subscription_screen.dart';
 import '../data/pass_rate_data.dart';
+import '../services/database_service.dart';
+import '../models/question.dart';
+import 'round_list_screen.dart';
 import 'pass_rate_screen.dart';
 import 'stats_screen.dart';
 import 'study_plan_screen.dart';
@@ -23,7 +26,10 @@ import 'study_plan_screen.dart';
 // ─── Home Screen ─────────────────────────────────────────────────────────────
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// 복원 기출 회차 목록을 열려면 DB 가 필요하다.
+  final DatabaseService db;
+
+  const HomeScreen({super.key, required this.db});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -273,6 +279,25 @@ class _HomeScreenState extends State<HomeScreen>
               // AI Prediction button
               _AiPredictionButton(
                 onTap: () => _startAiPrediction(context),
+              ),
+              const SizedBox(height: 12),
+
+              // 복원 기출 — AI 예상 바로 아래에 둔다. 시험이 가까울수록
+              // 실제로 나온 문제를 풀고 싶어지는데, 그때마다 문제은행 탭을
+              // 거쳐 들어가게 하면 손이 많이 간다.
+              _RestoredExamButton(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                    context,
+                    CupertinoPageRoute(
+                      builder: (_) => RoundListScreen(
+                        db: widget.db,
+                        sourceFilter: Question.sourceRestored,
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
 
@@ -1407,6 +1432,73 @@ class _PassRateButton extends StatelessWidget {
             ),
             const Icon(Icons.chevron_right,
                 color: Color(0xFF6B6B6B), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 복원 기출 회차 목록으로 가는 홈 버튼.
+///
+/// AI 예상문제와 시각적으로 구분되게 초록 계열을 쓴다 — 회차 목록의 '복원 기출'
+/// 배지와 같은 색이라, 두 화면을 오갈 때 같은 것을 가리킨다는 게 드러난다.
+class _RestoredExamButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _RestoredExamButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          color: AppConfig.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppConfig.correctColor.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppConfig.correctColor.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(Icons.verified_outlined,
+                  color: AppConfig.correctColor, size: 21),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '복원 기출 풀기',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '2020~2026년 21개 회차 · 420문항 전체 공개',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[600], size: 20),
           ],
         ),
       ),

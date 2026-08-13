@@ -718,14 +718,26 @@ class DatabaseService {
     return maps.map((m) => Question.fromMap(m)).toList();
   }
 
-  Future<List<Question>> getRandomQuestions(int limit) async {
+  /// 무작위 문항을 [limit] 개 뽑는다.
+  ///
+  /// [source] 를 주면 그 출처에서만 뽑는다. 복원 기출만으로 20문제를 뽑으면
+  /// 실제 시험(회차당 20문항)과 같은 구성의 모의고사가 된다.
+  Future<List<Question>> getRandomQuestions(int limit, {String? source}) async {
     if (kIsWeb) {
       final all = await _loadFromJson();
-      all.shuffle();
-      return all.take(limit).toList();
+      final pool =
+          source == null ? all : all.where((q) => q.source == source).toList();
+      pool.shuffle();
+      return pool.take(limit).toList();
     }
     final db = await database;
-    final maps = await db.query('questions', orderBy: 'RANDOM()', limit: limit);
+    final maps = await db.query(
+      'questions',
+      where: source == null ? null : 'source = ?',
+      whereArgs: source == null ? null : [source],
+      orderBy: 'RANDOM()',
+      limit: limit,
+    );
     return maps.map((m) => Question.fromMap(m)).toList();
   }
 

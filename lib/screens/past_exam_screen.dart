@@ -109,6 +109,47 @@ class _PastExamScreenState extends State<PastExamScreen> {
     }
   }
 
+  /// 복원 기출 안에서만 20문제를 뽑아 실전처럼 푼다.
+  ///
+  /// 실기는 회차당 20문항이라 개수를 그대로 맞췄다. 난이도 필터는 걸지 않는다 —
+  /// 실제 시험은 난이도를 골라주지 않고, 여기서 걸면 "실전" 이라는 말이 거짓이 된다.
+  Future<void> _startRestoredMock() async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final questions = await widget.db
+          .getRandomQuestions(20, source: Question.sourceRestored);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      if (questions.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('복원 기출을 불러오지 못했습니다.'),
+            backgroundColor: AppConfig.cardColor,
+          ),
+        );
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _QuizScreen(
+            questions: questions,
+            title: '복원 기출 랜덤 20문제',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
   /// 회차 목록을 연다. [source] 로 복원 기출/AI 예상을 갈라서 보여준다.
   ///
   /// 전환 애니메이션 중 두 번째 탭이 라우트를 한 장 더 쌓지 않게 막는다
@@ -154,6 +195,15 @@ class _PastExamScreenState extends State<PastExamScreen> {
                       type: null,
                       title: '전체 랜덤 20문제',
                     ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  _RoundBookTile(
+                    title: '복원 기출 랜덤 20문제',
+                    subtitle: '실제 시험처럼 복원 기출에서만 20문제 · 난이도 필터 없음',
+                    icon: Icons.shuffle,
+                    color: AppConfig.correctColor,
+                    onTap: _startRestoredMock,
                   ),
                   const SizedBox(height: 12),
 

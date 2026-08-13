@@ -228,7 +228,7 @@ class _RootNavigatorState extends State<_RootNavigator> {
   Widget _getTab(int index) {
     return _cachedTabs.putIfAbsent(index, () {
       switch (index) {
-        case 0: return const HomeScreen();
+        case 0: return HomeScreen(db: widget.db);
         case 1: return PastExamScreen(db: widget.db);
         case 2: return const CheatSheetScreen();
         case 3: return const StatsScreen();
