@@ -18,7 +18,20 @@ import 'past_exam_screen.dart';
 class RoundListScreen extends StatefulWidget {
   final DatabaseService db;
 
-  const RoundListScreen({super.key, required this.db});
+  /// 이 출처만 보여준다. null 이면 전부.
+  ///
+  /// 복원 기출과 AI 예상은 성격이 완전히 다른 자료라, 한 목록에 섞어두면
+  /// "오늘은 기출만 풀자" 같은 아주 흔한 의도를 화면이 받아주지 못한다.
+  /// 그래서 문제은행에서 각각 별도 입구로 들어온다.
+  final String? sourceFilter;
+
+  const RoundListScreen({super.key, required this.db, this.sourceFilter});
+
+  String get title => switch (sourceFilter) {
+    Question.sourceRestored => '복원 기출 회차별',
+    Question.sourceAi => 'AI 예상 회차별',
+    _ => '회차별 문제집',
+  };
 
   @override
   State<RoundListScreen> createState() => _RoundListScreenState();
@@ -37,7 +50,10 @@ class _RoundListScreenState extends State<RoundListScreen> {
 
   Future<void> _load() async {
     try {
-      final rounds = await widget.db.getRoundSummary();
+      final all = await widget.db.getRoundSummary();
+      final rounds = widget.sourceFilter == null
+          ? all
+          : all.where((r) => r.source == widget.sourceFilter).toList();
       if (!mounted) return;
       setState(() => _rounds = rounds);
     } catch (e) {
@@ -50,13 +66,16 @@ class _RoundListScreenState extends State<RoundListScreen> {
     if (_opening) return;
     _opening = true;
     try {
-      final questions =
-          await widget.db.getQuestionsByRound(year, round, source: source);
+      final questions = await widget.db.getQuestionsByRound(
+        year,
+        round,
+        source: source,
+      );
       if (!mounted) return;
       if (questions.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('해당 회차에 문제가 없습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('해당 회차에 문제가 없습니다.')));
         return;
       }
       await Navigator.of(context).push(
@@ -71,8 +90,9 @@ class _RoundListScreenState extends State<RoundListScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('불러오지 못했습니다: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('불러오지 못했습니다: $e')));
     } finally {
       _opening = false;
     }
@@ -85,8 +105,10 @@ class _RoundListScreenState extends State<RoundListScreen> {
       appBar: AppBar(
         backgroundColor: AppConfig.backgroundColor,
         foregroundColor: Colors.white,
-        title: const Text('회차별 문제집',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         centerTitle: true,
         elevation: 0,
       ),
@@ -99,9 +121,11 @@ class _RoundListScreenState extends State<RoundListScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('불러오지 못했습니다.\n$_error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey)),
+          child: Text(
+            '불러오지 못했습니다.\n$_error',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey),
+          ),
         ),
       );
     }
@@ -130,7 +154,12 @@ class _RoundListScreenState extends State<RoundListScreen> {
       itemCount: sortedYears.length + 1,
       itemBuilder: (context, index) {
         // 첫 항목은 출처 고지. 목록 위에 항상 보이게 둔다.
-        if (index == 0) return _notice();
+        if (index == 0) {
+          return _notice(
+            rounds.any((r) => r.source == Question.sourceRestored),
+            rounds.any((r) => r.source != Question.sourceRestored),
+          );
+        }
 
         final year = sortedYears[index - 1];
         final items = years[year]!;
@@ -142,11 +171,14 @@ class _RoundListScreenState extends State<RoundListScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 16, bottom: 10),
-              child: Text('$year년',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800)),
+              child: Text(
+                '$year년',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
             ...items.map(_roundTile),
           ],
@@ -158,8 +190,7 @@ class _RoundListScreenState extends State<RoundListScreen> {
   /// 출처 배지. 복원 기출과 AI 예상문제는 성격이 완전히 다르므로 색까지 나눈다.
   Widget _badge(String source) {
     final restored = source == Question.sourceRestored;
-    final color =
-        restored ? AppConfig.correctColor : AppConfig.warningColor;
+    final color = restored ? AppConfig.correctColor : AppConfig.warningColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -170,7 +201,10 @@ class _RoundListScreenState extends State<RoundListScreen> {
       child: Text(
         restored ? '복원 기출' : 'AI 예상',
         style: TextStyle(
-            color: color, fontSize: 11, fontWeight: FontWeight.w700),
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -179,7 +213,12 @@ class _RoundListScreenState extends State<RoundListScreen> {
   ///
   /// 회차명이 "그 회차 시험지" 로 읽히지 않게 못박고, 복원 기출의 출처를 밝힌다.
   /// **CC BY 4.0 의 유일한 의무가 저작자 표시이므로 이 안내는 지우면 안 된다.**
-  Widget _notice() {
+  ///
+  /// 다만 **목록에 실제로 있는 것만 고지한다.** AI 예상만 있는 화면에
+  /// "출처: Life-Journey 블로그" 를 띄우면 AI 문항이 거기서 온 것처럼 읽혀
+  /// 오히려 거짓말이 된다. 반대로 복원 기출만 있는 화면에 AI 고지를 띄우면
+  /// 실제 기출을 AI 가 만든 것처럼 읽힌다.
+  Widget _notice(bool hasRestored, bool hasAi) {
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -191,40 +230,54 @@ class _RoundListScreenState extends State<RoundListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.verified_outlined,
-                  color: AppConfig.correctColor, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '복원 기출 — 실제 시험을 응시자들이 복원한 문제입니다.\n'
-                  '유료 잠금 없이 전체 공개합니다.\n'
-                  '출처: Life-Journey 블로그 (CC BY 4.0)',
-                  style: TextStyle(
-                      color: Colors.grey[300], fontSize: 12, height: 1.5),
+          if (hasRestored)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.verified_outlined,
+                  color: AppConfig.correctColor,
+                  size: 18,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.info_outline,
-                  color: AppConfig.warningColor, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'AI 예상 — 기출 유형을 학습한 AI 가 만든 문제입니다.\n'
-                  '실제 기출 시험지가 아니며, 연도·회차는 출제 경향의 기준입니다.',
-                  style: TextStyle(
-                      color: Colors.grey[300], fontSize: 12, height: 1.5),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '복원 기출 — 실제 시험을 응시자들이 복원한 문제입니다.\n'
+                    '유료 잠금 없이 전체 공개합니다.\n'
+                    '출처: Life-Journey 블로그 (CC BY 4.0)',
+                    style: TextStyle(
+                      color: Colors.grey[300],
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          if (hasRestored && hasAi) const SizedBox(height: 10),
+          if (hasAi)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  color: AppConfig.warningColor,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'AI 예상 — 기출 유형을 학습한 AI 가 만든 문제입니다.\n'
+                    '실제 기출 시험지가 아니며, 연도·회차는 출제 경향의 기준입니다.',
+                    style: TextStyle(
+                      color: Colors.grey[300],
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -241,8 +294,7 @@ class _RoundListScreenState extends State<RoundListScreen> {
           borderRadius: BorderRadius.circular(12),
           onTap: () => _open(r.year, r.round, r.source),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
                 Container(
@@ -253,11 +305,14 @@ class _RoundListScreenState extends State<RoundListScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
-                    child: Text('${r.round}회',
-                        style: const TextStyle(
-                            color: AppConfig.primaryColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800)),
+                    child: Text(
+                      '${r.round}회',
+                      style: const TextStyle(
+                        color: AppConfig.primaryColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -271,15 +326,17 @@ class _RoundListScreenState extends State<RoundListScreen> {
                         children: [
                           Flexible(
                             child: Text(
-                                restored
-                                    ? '${r.year}년 ${r.round}회 복원 기출'
-                                    : '${r.year}년 ${r.round}회 유형',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700)),
+                              restored
+                                  ? '${r.year}년 ${r.round}회 복원 기출'
+                                  : '${r.year}년 ${r.round}회 유형',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 8),
                           _badge(r.source),
@@ -290,8 +347,7 @@ class _RoundListScreenState extends State<RoundListScreen> {
                         restored
                             ? '${r.count}문항 · 실제 시험 복원 · 전체 공개'
                             : '${r.count}문항 · AI 예상문제',
-                        style:
-                            TextStyle(color: Colors.grey[500], fontSize: 12),
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
                       ),
                     ],
                   ),
@@ -312,8 +368,11 @@ class PastExamQuizScreen extends StatelessWidget {
   final List<Question> questions;
   final String title;
 
-  const PastExamQuizScreen(
-      {super.key, required this.questions, required this.title});
+  const PastExamQuizScreen({
+    super.key,
+    required this.questions,
+    required this.title,
+  });
 
   @override
   Widget build(BuildContext context) =>

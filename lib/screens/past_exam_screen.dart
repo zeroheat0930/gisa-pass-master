@@ -109,6 +109,23 @@ class _PastExamScreenState extends State<PastExamScreen> {
     }
   }
 
+  /// 회차 목록을 연다. [source] 로 복원 기출/AI 예상을 갈라서 보여준다.
+  ///
+  /// 전환 애니메이션 중 두 번째 탭이 라우트를 한 장 더 쌓지 않게 막는다
+  /// (_loadAndStart 의 _isLoading 가드와 동일 이유).
+  void _openRounds(String source) {
+    if (_openingRounds) return;
+    _openingRounds = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) =>
+                RoundListScreen(db: widget.db, sourceFilter: source),
+          ),
+        )
+        .whenComplete(() => _openingRounds = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -140,65 +157,24 @@ class _PastExamScreenState extends State<PastExamScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 회차별 문제집
-                  Material(
-                    color: AppConfig.cardColor,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      // 전환 애니메이션 중 두 번째 탭이 라우트를 한 장 더 쌓지
-                      // 않게 막는다 (_loadAndStart 의 _isLoading 가드와 동일 이유).
-                      onTap: () {
-                        if (_openingRounds) return;
-                        _openingRounds = true;
-                        Navigator.of(context)
-                            .push(
-                              MaterialPageRoute(
-                                builder: (_) => RoundListScreen(db: widget.db),
-                              ),
-                            )
-                            .whenComplete(() => _openingRounds = false);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF7E57C2)
-                                    .withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(11),
-                              ),
-                              child: const Icon(Icons.library_books,
-                                  color: Color(0xFF9575CD), size: 22),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('회차별 문제집',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w800)),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                      '2020~${AppConfig.latestQuestionYear}년 회차별로 골라 풀기',
-                                      style: const TextStyle(
-                                          color: Color(0xFF9E9E9E),
-                                          fontSize: 12)),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.chevron_right, color: Colors.grey[600]),
-                          ],
-                        ),
-                      ),
-                    ),
+                  // 복원 기출 — 실제 시험을 복원한 문제. AI 예상과 성격이
+                  // 완전히 달라 입구부터 나눈다. 섞어두면 "오늘은 기출만 풀자"
+                  // 라는 아주 흔한 의도를 화면이 받아주지 못한다.
+                  _RoundBookTile(
+                    title: '복원 기출 회차별',
+                    subtitle: '실제 시험을 복원한 문제 · 2020~2026년 21개 회차',
+                    icon: Icons.verified_outlined,
+                    color: AppConfig.correctColor,
+                    onTap: () => _openRounds(Question.sourceRestored),
+                  ),
+                  const SizedBox(height: 12),
+
+                  _RoundBookTile(
+                    title: 'AI 예상 회차별',
+                    subtitle: '기출 유형을 학습한 AI 예상문제 · 회차별로 골라 풀기',
+                    icon: Icons.auto_awesome,
+                    color: AppConfig.warningColor,
+                    onTap: () => _openRounds(Question.sourceAi),
                   ),
                   const SizedBox(height: 24),
 
@@ -1431,3 +1407,69 @@ Widget buildPastExamQuiz({
   required String title,
 }) =>
     _QuizScreen(questions: questions, title: title);
+
+/// 회차별 문제집 입구 타일. 복원 기출과 AI 예상이 각각 하나씩 쓴다.
+///
+/// 두 벌을 복붙하지 않는다 — 이 코드베이스에서 반복된 사고가 '같은 것을 복붙하고
+/// 한쪽만 고치는 것' 이라, 색과 문구만 다른 타일은 하나로 묶어둔다.
+class _RoundBookTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _RoundBookTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppConfig.cardColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: Color(0xFF9E9E9E), fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[600]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

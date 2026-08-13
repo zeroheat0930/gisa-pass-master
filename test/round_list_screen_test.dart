@@ -33,14 +33,15 @@ class _StubDb extends DatabaseService {
 }
 
 void main() {
-  Future<_StubDb> pump(WidgetTester tester) async {
+  Future<_StubDb> pump(WidgetTester tester, {String? sourceFilter}) async {
     // 같은 2026년 2회 안에 복원 기출과 AI 예상이 함께 있는 상황을 재현한다.
     final db = _StubDb([
       (year: 2026, round: 2, source: 'restored', count: 12),
       (year: 2026, round: 2, source: 'ai', count: 41),
       (year: 2025, round: 3, source: 'ai', count: 56),
     ]);
-    await tester.pumpWidget(MaterialApp(home: RoundListScreen(db: db)));
+    await tester.pumpWidget(MaterialApp(
+        home: RoundListScreen(db: db, sourceFilter: sourceFilter)));
     await tester.pumpAndSettle();
     return db;
   }
@@ -91,5 +92,48 @@ void main() {
 
     expect(db.requested, [(2026, 2, 'restored')],
         reason: '출처를 안 넘기면 복원 기출을 눌러도 AI 문항까지 섞여 나온다');
+  });
+
+  group('출처별로 갈라 보기', () {
+    testWidgets('복원 기출만 고르면 AI 예상은 목록에 없다', (tester) async {
+      await pump(tester, sourceFilter: Question.sourceRestored);
+
+      expect(find.text('2026년 2회 복원 기출'), findsOneWidget);
+      expect(find.text('2026년 2회 유형'), findsNothing);
+      expect(find.text('2025년 3회 유형'), findsNothing);
+    });
+
+    testWidgets('AI 예상만 고르면 복원 기출은 목록에 없다', (tester) async {
+      await pump(tester, sourceFilter: Question.sourceAi);
+
+      expect(find.text('2026년 2회 유형'), findsOneWidget);
+      expect(find.text('2026년 2회 복원 기출'), findsNothing);
+    });
+
+    testWidgets('AI 예상만 보는 화면에는 복원 기출 출처를 띄우지 않는다', (tester) async {
+      // 이 화면에는 복원 기출이 한 문제도 없다. 여기에 "출처: Life-Journey" 를
+      // 띄우면 AI 문항이 거기서 온 것처럼 읽혀 오히려 거짓말이 된다.
+      await pump(tester, sourceFilter: Question.sourceAi);
+
+      expect(find.textContaining('Life-Journey'), findsNothing);
+      expect(find.textContaining('CC BY 4.0'), findsNothing);
+      expect(find.textContaining('실제 기출 시험지가 아니'), findsOneWidget,
+          reason: 'AI 고지는 남아야 한다');
+    });
+
+    testWidgets('복원 기출만 보는 화면에는 저작자 표시가 반드시 남는다', (tester) async {
+      // CC BY 4.0 의 유일한 의무다. 여기서 사라지면 라이선스 위반이다.
+      await pump(tester, sourceFilter: Question.sourceRestored);
+
+      expect(find.textContaining('Life-Journey'), findsOneWidget);
+      expect(find.textContaining('CC BY 4.0'), findsOneWidget);
+      expect(find.textContaining('실제 기출 시험지가 아니'), findsNothing,
+          reason: '실제 기출을 AI 가 만든 것처럼 읽히면 안 된다');
+    });
+
+    testWidgets('화면 제목이 무엇을 보고 있는지 말해준다', (tester) async {
+      await pump(tester, sourceFilter: Question.sourceRestored);
+      expect(find.text('복원 기출 회차별'), findsOneWidget);
+    });
   });
 }
