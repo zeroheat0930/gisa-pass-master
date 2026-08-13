@@ -339,6 +339,92 @@ void main() {
       expect(rows.last['round'], 1);
     });
 
+    // v1.8.0 은 동기화 매칭 키에 연도·회차를 더했다. 그 키로 **기존 유저의 행을
+    // 다시 찾지 못하면** 옛 행이 방치된 채 새 행이 INSERT 되어 문항이 영구 중복되고
+    // (삭제 경로가 없다) 유저의 학습 이력은 아무도 안 푸는 유령 문항을 가리키게 된다.
+    // 돈 내고 쓰는 유저의 DB 라서 여기가 이 릴리스에서 가장 위험한 지점이다.
+    group('구버전 유저가 업데이트를 받는 경로', () {
+      /// 예전 버전 상태를 만든다 — 지금 에셋으로 채운 뒤, 이번 릴리스에서
+      /// 추가된 회차만 지워 "그때는 없던" 상태로 되돌린다.
+      Future<void> seedOldVersion(Database db, {required int keepFromYear}) async {
+        await DatabaseService.syncQuestionsFromAssets(db);
+        await db.delete('questions',
+            where: "source = 'restored' AND year < ?", whereArgs: [keepFromYear]);
+      }
+
+      for (final (label, keepFromYear, oldRestored) in [
+        ('복원 기출 20문항만 있던 유저 (v1.7.0)', 2026, 40),
+        ('복원 기출 100문항까지 있던 유저', 2025, 100),
+      ]) {
+        test('$label 가 업데이트해도 문항이 중복되지 않는다', () async {
+          final db = await openMemoryDb();
+          addTearDown(db.close);
+          await createQuestionsTable(db);
+          await seedOldVersion(db, keepFromYear: keepFromYear);
+
+          final before = _firstInt(await db.rawQuery(
+              "SELECT COUNT(*) FROM questions WHERE source = 'restored'"));
+          expect(before, oldRestored, reason: '옛 상태를 제대로 재현하지 못했다');
+
+          // 업데이트 = 새 에셋으로 다시 동기화
+          await DatabaseService.syncQuestionsFromAssets(db);
+
+          final after = _firstInt(await db.rawQuery(
+              "SELECT COUNT(*) FROM questions WHERE source = 'restored'"));
+          expect(after, 420, reason: '복원 기출이 420문항이 되어야 한다');
+
+          final total =
+              _firstInt(await db.rawQuery('SELECT COUNT(*) FROM questions'));
+          expect(total, await _assetQuestionCount(),
+              reason: '에셋보다 많으면 중복 INSERT 가 일어난 것이다');
+
+          // 같은 (연도, 회차, 본문) 이 두 번 들어간 행이 없어야 한다.
+          final dupes = await db.rawQuery(
+              'SELECT year, round, question_text, COUNT(*) c FROM questions '
+              'GROUP BY year, round, question_text, IFNULL(code_snippet, \'\') '
+              'HAVING c > 1');
+          expect(dupes, isEmpty, reason: '중복된 문항: $dupes');
+        });
+      }
+
+      test('업데이트해도 기존 문항의 id 와 학습 이력이 유지된다', () async {
+        final db = await openMemoryDb();
+        addTearDown(db.close);
+        await createQuestionsTable(db);
+        await db.execute('''
+          CREATE TABLE answer_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_id INTEGER NOT NULL,
+            is_correct INTEGER NOT NULL,
+            user_answer TEXT NOT NULL,
+            answered_at TEXT NOT NULL
+          )
+        ''');
+        await seedOldVersion(db, keepFromYear: 2026);
+
+        // 유저가 옛 버전에서 풀어둔 문항 하나를 고른다.
+        final solved = (await db.query('questions',
+                where: "source = 'restored'", orderBy: 'id', limit: 1))
+            .first;
+        final qid = solved['id'] as int;
+        final text = solved['question_text'] as String;
+        await db.insert('answer_records', {
+          'question_id': qid,
+          'is_correct': 1,
+          'user_answer': '정답',
+          'answered_at': '2026-08-01T00:00:00.000',
+        });
+
+        await DatabaseService.syncQuestionsFromAssets(db);
+
+        final still =
+            await db.query('questions', where: 'id = ?', whereArgs: [qid]);
+        expect(still, hasLength(1), reason: '풀어둔 문항의 행이 사라졌다');
+        expect(still.first['question_text'], text,
+            reason: 'id 가 다른 문항으로 옮겨갔다 — 학습 이력이 거짓말을 하게 된다');
+      });
+    });
+
     test('감사에서 확정된 정답 오류가 실제로 고쳐져 있다', () async {
       Future<Map<String, dynamic>> item(String file, int i) async {
         final raw = await rootBundle.loadString('assets/questions/$file');
