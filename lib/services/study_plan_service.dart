@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 import '../models/study_plan.dart';
 import '../models/question.dart';
 import 'database_service.dart';
@@ -303,6 +304,22 @@ class StudyPlanService extends ChangeNotifier {
     }
   }
 
+  /// 이 미션은 **복원 기출로만** 내는가.
+  ///
+  /// 시험이 가까울수록 AI 예상문제보다 실제로 나왔던 문제를 푸는 편이 낫다.
+  /// 그 자리는 '실전 모의고사'(queryType: prediction) 미션이다 — 각 플랜의
+  /// 끝자락에 이미 배치되어 있어서 날짜로 따로 자를 필요가 없다.
+  ///
+  /// **날짜로 "마지막 N일" 을 자르면 안 된다.** 플랜의 마지막 날들은 대개
+  /// '최종 오답 정리'·'가볍게 복습' 인데, 이건 유저 **자신의** 오답과 풀이
+  /// 이력을 다루는 미션이다. 여기에 복원 기출을 밀어넣으면 미션의 목적이
+  /// 통째로 사라진다(실제로 그렇게 짰다가 테스트에서 걸렸다).
+  ///
+  /// 1일 벼락치기는 예외다. 그 하루가 곧 시험 전날이라 미션 종류와 무관하게
+  /// 실제 기출을 푸는 편이 낫다.
+  static bool usesRestoredPool(String planType, String queryType) =>
+      queryType == 'prediction' || planType == '1day';
+
   StudyPlanService(this._db);
 
   /// 현재 진행 중인 플랜 로드
@@ -415,6 +432,43 @@ class StudyPlanService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 미션 조건으로 문제를 뽑는다.
+  ///
+  /// [restoredOnly] 면 복원 기출을 먼저 채우고, 모자란 만큼만 나머지에서
+  /// 겹치지 않게 보충한다. 부족하다고 미션 문제 수를 줄이면 유저는 앱이
+  /// 고장난 줄 안다.
+  Future<List<Question>> _pick(
+    Database db, {
+    required String where,
+    required List<Object?> args,
+    required int limit,
+    required bool restoredOnly,
+  }) async {
+    Future<List<Question>> run(String w, List<Object?> a, int n) async {
+      final maps = await db.query('questions',
+          where: w, whereArgs: a, orderBy: 'RANDOM()', limit: n);
+      return maps.map((m) => Question.fromMap(m)).toList();
+    }
+
+    if (!restoredOnly) return run(where, args, limit);
+
+    final picked = await run(
+      '$where AND source = ?',
+      [...args, Question.sourceRestored],
+      limit,
+    );
+    if (picked.length >= limit) return picked;
+
+    final ids = picked.map((q) => q.id).whereType<int>().toList();
+    final notIn = ids.isEmpty ? '' : ' AND id NOT IN (${ids.map((_) => '?').join(',')})';
+    picked.addAll(await run(
+      '$where$notIn',
+      [...args, ...ids],
+      limit - picked.length,
+    ));
+    return picked;
+  }
+
   /// Day별 문제 로드
   Future<List<Question>> getQuestionsForDay(int dayNumber) async {
     final planType = _currentPlan?.planType ?? '14day';
@@ -424,26 +478,29 @@ class StudyPlanService extends ChangeNotifier {
     final mission = missionList[idx];
     final db = await _db.database;
 
+    // 실전 모의고사 자리면 복원 기출로만 낸다. 모자라면 나머지로 채워
+    // **미션의 문제 수 자체는 줄지 않게** 한다 — 플랜이 갑자기 짧아지면
+    // 유저는 앱이 고장난 줄 안다.
+    final restoredOnly = usesRestoredPool(planType, mission.queryType);
+
     switch (mission.queryType) {
       case 'type':
-        final maps = await db.query(
-          'questions',
+        return _pick(
+          db,
           where: 'question_type = ?',
-          whereArgs: [mission.filterValue],
-          orderBy: 'RANDOM()',
+          args: [mission.filterValue],
           limit: mission.questionCount,
+          restoredOnly: restoredOnly,
         );
-        return maps.map((m) => Question.fromMap(m)).toList();
 
       case 'type_difficulty':
-        final maps = await db.query(
-          'questions',
+        return _pick(
+          db,
           where: 'question_type = ? AND difficulty >= ?',
-          whereArgs: [mission.filterValue, mission.minDifficulty],
-          orderBy: 'RANDOM()',
+          args: [mission.filterValue, mission.minDifficulty],
           limit: mission.questionCount,
+          restoredOnly: restoredOnly,
         );
-        return maps.map((m) => Question.fromMap(m)).toList();
 
       case 'weakness':
         final errorRates = await _db.getAllErrorRates();
@@ -479,6 +536,19 @@ class StudyPlanService extends ChangeNotifier {
         return questions;
 
       case 'prediction':
+        // 실전 모의고사 — 실제로 나왔던 문제로 낸다. 모자라면 나머지로 채운다.
+        if (restoredOnly) {
+          final picked = await _db.getRandomQuestions(mission.questionCount,
+              source: Question.sourceRestored);
+          if (picked.length >= mission.questionCount) return picked;
+          final ids = picked.map((q) => q.id).whereType<int>().toSet();
+          final rest = await _db.getAllQuestions();
+          rest.shuffle();
+          picked.addAll(rest
+              .where((q) => !ids.contains(q.id))
+              .take(mission.questionCount - picked.length));
+          return picked;
+        }
         final all = await _db.getAllQuestions();
         all.shuffle();
         return all.take(mission.questionCount).toList();
