@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:gisa_pass_master/config.dart';
-import 'package:gisa_pass_master/screens/pass_rate_screen.dart';
+import 'package:gisa_pass_master/screens/round_list_screen.dart';
 
 void main() => runApp(const _PreviewApp());
 
@@ -17,9 +17,8 @@ class _PreviewApp extends StatelessWidget {
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: AppConfig.backgroundColor,
       ),
-      // 실제 휴대폰 폭으로 좁혀서 본다.
       home: Center(
-        child: SizedBox(width: 390, child: const PassRateScreen()),
+        child: SizedBox(width: 390, child: const RoundListScreen()),
       ),
     );
   }

@@ -316,6 +316,29 @@ void main() {
           reason: '복원 기출은 회차당 정확히 20문항이어야 한다: $rows');
     });
 
+    test('복원 기출 21개 회차가 목록 조회에 그대로 나온다', () async {
+      // 회차 목록 화면은 getRoundSummary 가 돌려주는 것만 보여준다.
+      // 에셋에 문항을 넣어도 이 조회에 안 잡히면 유저에게는 없는 것이나 같다.
+      // 화면 테스트는 가짜 DB 를 쓰므로 이 구간은 여기서만 확인된다.
+      final db = await openMemoryDb();
+      addTearDown(db.close);
+      await createQuestionsTable(db);
+      await DatabaseService.syncQuestionsFromAssets(db);
+
+      final rows = await db.rawQuery(
+          "SELECT year, round, COUNT(*) c FROM questions WHERE source = 'restored' "
+          'GROUP BY year, round ORDER BY year DESC, round DESC');
+
+      expect(rows, hasLength(21), reason: '2020~2026년 21개 회차가 다 있어야 한다');
+      expect(rows.every((r) => r['c'] == 20), isTrue,
+          reason: '회차당 20문항이어야 한다: $rows');
+
+      // 양 끝이 맞는지도 본다 — 정렬이나 연도 파싱이 어긋나면 여기서 걸린다.
+      expect(rows.first['year'], 2026);
+      expect(rows.last['year'], 2020);
+      expect(rows.last['round'], 1);
+    });
+
     test('감사에서 확정된 정답 오류가 실제로 고쳐져 있다', () async {
       Future<Map<String, dynamic>> item(String file, int i) async {
         final raw = await rootBundle.loadString('assets/questions/$file');
