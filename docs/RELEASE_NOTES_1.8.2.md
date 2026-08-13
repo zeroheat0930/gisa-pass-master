@@ -80,15 +80,37 @@ Play 출시 노트 237자 / 500자 제한. Play 출시 이름은 `1.8.2 (37)`.
   가 이를 지킨다.
 - 복원 기출은 유료 잠금 없이 전체 공개. 결제 항목 변경 없음.
 
+## Play Console 권장사항 4건 처리 결과
+
+| 권장사항 | 원인 | 처리 |
+|---|---|---|
+| R8 / 최적화된 리소스 축소 미사용 | 우리 `build.gradle.kts` | **켰다.** APK 70.1 → 64.6MB |
+| 더 넓은 화면 — `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` | **Flutter 엔진** | 우리 코드 아님. Android 15 에서 실제 확인 — 인셋 정상 |
+| 네트워크 이미지 수동 다운로드·디코딩 | **AdMob SDK** | 우리 코드 아님 |
+| 비트맵 이미지 최적화 | 런처 아이콘 PNG(약 390KB) | 미처리. 효과 미미해 뒤로 미룸 |
+
+뒤의 둘은 Flutter·AdMob 버전을 올려야 사라진다. **권고이지 정책 위반이 아니라
+출시를 막지 않는다.**
+
+`android/app/proguard-rules.pro` 를 새로 넣었다. R8 은 리플렉션으로 접근되는
+클래스를 지우거나 이름을 바꾼다. Play Billing·AdMob·flutter_local_notifications
+가 그런 것들이라 붙잡아 뒀다. **여기서 실수하면 릴리즈에서만, 그것도 조용히
+깨진다.**
+
 ## 배포 전 체크리스트
 
 - [x] `flutter analyze` 무결
 - [x] `flutter test` 277건 통과
-- [ ] 시뮬레이터 통합 테스트
-- [ ] `flutter build ipa --release`
-- [ ] `flutter build appbundle --release`
+- [x] iOS 시뮬레이터 통합 테스트 5건 통과
+- [x] **Android 15(API 35) 에뮬레이터에서 R8 켠 릴리즈 실행 검증**
+      — 크래시 없음, 문항 로딩·화면 전환·광고 로드 정상, 저작권 고지 표시 확인
+- [x] `flutter build ipa --release`
+- [x] `flutter build appbundle --release`
 - [ ] Transporter 업로드 → App Store Connect 심사 제출
 - [ ] Play Console 업로드 → **게시 개요 → 변경사항 게시**
+- [ ] **실기기에서 결제 확인** (에뮬레이터에 구글 계정이 없어 `IAP available:
+      false`. R8 을 끈 빌드에서도 같은 값이라 R8 탓은 아니지만, 실제 구매는
+      확인된 바 없다.)
 
 ## Play 주의
 
