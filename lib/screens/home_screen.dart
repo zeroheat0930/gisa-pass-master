@@ -10,6 +10,7 @@ import '../providers/stats_provider.dart';
 import '../services/ai_exam_quota.dart';
 import '../services/purchase_service.dart';
 import '../widgets/copy_email_row.dart';
+import '../widgets/license_notice_row.dart';
 import '../widgets/dday_timer.dart';
 import '../widgets/exam_quota_dialog.dart';
 import '../widgets/pass_score_card.dart';
@@ -1341,6 +1342,10 @@ class _DevMessageCardState extends State<_DevMessageCard>
                 // 탭을 가로채 주소만 복사한다. url_launcher 를 넣지 않은 것은
                 // 메일 하나 때문에 의존성을 늘릴 이유가 없어서다.
                 const CopyEmailRow(email: AppConfig.contactEmail),
+                const SizedBox(height: 8),
+                // 오픈소스 라이선스 고지. BSD·MIT·Apache 2.0 이 배포물에
+                // 저작권 고지를 포함하라고 요구하므로 앱 어딘가에는 있어야 한다.
+                const LicenseNoticeRow(),
                 const SizedBox(height: 12),
                 AnimatedBuilder(
                   animation: _pulseAnim,

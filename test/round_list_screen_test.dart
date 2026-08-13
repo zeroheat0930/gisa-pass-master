@@ -74,11 +74,19 @@ void main() {
   testWidgets('출처와 라이선스가 목록 위에 표시된다', (tester) async {
     await pump(tester);
 
-    // CC BY 4.0 의 유일한 의무가 저작자 표시다. 이게 사라지면 라이선스 위반이다.
+    // CC BY 4.0 제3조 (a)(1) 은 네 가지를 요구한다. 하나라도 빠지면
+    // 라이선스가 소멸하고(제6조 (a)) 무단 이용이 된다. 넷 다 확인한다.
     expect(find.textContaining('Life-Journey'), findsOneWidget,
-        reason: '복원 기출 출처를 반드시 표시해야 한다');
+        reason: '1. 저작자 표시');
     expect(find.textContaining('CC BY 4.0'), findsOneWidget,
-        reason: '라이선스 표시도 CC BY 의 요구사항이다');
+        reason: '2. 라이선스 종류 명시');
+    expect(find.textContaining('creativecommons.org/licenses/by/4.0'),
+        findsOneWidget,
+        reason: '3. 라이선스 링크(URI) — 종류만 적고 링크를 빼면 안 된다');
+    expect(find.textContaining('텍스트로 옮겼습니다'), findsOneWidget,
+        reason: '4. 변경 공지 — 원문 이미지를 텍스트·JSON 으로 옮겼다');
+    expect(find.textContaining('chobopark.tistory.com'), findsOneWidget,
+        reason: '원문에 도달할 수 있어야 출처 표시가 실질적이다');
     expect(find.textContaining('유료 잠금 없이 전체 공개'), findsOneWidget);
     expect(find.textContaining('실제 기출 시험지가 아니'), findsOneWidget,
         reason: 'AI 문항에 대한 고지도 함께 있어야 한다');
@@ -122,11 +130,14 @@ void main() {
     });
 
     testWidgets('복원 기출만 보는 화면에는 저작자 표시가 반드시 남는다', (tester) async {
-      // CC BY 4.0 의 유일한 의무다. 여기서 사라지면 라이선스 위반이다.
+      // 여기서 사라지면 라이선스가 소멸한다(제6조 (a)).
       await pump(tester, sourceFilter: Question.sourceRestored);
 
       expect(find.textContaining('Life-Journey'), findsOneWidget);
       expect(find.textContaining('CC BY 4.0'), findsOneWidget);
+      expect(find.textContaining('creativecommons.org/licenses/by/4.0'),
+          findsOneWidget);
+      expect(find.textContaining('텍스트로 옮겼습니다'), findsOneWidget);
       expect(find.textContaining('실제 기출 시험지가 아니'), findsNothing,
           reason: '실제 기출을 AI 가 만든 것처럼 읽히면 안 된다');
     });

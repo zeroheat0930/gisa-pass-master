@@ -15,6 +15,7 @@ import 'services/prediction_engine.dart';
 import 'services/spaced_repetition_service.dart';
 import 'services/ad_service.dart';
 import 'services/purchase_service.dart';
+import 'services/license_notices.dart';
 import 'services/notification_service.dart';
 import 'widgets/notification_opt_in.dart';
 import 'services/study_plan_service.dart';
@@ -28,6 +29,10 @@ void main() async {
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
   }
+
+  // 문항 데이터의 출처·라이선스를 Flutter 라이선스 목록에 등록한다.
+  // 패키지가 아닌 저작물은 Flutter 가 자동으로 모아주지 않는다.
+  LicenseNotices.register();
 
   // 서비스 생성 (앱 수명 동안 한 번만)
   final db = DatabaseService();

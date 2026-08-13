@@ -212,7 +212,16 @@ class _RoundListScreenState extends State<RoundListScreen> {
   /// 화면 맨 위 고지 + 출처 표기.
   ///
   /// 회차명이 "그 회차 시험지" 로 읽히지 않게 못박고, 복원 기출의 출처를 밝힌다.
-  /// **CC BY 4.0 의 유일한 의무가 저작자 표시이므로 이 안내는 지우면 안 된다.**
+  /// **이 안내는 지우면 안 된다.** 지우는 순간 라이선스가 소멸해(CC BY 4.0
+  /// 제6조 (a)) 무단 이용이 된다.
+  ///
+  /// CC BY 4.0 제3조 (a)(1) 이 요구하는 것은 네 가지다 — 저작자, 라이선스
+  /// 종류, **라이선스 링크**, 그리고 **변경했다면 그 사실**. 원문은 문항이
+  /// 이미지로 올라와 있어 우리가 읽어 텍스트·JSON 으로 옮겼으므로 변경에
+  /// 해당한다. 넷 다 아래 문구에 들어 있다.
+  ///
+  /// 출처가 CC BY 4.0 이었다는 증거(원문 HTML·해시·아카이브 스냅샷)는
+  /// `docs/license-evidence/` 에 있다.
   ///
   /// 다만 **목록에 실제로 있는 것만 고지한다.** AI 예상만 있는 화면에
   /// "출처: Life-Journey 블로그" 를 띄우면 AI 문항이 거기서 온 것처럼 읽혀
@@ -244,7 +253,10 @@ class _RoundListScreenState extends State<RoundListScreen> {
                   child: Text(
                     '복원 기출 — 실제 시험을 응시자들이 복원한 문제입니다.\n'
                     '유료 잠금 없이 전체 공개합니다.\n'
-                    '출처: Life-Journey 블로그 (CC BY 4.0)',
+                    '출처: Life-Journey 블로그 (chobopark.tistory.com)\n'
+                    '라이선스: CC BY 4.0 '
+                    '(creativecommons.org/licenses/by/4.0)\n'
+                    '원문의 이미지·표를 앱에서 읽을 수 있게 텍스트로 옮겼습니다.',
                     style: TextStyle(
                       color: Colors.grey[300],
                       fontSize: 12,
