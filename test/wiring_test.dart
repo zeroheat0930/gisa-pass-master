@@ -327,6 +327,34 @@ void main() {
     });
   });
 
+  // ── 3b) 학습 플랜 유료 게이트 배선 ──────────────────────────────────────
+  // 감사 확정: 1일/3일 플랜 전 구간 무료 + 초기화 무제한 조합으로
+  // 유료 구간을 영영 살 이유가 없었다. 게이트 클래스만 테스트하면
+  // 화면에서 호출을 지워도 초록불이 뜨므로, 배선 자체를 잡아둔다.
+  group('학습 플랜 유료 게이트 배선', () {
+    String source(String path) => _activeSource(path);
+
+    test('초기화 버튼이 쿼터를 확인한다', () {
+      final screen = source('lib/screens/study_plan_screen.dart');
+      expect(screen.contains('PlanResetQuota.canReset'), isTrue,
+          reason: '초기화 전 무료 한도를 확인해야 한다 (수익 직결)');
+    });
+
+    test('초기화가 실행되면 쿼터를 소모한다', () {
+      final screen = source('lib/screens/study_plan_screen.dart');
+      expect(screen.contains('PlanResetQuota.consume'), isTrue,
+          reason: '확인만 하고 소모하지 않으면 제한이 무의미하다');
+    });
+
+    test('화면이 게이팅 정본(StudyPlanService)을 쓴다', () {
+      final screen = source('lib/screens/study_plan_screen.dart');
+      expect(screen.contains('StudyPlanService.needsPremiumForDay'), isTrue,
+          reason: '화면에 사본 게이팅 로직을 두면 한쪽만 고쳐지는 패턴이 재발한다');
+      expect(screen.contains('_needsPremiumForDay'), isFalse,
+          reason: '스크린 로컬 사본이 되살아나면 정본과 어긋난다');
+    });
+  });
+
   // ── 4) 출제 예측 선정 ────────────────────────────────────────────────────
   // 우선순위 점수는 사실상 결정적이라, 전체를 정렬해 상위 N개를 자르면 매 세션
   // 똑같은 문제만 나오고 나머지 수백 문항이 영영 출제되지 않는다.

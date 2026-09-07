@@ -6,6 +6,7 @@ import '../config.dart';
 import '../models/study_plan.dart';
 import '../providers/study_provider.dart';
 import '../services/study_plan_service.dart';
+import '../services/plan_reset_quota.dart';
 import '../services/purchase_service.dart';
 import 'quiz_screen.dart';
 import 'subscription_screen.dart';
@@ -111,9 +112,10 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     final planService = context.read<StudyPlanService>();
     final purchaseService = context.read<PurchaseService>();
 
-    // 프리미엄 체크: 1일/3일은 전체 무료, 5일은 Day 4부터, 7일/14일은 Day 4부터
+    // 프리미엄 체크: 무료는 짧은 플랜(1·3일) Day 1, 긴 플랜(5·7·14일) Day 3까지
     final planType = planService.currentPlan?.planType ?? '14day';
-    final needsPremium = _needsPremiumForDay(planType, dayNumber);
+    final needsPremium =
+        StudyPlanService.needsPremiumForDay(planType, dayNumber);
     if (needsPremium && !purchaseService.isPremium) {
       if (!mounted) return;
       Navigator.push(
@@ -163,16 +165,71 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     }
   }
 
-  static bool _needsPremiumForDay(String planType, int dayNumber) {
-    switch (planType) {
-      case '1day':
-      case '3day':
-        return false; // 전체 무료
-      case '5day':
-      case '7day':
-      case '14day':
-      default:
-        return dayNumber > 3;
+  /// 플랜 초기화 버튼. 무료 유저는 하루 1회만 — 무제한이면 무료 구간만 있는
+  /// 플랜을 리셋해 가며 영구 무료로 쓸 수 있다.
+  Future<void> _resetPlanPressed() async {
+    final planService = context.read<StudyPlanService>();
+    final isPremium = context.read<PurchaseService>().isPremium;
+
+    if (!await PlanResetQuota.canReset(isPremium: isPremium)) {
+      if (!mounted) return;
+      final goPremium = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppConfig.cardColor,
+          title: const Text('오늘은 여기까지',
+              style: TextStyle(color: Colors.white)),
+          content: const Text(
+            '무료 초기화는 하루 1회입니다.\n내일 다시 초기화하거나, 프리미엄으로 제한 없이 이용하세요.',
+            style: TextStyle(color: Colors.white70, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('닫기', style: TextStyle(color: Colors.grey[400])),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('프리미엄 보기',
+                  style: TextStyle(
+                      color: Color(0xFFFFD700), fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+      if (goPremium == true && mounted) {
+        Navigator.push(
+          context,
+          CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppConfig.cardColor,
+        title: const Text('플랜 초기화', style: TextStyle(color: Colors.white)),
+        content: const Text('진행 중인 플랜을 초기화하고 새로 시작하시겠습니까?',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('취소', style: TextStyle(color: Colors.grey[400])),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('초기화',
+                style: TextStyle(color: AppConfig.wrongColor)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await PlanResetQuota.consume(isPremium: isPremium);
+      await planService.resetPlan();
     }
   }
 
@@ -205,33 +262,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           if (plan != null)
             IconButton(
               icon: Icon(Icons.refresh, color: Colors.grey[500], size: 20),
-              onPressed: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: AppConfig.cardColor,
-                    title: const Text('플랜 초기화',
-                        style: TextStyle(color: Colors.white)),
-                    content: const Text('진행 중인 플랜을 초기화하고 새로 시작하시겠습니까?',
-                        style: TextStyle(color: Colors.white70)),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: Text('취소',
-                            style: TextStyle(color: Colors.grey[400])),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('초기화',
-                            style: TextStyle(color: AppConfig.wrongColor)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true && mounted) {
-                  await planService.resetPlan();
-                }
-              },
+              onPressed: _resetPlanPressed,
             ),
         ],
       ),
@@ -487,9 +518,9 @@ class _PlanTimelineView extends StatelessWidget {
               final progress = progressMap[dayNumber];
               final isCompleted = progress?.completed ?? false;
               final isToday = dayNumber == todayDay;
-              final isLocked = _StudyPlanScreenState._needsPremiumForDay(
-                      plan.planType, dayNumber) &&
-                  !isPremium;
+              final isLocked =
+                  StudyPlanService.needsPremiumForDay(plan.planType, dayNumber) &&
+                      !isPremium;
               final isPast = dayNumber < todayDay;
 
               return _DayCard(

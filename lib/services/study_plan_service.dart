@@ -304,6 +304,25 @@ class StudyPlanService extends ChangeNotifier {
     }
   }
 
+  /// 이 플랜의 이 날짜가 프리미엄 전용인가.
+  ///
+  /// 무료는 플랜 앞부분 맛보기까지다 — 긴 플랜(5·7·14일)은 Day 3까지,
+  /// 짧은 플랜(1·3일)은 Day 1까지. 예전에는 1일·3일 플랜이 **전 구간 무료**라
+  /// 짧은 플랜만 골라 쓰면 유료 구간을 영영 살 이유가 없었다.
+  /// 1일 플랜은 Day 1 하나뿐이라 "첫날 무료" 규칙 그대로 전부 무료가 된다.
+  static bool needsPremiumForDay(String planType, int dayNumber) {
+    switch (planType) {
+      case '1day':
+      case '3day':
+        return dayNumber > 1;
+      case '5day':
+      case '7day':
+      case '14day':
+      default:
+        return dayNumber > 3;
+    }
+  }
+
   /// 이 미션은 **복원 기출로만** 내는가.
   ///
   /// 시험이 가까울수록 AI 예상문제보다 실제로 나왔던 문제를 푸는 편이 낫다.
