@@ -103,10 +103,10 @@
 - [x] ~~`lib/services/database_service.dart` — questions 갱신 마이그레이션 부재~~ → DB v6 로 해결
 - [x] ~~`_submit()` 중복 제출 가드 부재~~ → 문제은행·AI 모의고사에 제출·이동 가드 추가
 - [x] ~~AI 예측이 무작위 50문항만 정렬해 사실상 랜덤 출제~~ → 전체 문항을 정렬 후 상위 50개 사용
-- [ ] `lib/screens/study_plan_screen.dart` — 프리미엄 게이팅 사실상 무력화 (1일/3일 플랜 전 구간 무료,
-      플랜 리셋 무제한) *(수익 직결)*
-- [ ] `ios/Runner/Info.plist` — `SKAdNetworkItems`에 AdMob 자기 ID 1개만 등록되어 미디에이션
-      수요처의 설치 어트리뷰션이 전부 유실 *(광고 수익 직접 손실)*
+- [x] ~~프리미엄 게이팅 사실상 무력화 (1일/3일 플랜 전 구간 무료, 플랜 리셋 무제한)~~
+      → 3일 플랜 Day 2부터 프리미엄, 무료 유저 초기화 하루 1회(`PlanResetQuota`).
+      **v1.8.2+39 빌드에는 미포함** — 다음 빌드부터 반영 (커밋 `7f93de0`)
+- [x] ~~`SKAdNetworkItems`에 AdMob 자기 ID 1개만 등록~~ → 50개 등록 확인 (빌드 39 포함)
 - [x] ~~프리미엄 캐시가 백업/기기이전으로 복제될 수 있음~~ → backup_rules / data_extraction_rules 로 제외
 - [x] ~~ATT 요청을 runApp() 이전에 await~~ → 첫 프레임 이후로 이동
 - [x] ~~배너 로드 실패 시 재시도 없음~~ → 지수 백오프 최대 3회 재시도
