@@ -9,6 +9,7 @@ import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
 import '../widgets/answer_effect.dart';
 import '../widgets/notification_opt_in.dart';
+import '../widgets/banner_ad_bar.dart';
 
 class QuizScreen extends StatefulWidget {
   final StudyMode mode;
@@ -303,15 +304,8 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
       appBar: _buildAppBar(context),
-      bottomNavigationBar: _bannerLoaded && _bannerAd != null
-          ? SafeArea(
-              child: SizedBox(
-                height: _bannerAd!.size.height.toDouble(),
-                width: _bannerAd!.size.width.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
-            )
-          : null,
+      bottomNavigationBar:
+          BannerAdBar(bannerAd: _bannerAd, loaded: _bannerLoaded),
       body: SafeArea(
         child: Column(
           children: [

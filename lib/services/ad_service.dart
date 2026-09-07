@@ -306,9 +306,19 @@ class AdService {
       await ad.show(onUserEarnedReward: (_, __) => earned = true);
     } catch (e) {
       debugPrint('리워드 광고 show 오류: $e');
+      ad.dispose();
+      loadRewardedAd(); // 정상 경로의 콜백들처럼 다음 노출 기회를 채워둔다
       if (!completer.isCompleted) completer.complete(false);
     }
-    return completer.future;
+    // 콜백이 아예 오지 않는 비정상 경로의 안전판. 이게 없으면 호출자
+    // (모의고사 버튼의 _isNavigating 등)가 앱 재시작 전까지 잠긴다.
+    return completer.future.timeout(
+      const Duration(minutes: 3),
+      onTimeout: () {
+        loadRewardedAd();
+        return false;
+      },
+    );
   }
 
   /// 리소스 해제
@@ -316,5 +326,8 @@ class AdService {
     _interstitialAd?.dispose();
     _interstitialAd = null;
     _isAdLoaded = false;
+    _rewardedAd?.dispose();
+    _rewardedAd = null;
+    _isLoadingRewarded = false;
   }
 }

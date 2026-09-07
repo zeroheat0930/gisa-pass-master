@@ -100,6 +100,46 @@ void main() {
       expect(service.isPremium, isTrue,
           reason: '복원 콜백이 무시되면 재설치 유저가 평생 이용권을 잃는다');
     });
+
+    // StoreKit 은 error/canceled 트랜잭션도 pendingCompletePurchase 로
+    // 내려준다. 종결하지 않으면 큐에 남아 앱을 켤 때마다 재전달되고,
+    // 결제를 취소한 유저마다 하나씩 계속 쌓인다.
+    for (final status in [PurchaseStatus.error, PurchaseStatus.canceled]) {
+      test('$status 트랜잭션도 종결한다 — 프리미엄은 켜지 않고', () async {
+        SharedPreferences.setMockInitialValues({});
+
+        final service = PurchaseService();
+        final completed = <String>[];
+        service.completePurchaseForTest = (p) async {
+          completed.add(p.purchaseID ?? '');
+        };
+
+        service.handlePurchaseUpdates([_purchase(status)]);
+        await pumpEventQueue();
+
+        expect(completed, ['txn-1'],
+            reason: '실패·취소 트랜잭션을 종결하지 않으면 StoreKit 큐에 영영 남는다');
+        expect(service.isPremium, isFalse,
+            reason: '실패한 결제에 프리미엄을 주면 안 된다');
+      });
+    }
+
+    test('이미 종결된 error 트랜잭션은 다시 종결하지 않는다', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final service = PurchaseService();
+      final completed = <String>[];
+      service.completePurchaseForTest = (p) async {
+        completed.add(p.purchaseID ?? '');
+      };
+
+      final p = _purchase(PurchaseStatus.error)..pendingCompletePurchase = false;
+      service.handlePurchaseUpdates([p]);
+      await pumpEventQueue();
+
+      expect(completed, isEmpty,
+          reason: '종결할 게 없는 트랜잭션에 completePurchase 를 부르면 안 된다');
+    });
   });
 
   group('프리미엄 영속성 — 읽기 (앱 재시작)', () {

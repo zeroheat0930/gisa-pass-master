@@ -355,6 +355,29 @@ void main() {
     });
   });
 
+  // ── 3c) 배너 표시 정본 배선 ─────────────────────────────────────────────
+  // 세 화면에 복붙된 배너 블록은 프리미엄을 구독하지 않아, 화면을 띄운 채
+  // 결제하면 방금 결제한 유저에게 배너가 계속 보였다. 정본(BannerAdBar)이
+  // 프리미엄을 구독하므로, 화면이 사본으로 돌아가면 그 버그가 재발한다.
+  group('배너 표시 정본 배선', () {
+    String source(String path) => _activeSource(path);
+
+    test('배너를 쓰는 화면은 전부 BannerAdBar 정본을 쓴다', () {
+      for (final path in [
+        'lib/screens/quiz_screen.dart',
+        'lib/screens/ai_prediction_screen.dart',
+        'lib/screens/past_exam_screen.dart',
+      ]) {
+        final s = source(path);
+        expect(s.contains('BannerAdBar('), isTrue,
+            reason: '$path 가 배너 정본 위젯을 쓰지 않는다');
+        expect(s.contains('AdWidget('), isFalse,
+            reason: '$path 에 화면 로컬 배너 사본이 되살아나면 '
+                '결제 직후 배너 잔존 버그가 재발한다');
+      }
+    });
+  });
+
   // ── 4) 출제 예측 선정 ────────────────────────────────────────────────────
   // 우선순위 점수는 사실상 결정적이라, 전체를 정렬해 상위 N개를 자르면 매 세션
   // 똑같은 문제만 나오고 나머지 수백 문항이 영영 출제되지 않는다.

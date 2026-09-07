@@ -13,6 +13,7 @@ import '../services/answer_checker.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/exam_quota_dialog.dart';
 import '../widgets/question_card.dart';
+import '../widgets/banner_ad_bar.dart';
 import 'subscription_screen.dart';
 
 class AiPredictionScreen extends StatefulWidget {
@@ -360,15 +361,8 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _bannerLoaded && _bannerAd != null
-          ? SafeArea(
-              child: SizedBox(
-                height: _bannerAd!.size.height.toDouble(),
-                width: _bannerAd!.size.width.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
-            )
-          : null,
+      bottomNavigationBar:
+          BannerAdBar(bannerAd: _bannerAd, loaded: _bannerLoaded),
       body: SafeArea(
         child: Column(
           children: [

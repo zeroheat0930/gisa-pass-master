@@ -11,6 +11,7 @@ import '../services/answer_checker.dart';
 import '../services/database_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
+import '../widgets/banner_ad_bar.dart';
 import 'round_list_screen.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -703,15 +704,8 @@ class _QuizScreenState extends State<_QuizScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _bannerLoaded && _bannerAd != null
-          ? SafeArea(
-              child: SizedBox(
-                height: _bannerAd!.size.height.toDouble(),
-                width: _bannerAd!.size.width.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
-            )
-          : null,
+      bottomNavigationBar:
+          BannerAdBar(bannerAd: _bannerAd, loaded: _bannerLoaded),
       body: SafeArea(
         child: Column(
           children: [

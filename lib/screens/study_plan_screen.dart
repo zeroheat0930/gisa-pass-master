@@ -20,6 +20,7 @@ class StudyPlanScreen extends StatefulWidget {
 
 class _StudyPlanScreenState extends State<StudyPlanScreen> {
   bool _loading = false;
+  bool _resetting = false;
 
   @override
   void initState() {
@@ -168,6 +169,18 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
   /// 플랜 초기화 버튼. 무료 유저는 하루 1회만 — 무제한이면 무료 구간만 있는
   /// 플랜을 리셋해 가며 영구 무료로 쓸 수 있다.
   Future<void> _resetPlanPressed() async {
+    // 연타 가드 — canReset 의 await 사이로 두 번째 탭이 들어오면 확인
+    // 다이얼로그가 겹쳐 쿼터만 2회 소모된다.
+    if (_resetting) return;
+    _resetting = true;
+    try {
+      await _resetPlanFlow();
+    } finally {
+      _resetting = false;
+    }
+  }
+
+  Future<void> _resetPlanFlow() async {
     final planService = context.read<StudyPlanService>();
     final isPremium = context.read<PurchaseService>().isPremium;
 
@@ -228,8 +241,10 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
       ),
     );
     if (confirmed == true && mounted) {
-      await PlanResetQuota.consume(isPremium: isPremium);
+      // 리셋이 실제로 된 뒤에 소모한다 — 순서가 반대면 DB 오류 시
+      // 쿼터만 날아간다. consume 실패는 유저에게 유리한 쪽이라 그냥 둔다.
       await planService.resetPlan();
+      await PlanResetQuota.consume(isPremium: isPremium);
     }
   }
 
