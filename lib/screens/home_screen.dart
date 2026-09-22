@@ -7,15 +7,12 @@ import '../config.dart';
 import '../models/study_stats.dart';
 import '../providers/study_provider.dart';
 import '../providers/stats_provider.dart';
-import '../services/ai_exam_quota.dart';
-import '../services/purchase_service.dart';
+import '../services/ai_exam_launcher.dart';
 import '../widgets/copy_email_row.dart';
 import '../widgets/license_notice_row.dart';
 import '../widgets/dday_timer.dart';
-import '../widgets/exam_quota_dialog.dart';
 import '../widgets/pass_score_card.dart';
 import 'quiz_screen.dart';
-import 'ai_prediction_screen.dart';
 import 'subscription_screen.dart';
 import '../data/pass_rate_data.dart';
 import '../services/database_service.dart';
@@ -141,56 +138,17 @@ class _HomeScreenState extends State<HomeScreen>
     _isNavigating = true;
 
     try {
-      // 구독 화면은 AI 모의고사를 유료 전용으로 광고하는데 게이트가 없었다.
-      // 완전히 막으면 쓰던 유저에게서 기능을 빼앗는 것이라 하루 1회는 열어둔다.
-      final isPremium = context.read<PurchaseService>().isPremium;
-      if (!await AiExamQuota.canStart(isPremium: isPremium)) {
-        if (!context.mounted) return;
-        final earned = await ExamQuotaDialog.show(
-          context,
-          isPremium: isPremium,
-          onSeePremium: () => Navigator.push(
-            context,
-            CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
-          ),
-        );
-        // 광고를 끝까지 봐서 1회를 얻었으면 그대로 이어서 응시한다.
-        if (!earned || !context.mounted) return;
-      }
-      await _launchAiPrediction(context);
+      // 게이트·쿼터 안내·문제 로드·화면 push 는 정본 한 곳에만 둔다
+      // (services/ai_exam_launcher.dart). 여기에 다시 적으면 복원 기출 결과
+      // 화면의 같은 입구와 어긋난다.
+      await startAiExam(context);
+
+      // 모의고사를 마치고 돌아왔으면 홈 통계를 다시 읽는다.
+      if (!context.mounted) return;
+      await context.read<StatsProvider>().loadStats();
     } finally {
       _isNavigating = false;
     }
-  }
-
-  Future<void> _launchAiPrediction(BuildContext context) async {
-    HapticFeedback.lightImpact();
-    final provider = context.read<StudyProvider>();
-    await provider.loadQuestions();
-    // 쿼터는 여기서 깎지 않는다. 로딩 중에 뒤로가기로 빠져나가면 시험을 보지도
-    // 않고 무료 1회가 증발한다. 소모는 시험이 실제로 시작되는 시점
-    // (AiPredictionScreen 의 로딩 완료)에서 한다.
-    if (!context.mounted) return;
-
-    final questions = provider.questionList;
-    if (questions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('문제가 없습니다.')),
-      );
-      return;
-    }
-
-    final examQuestions = questions.take(20).toList();
-    await Navigator.push(
-      context,
-      CupertinoPageRoute(
-        builder: (_) => AiPredictionScreen(questions: examQuestions),
-      ),
-    );
-
-    // 모의고사를 마치고 돌아왔으면 홈 통계를 다시 읽는다.
-    if (!context.mounted) return;
-    await context.read<StatsProvider>().loadStats();
   }
 
   @override

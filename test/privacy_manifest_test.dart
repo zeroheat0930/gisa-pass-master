@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -111,5 +112,66 @@ void main() {
       final r = Process.runSync('plutil', ['-lint', file.path]);
       expect(r.exitCode, 0, reason: 'plutil -lint 실패: ${r.stdout}${r.stderr}');
     });
+  });
+
+  // ── iOS 플러그인 의존성 ────────────────────────────────────────────────────
+  //
+  // 반려는 우리 매니페스트뿐 아니라 **동봉되는 플러그인 매니페스트**로도 난다.
+  // 애플은 앱 번들 안의 모든 매니페스트를 본다. 의존성을 추가할 때마다
+  // 여기에 한 줄 추가하고, 없으면 업로드 전에 알아야 한다(반려 1회 = 반나절).
+  group('iOS 플러그인 의존성의 매니페스트', () {
+    /// pub 이 해석한 패키지 경로. `flutter pub get` 을 돌린 적이 없으면 null.
+    Directory? packageRoot(String name) {
+      final config = File('.dart_tool/package_config.json');
+      if (!config.existsSync()) return null;
+      final packages = (jsonDecode(config.readAsStringSync())
+          as Map<String, dynamic>)['packages'] as List<dynamic>;
+      for (final p in packages.cast<Map<String, dynamic>>()) {
+        if (p['name'] != name) continue;
+        return Directory.fromUri(config.uri.resolve(p['rootUri'] as String));
+      }
+      return null;
+    }
+
+    List<File> manifestsIn(Directory root) {
+      final ios = Directory('${root.path}/ios');
+      if (!ios.existsSync()) return const [];
+      return ios
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('PrivacyInfo.xcprivacy'))
+          .toList();
+    }
+
+    // +41 에서 새로 들어온 것들. in_app_review 가 url_launcher 를 끌고 온다.
+    for (final name in const ['in_app_review', 'url_launcher_ios']) {
+      test('$name 이 프라이버시 매니페스트를 동봉한다', () {
+        final root = packageRoot(name);
+        expect(root, isNotNull,
+            reason: '$name 을 해석하지 못했다. flutter pub get 을 먼저 돌릴 것');
+        final manifests = manifestsIn(root!);
+        expect(manifests, isNotEmpty,
+            reason: '$name 이 PrivacyInfo.xcprivacy 없이 번들에 들어가면 '
+                'ITMS-91064 로 반려된다(빌드 37·38 의 재발)');
+
+        for (final manifest in manifests) {
+          final body = manifest.readAsStringSync();
+          final tracks = RegExp(r'<key>\s*NSPrivacyTracking\s*</key>\s*<true/>')
+              .hasMatch(body);
+          if (!tracks) continue;
+          final domains = RegExp(
+                  '<key>\\s*NSPrivacyTrackingDomains\\s*</key>\\s*(.*?)(?=<key>|</dict>)',
+                  dotAll: true)
+              .firstMatch(body)
+              ?.group(1);
+          final count = domains == null
+              ? 0
+              : RegExp(r'<string>\s*\S+\s*</string>').allMatches(domains).length;
+          expect(count, greaterThan(0),
+              reason: '${manifest.path} 가 tracking=true 인데 도메인이 0개다 '
+                  '— 우리 앱이 그대로 반려된다');
+        }
+      });
+    }
   });
 }

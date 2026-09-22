@@ -6,13 +6,17 @@ import '../utils/duration_format.dart';
 import '../models/question.dart';
 import '../providers/study_provider.dart';
 import '../services/ad_service.dart';
+import '../services/ai_exam_launcher.dart';
 import '../services/answer_checker.dart';
 import '../services/database_service.dart';
+import '../services/purchase_service.dart';
+import '../services/review_prompt_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
 import '../widgets/banner_ad_bar.dart';
 import '../widgets/banner_ad_host.dart';
 import 'round_list_screen.dart';
+import 'subscription_screen.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -468,6 +472,40 @@ class _CategoryCard extends StatelessWidget {
   }
 }
 
+// ── 실전 환산 (P3-lite) ───────────────────────────────────────────────────────
+
+/// 실기 1회분은 20문항 150분이다 → 문항당 7.5분 = 450초.
+const int _secondsPerQuestion = 450;
+
+/// 푼 문항 수에 비례한 실전 기준 시간.
+///
+/// "20문항 기준 150분" 으로 고정하면 안 된다. 이 결과 화면은 진입 경로가
+/// 셋(문제은행 필터 / 회차별 문제집 / 복원 기출 랜덤 20)이고 문항 수가 서로
+/// 달라서, 고정 문구는 나머지 경로에서 **거짓 표기**가 된다.
+Duration realExamLimitFor(int questionCount) => Duration(
+    seconds: _secondsPerQuestion * (questionCount < 0 ? 0 : questionCount));
+
+/// 결과 화면의 '실전 환산' 한 줄.
+///
+/// 경과가 기준 시간을 넘으면 환산 대신 초과를 알린다. 풀이 스톱워치는 일시정지가
+/// 없어 앱을 켜둔 채 하루가 지나도 계속 흐르는데, 그 값을 그대로 "150분 중 900분
+/// 사용" 처럼 내보이면 숫자가 헛소리가 된다.
+String realExamPaceLabel({
+  required int questionCount,
+  required Duration elapsed,
+}) {
+  final limit = realExamLimitFor(questionCount);
+  final minutes = limit.inSeconds / 60;
+  // 7.5분 단위라 홀수 문항에서 소수가 나온다(5문항 = 37.5분).
+  final limitText = minutes == minutes.roundToDouble()
+      ? minutes.toStringAsFixed(0)
+      : minutes.toStringAsFixed(1);
+  final head = '실전 환산: $questionCount문항 기준 $limitText분';
+  if (elapsed > limit) return '$head — 기준 시간 초과';
+  final used = elapsed.isNegative ? 0 : elapsed.inMinutes;
+  return '$head 중 $used분 사용';
+}
+
 // ── Phase 2: Quiz screen ──────────────────────────────────────────────────────
 
 class _QuizScreen extends StatefulWidget {
@@ -495,6 +533,18 @@ class _QuizScreenState extends State<_QuizScreen> {
 
   final _banner = BannerAdHost();
   int _adCounter = 0;
+
+  /// 결과 화면 CTA 의 이중 탭 가드. **await 앞에서** 세운다.
+  bool _isNavigating = false;
+
+  /// 이번 세션의 리뷰 요청 기회를 이미 썼는지 (플래그 정본 1개).
+  ///
+  /// 두 곳에서 선다. (a) 결과 화면 진입 시 조건을 1회 평가했을 때,
+  /// (b) 유료 CTA 를 탭했을 때. (b)가 필요한 이유는 CTA 가 쿼터 소진
+  /// 다이얼로그를 띄울 수 있어서다 — 리뷰 다이얼로그와 겹치면 둘 다 무시당하고
+  /// 별점만 깎인다. '다시 풀기'로 결과 화면에 다시 와도 이 플래그는 내리지
+  /// 않는다(세션 내 1회).
+  bool _reviewChanceUsed = false;
 
   @override
   void initState() {
@@ -572,8 +622,57 @@ class _QuizScreenState extends State<_QuizScreen> {
       _timerTick?.cancel();
       _stopwatch.stop();
       setState(() => _isFinished = true);
+      // 결과 화면이 그려지기 전에 조건을 평가한다. CTA 가 아직 화면에 없어
+      // 쿼터 다이얼로그와 겹칠 수 없는 시점이 여기뿐이다.
+      unawaited(_maybeRequestReview());
     } else {
       setState(() => _currentIndex++);
+    }
+  }
+
+  /// 리뷰 조건을 세션당 1회만 평가한다.
+  ///
+  /// 플래그는 **평가가 끝난 뒤에** 세운다. 시작할 때 세우면 저장소를 읽는 사이
+  /// CTA 를 탭했는지(=쿼터 다이얼로그가 떠 있는지)를 같은 플래그로 구분할 수 없다.
+  Future<void> _maybeRequestReview() async {
+    if (_reviewChanceUsed) return;
+    await ReviewPromptService.requestIfEligible(
+      sessionTotal: widget.questions.length,
+      sessionCorrect: _isCorrectList.where((v) => v).length,
+      isCancelled: () => !mounted || _reviewChanceUsed,
+    );
+    _reviewChanceUsed = true;
+  }
+
+  /// 결과 화면 → AI 실전 모의고사. 진입 흐름은 홈과 **같은 정본**을 쓴다
+  /// (services/ai_exam_launcher.dart). 여기에 게이트를 다시 적으면 한쪽만
+  /// 고쳐지는 사고가 수익 게이트에서 재발한다.
+  ///
+  /// 이중 탭 가드는 정본의 await **앞**에 세운다 — 쿼터 조회를 기다리는 사이
+  /// 두 번째 탭이 통과하면 모의고사 화면이 두 번 쌓이고 무료 응시도 2회 소모된다.
+  Future<void> _startAiPredictionFromResults() async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    // CTA 를 탭한 이상 이번 세션 리뷰 요청은 건너뛴다.
+    _reviewChanceUsed = true;
+    try {
+      await startAiExam(context);
+    } finally {
+      _isNavigating = false;
+    }
+  }
+
+  /// 결과 화면 → 구독 화면. 프리미엄에게는 버튼 자체를 숨기므로 게이트는 없다.
+  Future<void> _openSubscriptionFromResults() async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    _reviewChanceUsed = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+      );
+    } finally {
+      _isNavigating = false;
     }
   }
 
@@ -811,6 +910,8 @@ class _QuizScreenState extends State<_QuizScreen> {
     final total = widget.questions.length;
     final correct = _isCorrectList.where((v) => v).length;
     final passed = correct >= (total * 0.6).ceil();
+    // 결제 직후 구독 CTA 가 남아 있으면 산 사람에게 계속 팔려는 꼴이 된다.
+    final isPremium = context.watch<PurchaseService>().isPremium;
 
     final Map<String, int> typeTotal = {};
     final Map<String, int> typeCorrect = {};
@@ -915,6 +1016,14 @@ class _QuizScreenState extends State<_QuizScreen> {
                               color: Colors.grey[400], fontSize: 14),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      realExamPaceLabel(
+                          questionCount: total, elapsed: elapsed),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Colors.grey[400], fontSize: 13),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -1042,6 +1151,54 @@ class _QuizScreenState extends State<_QuizScreen> {
                   textStyle: const TextStyle(fontSize: 16),
                 ),
               ),
+
+              // ── 다음 행동 (P0) ────────────────────────────────────────
+              // 복원 기출은 전부 무료로 열어둔 탓에 트래픽이 가장 큰데 이 화면에
+              // 유료 입구가 하나도 없었다. 잠그는 것이 아니라 링크만 둔다.
+              const SizedBox(height: 28),
+              Text(
+                '다음 단계',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _startAiPredictionFromResults,
+                icon: const Icon(Icons.psychology_outlined),
+                label: const Text('AI 실전 모의고사로 실력 점검'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppConfig.primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: AppConfig.primaryColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (!isPremium) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _openSubscriptionFromResults,
+                  icon: const Icon(Icons.block_outlined),
+                  label: const Text('광고 없이 공부에 집중'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey[300],
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: AppConfig.borderColor),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(fontSize: 15),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

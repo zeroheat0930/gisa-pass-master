@@ -47,6 +47,9 @@ dependencies:
   timezone: ^0.9.4
   device_info_plus: ^11.0.0
   app_tracking_transparency: ^2.0.6+1
+  # 평생권이라 재구매가 없다 — 리뷰 수가 유일한 증폭 수단이다.
+  # 스토어 기본 리뷰 다이얼로그만 쓴다(자체 별점 위젯 금지: 애플 규정 위반).
+  in_app_review: ^2.0.10
 
 dev_dependencies:
   flutter_test:

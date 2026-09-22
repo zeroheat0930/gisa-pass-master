@@ -285,10 +285,35 @@ void main() {
   group('AI 모의고사 유료 게이트 배선', () {
     String source(String path) => activeSource(path);
 
-    test('모의고사 진입 경로가 쿼터를 확인한다', () {
-      final home = source('lib/screens/home_screen.dart');
-      expect(home.contains('AiExamQuota.canStart'), isTrue,
-          reason: '진입 시 무료 응시 가능 여부를 확인해야 한다 (수익 직결)');
+    const launcher = 'lib/services/ai_exam_launcher.dart';
+
+    test('모의고사 진입 정본이 게이트·안내·화면을 모두 물고 있다', () {
+      final code = source(launcher);
+      for (final symbol in [
+        'AiExamQuota.canStart',
+        'ExamQuotaDialog.show(',
+        'AiPredictionScreen(',
+      ]) {
+        expect(code.contains(symbol), isTrue,
+            reason: '$launcher 에서 $symbol 이 빠지면 모든 입구가 함께 뚫린다 (수익 직결)');
+      }
+    });
+
+    test('진입 화면들은 정본을 부를 뿐 게이트를 사본으로 갖지 않는다', () {
+      // 입구가 둘(홈 / 복원 기출 결과 화면)이라, 각자 흐름을 갖고 있으면
+      // 한쪽만 고치는 사고가 수익 게이트에서 재발한다.
+      for (final path in [
+        'lib/screens/home_screen.dart',
+        'lib/screens/past_exam_screen.dart',
+      ]) {
+        final code = source(path);
+        expect(code.contains('startAiExam('), isTrue,
+            reason: '$path 가 모의고사 진입 정본을 부르지 않는다');
+        for (final copied in ['AiExamQuota.canStart', 'AiPredictionScreen(']) {
+          expect(code.contains(copied), isFalse,
+              reason: '$path 가 $copied 을 직접 갖고 있다 — 정본($launcher)만 쓸 것');
+        }
+      }
     });
 
     test('다시 풀기 경로도 쿼터를 확인한다', () {
@@ -308,7 +333,7 @@ void main() {
       // 무료 유저의 재응시 버튼이 죽고 리워드 수익이 조용히 0 이 된다.
       // (다이얼로그 내부의 시청→지급은 exam_quota_dialog_test 가 지킨다)
       for (final path in [
-        'lib/screens/home_screen.dart',
+        launcher,
         'lib/screens/ai_prediction_screen.dart',
       ]) {
         expect(source(path).contains('ExamQuotaDialog.show('), isTrue,
