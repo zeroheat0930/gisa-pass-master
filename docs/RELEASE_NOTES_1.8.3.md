@@ -31,7 +31,7 @@ Play 출시 노트 500자 제한 안. Play 출시 이름은 `1.8.3 (41)`.
 ## 사람이 할 것 (빌드 전·후)
 
 1. `pubspec.yaml` `1.8.2+40` → **`1.8.3+41`** (빌드 직전).
-2. `flutter analyze` 0건 · `flutter test` **371건** 통과 재확인.
+2. `flutter analyze` 0건 · `flutter test` **379건** 통과 재확인.
 3. 시뮬레이터 육안: **iPhone SE (3rd generation), iPhone 17 Pro** — AI 모의고사
    버튼이 스크롤 없이 보이는지, 큰 글씨 배율에서 오버플로 없는지.
 4. 통합: `flutter test integration_test/app_test.dart -d <시뮬ID> --dart-define=SKIP_ATT=true`
