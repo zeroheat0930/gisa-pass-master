@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
+import '../services/ai_exam_quota.dart';
+import '../services/plan_reset_quota.dart';
 import '../services/purchase_service.dart';
+import '../utils/price_format.dart';
 
 class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
@@ -157,6 +160,13 @@ class SubscriptionScreen extends StatelessWidget {
 // ─── Hero Header ────────────────────────────────────────────────────────────
 
 class _HeroHeader extends StatelessWidget {
+  /// 무료 한도와 남은 일수를 그대로 적는 한 줄 (ExamQuotaDialog 와 같은 규칙).
+  static String _factLine() {
+    final quota = '무료는 AI 모의고사 하루 ${AiExamQuota.freeAttemptsPerDay}회';
+    if (!AppConfig.shouldShowExamCountdown) return quota;
+    return '$quota · 시험까지 D-${AppConfig.daysUntilExam}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -205,6 +215,19 @@ class _HeroHeader extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
+          // 사실 서술만 적는다. 남은 일수는 AppConfig.daysUntilExam 정본,
+          // 노출 여부는 shouldShowExamCountdown 정본이 판단한다
+          // (시험이 지나면 다음 회차 기준 D-181 이 되어 헛소리가 된다).
+          const SizedBox(height: 10),
+          Text(
+            _factLine(),
+            style: const TextStyle(
+              color: Color(0xFF9E9E9E),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -221,7 +244,7 @@ class _PlanComparisonCard extends StatelessWidget {
         Expanded(
           child: _PlanTile(
             label: '무료',
-            price: '₩0',
+            price: formatPrice(0),
             period: '',
             color: const Color(0xFF9E9E9E),
             isPremium: false,
@@ -231,7 +254,9 @@ class _PlanComparisonCard extends StatelessWidget {
         Expanded(
           child: _PlanTile(
             label: '프리미엄',
-            price: '₩4,900',
+            // 가격 문자열을 화면에 박아두면 AppConfig.premiumPrice 를 고쳐도
+            // 여기가 안 따라온다. 표기 정본은 formatPrice 하나다.
+            price: formatPrice(AppConfig.premiumPrice),
             period: '',
             color: AppConfig.primaryColor,
             isPremium: true,
@@ -337,16 +362,34 @@ class _PlanTile extends StatelessWidget {
 class _FeatureList extends StatelessWidget {
   const _FeatureList();
 
-  static const List<_FeatureRow> _features = [
-    _FeatureRow(label: '기본 문제 풀기', free: true, premium: true),
-    _FeatureRow(label: '오답노트', free: true, premium: true),
-    _FeatureRow(label: '기본 통계', free: true, premium: true),
-    // 실제로 게이트가 있는 것만 적는다. 'AI 무제한 예측 문제'·'기출 유형 심층
-    // 분석'을 유료 전용으로 표기했었지만 코드에 게이트가 없거나 기능 자체가
-    // 없었다 — 판매 문구와 코드가 다르면 환불 분쟁·심사 리스크가 된다.
-    _FeatureRow(label: '광고 제거', free: false, premium: true),
-    _FeatureRow(label: 'AI 실전 모의고사 무제한', free: false, premium: true),
-    _FeatureRow(label: '학습 플랜 Day 4 이후', free: false, premium: true),
+  // 실제로 게이트가 있는 것만 적는다. 'AI 무제한 예측 문제'·'기출 유형 심층
+  // 분석'을 유료 전용으로 표기했었지만 코드에 게이트가 없거나 기능 자체가
+  // 없었다 — 판매 문구와 코드가 다르면 환불 분쟁·심사 리스크가 된다.
+  //
+  // 횟수 제한이 있는 기능을 ○/× 로 적으면 그것도 거짓 표기다. 무료 유저도
+  // 모의고사를 하루 1회(+광고 보너스) 쓰고 플랜 초기화도 하루 1회 할 수 있다.
+  // 숫자는 전부 게이팅 정본에서 읽어 표와 코드가 어긋날 수 없게 한다.
+  static final List<_FeatureRow> _features = [
+    const _FeatureRow(label: '기본 문제 풀기', free: true, premium: true),
+    const _FeatureRow(label: '오답노트', free: true, premium: true),
+    const _FeatureRow(label: '기본 통계', free: true, premium: true),
+    const _FeatureRow(label: '광고 제거', free: false, premium: true),
+    _FeatureRow(
+      label: 'AI 실전 모의고사',
+      freeText: '하루 ${AiExamQuota.freeAttemptsPerDay}회',
+      premiumText: '무제한',
+    ),
+    _FeatureRow(
+      label: '광고 보고 추가 응시',
+      freeText: '하루 ${AiExamQuota.maxBonusPerDay}회',
+      premiumText: '불필요',
+    ),
+    _FeatureRow(
+      label: '학습 플랜 초기화',
+      freeText: '하루 ${PlanResetQuota.freeResetsPerDay}회',
+      premiumText: '무제한',
+    ),
+    const _FeatureRow(label: '학습 플랜 Day 4 이후', free: false, premium: true),
   ];
 
   @override
@@ -426,10 +469,18 @@ class _FeatureRow {
   final String label;
   final bool free;
   final bool premium;
+
+  /// ○/× 대신 보여줄 문구. 횟수 제한이 있는 기능은 두 값으로 사실대로
+  /// 적을 수 없다(무료 = × 로 적으면 쓸 수 있는 기능을 못 쓴다고 하는 셈).
+  final String? freeText;
+  final String? premiumText;
+
   const _FeatureRow({
     required this.label,
-    required this.free,
-    required this.premium,
+    this.free = false,
+    this.premium = false,
+    this.freeText,
+    this.premiumText,
   });
 }
 
@@ -447,6 +498,20 @@ class _FeatureRowWidget extends StatelessWidget {
       return Icon(Icons.check_rounded, color: AppConfig.correctColor, size: 18);
     }
     return Icon(Icons.close_rounded, color: Colors.grey[700], size: 18);
+  }
+
+  /// 문구가 있으면 문구를, 없으면 ○/× 아이콘을 보여준다.
+  Widget _cell(bool available, String? text, Color textColor) {
+    if (text == null) return _icon(available);
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: textColor,
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    );
   }
 
   @override
@@ -476,13 +541,21 @@ class _FeatureRowWidget extends StatelessWidget {
           Expanded(
             flex: 2,
             child: Center(
-              child: _icon(feature.free),
+              child: _cell(
+                feature.free,
+                feature.freeText,
+                const Color(0xFF9E9E9E),
+              ),
             ),
           ),
           Expanded(
             flex: 2,
             child: Center(
-              child: _icon(feature.premium),
+              child: _cell(
+                feature.premium,
+                feature.premiumText,
+                AppConfig.primaryColor,
+              ),
             ),
           ),
         ],

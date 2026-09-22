@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:gisa_pass_master/config.dart';
 import 'package:gisa_pass_master/services/ad_service.dart';
 import 'package:gisa_pass_master/services/ai_exam_quota.dart';
 import 'package:gisa_pass_master/widgets/exam_quota_dialog.dart';
@@ -88,5 +89,102 @@ void main() {
     expect(earned, isFalse);
     expect(await AiExamQuota.bonusToday(), 0,
         reason: '안 봐도 지급되면 리워드 광고 수익 모델이 무너진다');
+  });
+
+  // ── 안내 문구(P2) ────────────────────────────────────────────────────────
+  //
+  // 유료 벽에 닿는 유일한 지점이라 문구가 사실과 어긋나면 곧장 환불 사유가 된다.
+  // 남은 일수는 AppConfig.daysUntilExam 정본만 쓰고, 시험이 지나 다음 회차로
+  // 넘어가면(또는 확정 일정이 아니면) D-Day 문구 자체를 내보내지 않는다.
+  group('쿼터 안내 문구', () {
+    tearDown(() => AppConfig.nowForTest = null);
+
+    /// 다이얼로그를 띄우기만 하고 닫는다(선택지는 '내일 다시').
+    Future<void> openAndClose(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => ExamQuotaDialog.show(
+                  context,
+                  isPremium: false,
+                  onSeePremium: () {},
+                ),
+                child: const Text('열기'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('열기'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> close(WidgetTester tester) async {
+      await tester.tap(find.text('내일 다시'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('시험이 가까우면 무료 한도와 D-Day 를 사실대로 적는다', (tester) async {
+      AppConfig.nowForTest = () => DateTime(2026, 9, 22); // 시험 2026-10-18 확정
+      expect(AppConfig.daysUntilExam, 26, reason: '테스트 전제 확인');
+
+      await openAndClose(tester);
+
+      expect(find.textContaining('하루 ${AiExamQuota.freeAttemptsPerDay}회'),
+          findsOneWidget,
+          reason: '무료 한도는 게이팅 정본 숫자 그대로 적어야 한다');
+      expect(find.textContaining('D-${AppConfig.daysUntilExam}'), findsOneWidget,
+          reason: '남은 일수는 daysUntilExam 정본을 그대로 쓴다');
+
+      await close(tester);
+    });
+
+    testWidgets('광고 보너스를 다 쓴 상태에서도 같은 문구가 나온다', (tester) async {
+      AppConfig.nowForTest = () => DateTime(2026, 9, 22);
+      for (var i = 0; i < AiExamQuota.maxBonusPerDay; i++) {
+        await AiExamQuota.grantBonus();
+      }
+
+      await openAndClose(tester);
+
+      expect(find.text('광고 보고 1회 더'), findsNothing, reason: '테스트 전제 확인');
+      expect(find.textContaining('하루 ${AiExamQuota.freeAttemptsPerDay}회'),
+          findsOneWidget);
+      expect(find.textContaining('D-${AppConfig.daysUntilExam}'), findsOneWidget,
+          reason: '분기마다 문구를 따로 쓰면 한쪽만 고쳐지는 사고가 난다');
+
+      await close(tester);
+    });
+
+    testWidgets('시험이 60일 넘게 남으면 D-Day 문구를 쓰지 않는다', (tester) async {
+      AppConfig.nowForTest = () => DateTime(2026, 7, 6); // 다음 확정 시험까지 104일
+      expect(AppConfig.daysUntilExam, greaterThan(60), reason: '테스트 전제 확인');
+      expect(AppConfig.isExamDateConfirmed, isTrue, reason: '일수 조건만 검증');
+
+      await openAndClose(tester);
+
+      expect(find.textContaining('D-'), findsNothing,
+          reason: '시험 직후에는 다음 회차까지 반 년이라 D-Day 가 압박이 아니라 소음이다');
+      expect(find.textContaining('하루 ${AiExamQuota.freeAttemptsPerDay}회'),
+          findsOneWidget, reason: '무료 한도 자체는 계속 알려준다');
+
+      await close(tester);
+    });
+
+    testWidgets('확정 일정이 아니면 D-Day 문구를 쓰지 않는다', (tester) async {
+      AppConfig.nowForTest = () => DateTime(2027, 6, 1); // 2027-2회는 추정 일정
+      expect(AppConfig.isExamDateConfirmed, isFalse, reason: '테스트 전제 확인');
+      expect(AppConfig.daysUntilExam, lessThanOrEqualTo(60),
+          reason: '확정 여부 조건만 검증');
+
+      await openAndClose(tester);
+
+      expect(find.textContaining('D-'), findsNothing,
+          reason: '추정 날짜로 남은 일수를 단언하면 거짓 표기가 된다');
+
+      await close(tester);
+    });
   });
 }

@@ -19,6 +19,18 @@ import '../services/ai_exam_quota.dart';
 class ExamQuotaDialog {
   ExamQuotaDialog._();
 
+  /// 유료 벽에 닿은 유저에게 주는 **사실 서술** 한 줄.
+  ///
+  /// "지금 안 사면" 류의 압박 문구는 쓰지 않는다. 결제 화면 카피와 실제
+  /// 게이팅이 어긋나면 환불·심사 분쟁이 되므로, 숫자는 전부 정본에서 읽는다.
+  /// 남은 일수는 [AppConfig.daysUntilExam] 만 쓰고, 노출 여부도
+  /// [AppConfig.shouldShowExamCountdown] 이 혼자 판단한다.
+  static String _factLine() {
+    final quota = '무료는 하루 ${AiExamQuota.freeAttemptsPerDay}회';
+    if (!AppConfig.shouldShowExamCountdown) return quota;
+    return '$quota · 시험까지 D-${AppConfig.daysUntilExam}';
+  }
+
   /// 반환값이 true 면 지금 바로 응시할 수 있다(광고 보상 획득).
   static Future<bool> show(
     BuildContext context, {
@@ -69,11 +81,8 @@ class ExamQuotaDialog {
               ),
             ),
             content: Text(
-              canEarn
-                  ? '광고를 보면 지금 바로 1회 더 응시할 수 있어요.\n'
-                        '프리미엄이면 광고 없이 무제한입니다.'
-                  : '무료로는 하루 ${AiExamQuota.freeAttemptsPerDay}회 응시할 수 있어요.\n'
-                        '내일 다시 열리고, 프리미엄이면 지금 바로 무제한으로 볼 수 있습니다.',
+              '${_factLine()}\n'
+              '${canEarn ? '광고를 보면 지금 바로 1회 더 응시할 수 있어요.\n프리미엄이면 광고 없이 무제한입니다.' : '내일 다시 열리고, 프리미엄이면 지금 바로 무제한으로 볼 수 있습니다.'}',
               style: TextStyle(
                 color: Colors.grey[300],
                 fontSize: 14,

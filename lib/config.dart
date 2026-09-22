@@ -4,6 +4,15 @@ import 'package:flutter/material.dart';
 class AppConfig {
   AppConfig._();
 
+  /// 테스트에서 '오늘'을 고정하기 위한 시임. 프로덕션에서는 항상 null 이다.
+  ///
+  /// D-Day 문구는 남은 일수에 따라 노출 여부가 갈리는데, 실제 날짜에 의존하면
+  /// 시험일이 지나는 순간 테스트가 조용히 반대 분기만 검증하게 된다.
+  @visibleForTesting
+  static DateTime Function()? nowForTest;
+
+  static DateTime _now() => nowForTest?.call() ?? DateTime.now();
+
   // === 앱 기본 정보 ===
   static const String appTitle = '기사패스마스터';
   static const String examLabel = '정보처리기사 실기 시험';
@@ -34,7 +43,7 @@ class AppConfig {
   /// 예전에는 마지막 항목을 그대로 반환해서, 표에 적힌 마지막 시험일이 지나면
   /// D-Day 가 영영 '시험 완료!' 에 갇혔다.
   static ({int year, int round, DateTime date}) get nextExam {
-    final now = DateTime.now();
+    final now = _now();
     final today = DateTime(now.year, now.month, now.day);
 
     for (final exam in _examSchedule) {
@@ -86,7 +95,7 @@ class AppConfig {
   /// `examDate.difference(now).inDays` 를 쓰면 남은 시간을 24로 나눈 값이라
   /// 시험 전날 밤에 이미 0이 되어 D-Day 가 하루씩 적게 표시된다.
   static int get daysUntilExam {
-    final now = DateTime.now();
+    final now = _now();
     final today = DateTime(now.year, now.month, now.day);
     final exam = DateTime(examDate.year, examDate.month, examDate.day);
     final diff = exam.difference(today).inDays;
@@ -94,20 +103,16 @@ class AppConfig {
   }
   static String get examRoundLabel => '${nextExam.year}년 ${nextExam.round}회';
 
-  /// 실제 시행이 끝나 기출로 다룰 수 있는 마지막 연도.
+  /// D-Day 문구를 화면에 내보내도 되는 기간(일).
+  static const int examCountdownWindowDays = 60;
+
+  /// 남은 일수를 판매 문구에 써도 되는 시점인지 (단일 정본).
   ///
-  /// 이보다 뒤 연도의 문항은 **예상문제**다. 문제 데이터가 만들어진 시점에
-  /// 아직 시행되지 않은 회차라서 기출일 수 없다.
-  /// 예상문제를 기출로 표시하면 유저를 속이는 것이므로 반드시 구분해서 보여줄 것.
-  static const int lastRealExamYear = 2025;
-
-  /// 해당 연도 문항이 예상문제인지
-  static bool isPredictedYear(int year) => year > lastRealExamYear;
-
-  /// 문제 데이터가 커버하는 마지막 연도.
-  /// 기출 마지막 해(lastRealExamYear)의 다음 해 예상문제까지 들어 있으므로 +1.
-  /// 새 연도 예상문제를 추가할 때 lastRealExamYear 를 올리면 함께 갱신된다.
-  static int get latestQuestionYear => lastRealExamYear + 1;
+  /// 두 조건이 모두 필요하다. 시험일이 지나면 다음 회차로 넘어가 D-181 같은
+  /// 값이 나오고(문구가 헛소리가 된다), 확정 일정이 바닥나면 [nextExam] 은
+  /// **추정치**라 그 날짜로 남은 일수를 단언하면 거짓 표기가 된다.
+  static bool get shouldShowExamCountdown =>
+      isExamDateConfirmed && daysUntilExam <= examCountdownWindowDays;
 
   // === 테마 컬러 ===
   static const Color primaryColor = Color(0xFFE53935);

@@ -5,13 +5,14 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:gisa_pass_master/config.dart';
 import 'package:gisa_pass_master/models/answer_record.dart';
 import 'package:gisa_pass_master/models/question.dart';
 import 'package:gisa_pass_master/providers/study_provider.dart';
 import 'package:gisa_pass_master/services/database_service.dart';
 import 'package:gisa_pass_master/services/prediction_engine.dart';
 import 'package:gisa_pass_master/services/spaced_repetition_service.dart';
+
+import 'support/active_source.dart';
 
 /// **배선(wiring) 테스트.**
 ///
@@ -24,21 +25,10 @@ import 'package:gisa_pass_master/services/spaced_repetition_service.dart';
 ///
 /// 부품 단위 테스트만으로는 이 종류를 절대 잡을 수 없다. 여기서 연결을 검증한다.
 
-// ── grep 기반 검증용: 주석을 걷어낸 소스 ────────────────────────────────────
-//
+// grep 기반 검증용 주석 제거 소스는 `test/support/active_source.dart` 정본을 쓴다
+// (배선 테스트 파일이 여러 개라 복붙하면 한쪽만 고쳐지는 사고가 난다).
 // 원본 소스를 그대로 grep 하면 **주석에도 매칭**된다. 실제로 AiExamQuota.consume
 // 호출을 주석 처리해 되돌려도(무료 무제한 응시) 전부 녹색이었다.
-// 라인 주석을 지운 소스에서만 찾는다.
-String _activeSource(String path) {
-  return File(path)
-      .readAsStringSync()
-      .split('\n')
-      .map((line) {
-        final i = line.indexOf('//');
-        return i < 0 ? line : line.substring(0, i);
-      })
-      .join('\n');
-}
 
 // ── 배선 확인용 스파이 ──────────────────────────────────────────────────────
 
@@ -293,7 +283,7 @@ void main() {
   // 쿼터 클래스 자체는 테스트하면서, 화면이 그것을 실제로 물어보는지는
   // 검증하지 않았다. 게이트를 통째로 지워도 테스트가 전부 통과했다.
   group('AI 모의고사 유료 게이트 배선', () {
-    String source(String path) => _activeSource(path);
+    String source(String path) => activeSource(path);
 
     test('모의고사 진입 경로가 쿼터를 확인한다', () {
       final home = source('lib/screens/home_screen.dart');
@@ -332,7 +322,7 @@ void main() {
   // 유료 구간을 영영 살 이유가 없었다. 게이트 클래스만 테스트하면
   // 화면에서 호출을 지워도 초록불이 뜨므로, 배선 자체를 잡아둔다.
   group('학습 플랜 유료 게이트 배선', () {
-    String source(String path) => _activeSource(path);
+    String source(String path) => activeSource(path);
 
     test('초기화 버튼이 쿼터를 확인한다', () {
       final screen = source('lib/screens/study_plan_screen.dart');
@@ -360,7 +350,7 @@ void main() {
   // 결제하면 방금 결제한 유저에게 배너가 계속 보였다. 정본(BannerAdBar)이
   // 프리미엄을 구독하므로, 화면이 사본으로 돌아가면 그 버그가 재발한다.
   group('배너 표시 정본 배선', () {
-    String source(String path) => _activeSource(path);
+    String source(String path) => activeSource(path);
 
     test('배너를 쓰는 화면은 전부 BannerAdBar 정본을 쓴다', () {
       for (final path in [
@@ -459,7 +449,7 @@ void main() {
   // 문제은행 채점을 단순 문자열 비교로 되돌려도 기존 테스트가 전부 통과했다.
   // 채점기 자체만 검증하고 화면이 그것을 쓰는지는 아무도 안 봤기 때문이다.
   group('채점기 호출부 배선', () {
-    String source(String path) => _activeSource(path);
+    String source(String path) => activeSource(path);
 
     const screens = [
       'lib/screens/quiz_screen.dart',
@@ -532,14 +522,14 @@ void main() {
     });
 
     test('DB 를 열 때 데이터 리비전 동기화가 호출된다', () {
-      final src = _activeSource('lib/services/database_service.dart');
+      final src = activeSource('lib/services/database_service.dart');
       // 선언문이 아니라 **호출식**을 확인한다 (await + 인자).
       expect(src.contains('await syncQuestionsIfRevisionChanged(db);'), isTrue,
           reason: '이 호출이 빠지면 v6 이후 유저에게 정답 수정이 영영 도달하지 않는다');
     });
 
     test('알림을 켜는 경로에 후속 재예약 훅이 물려 있다', () {
-      final main = _activeSource('lib/main.dart');
+      final main = activeSource('lib/main.dart');
       expect(main.contains('NotificationOptIn.onEnabled ='), isTrue,
           reason: '켠 직후 복습 알림을 잡지 않으면 다이얼로그가 한 약속이 안 지켜진다');
     });
@@ -551,7 +541,7 @@ void main() {
   // 붙들고 있는다 — 과거 실제로 터졌던 회귀인데 어떤 테스트도 지키지 않았다.
   group('통계 재조회 배선', () {
     test('통계를 보여주는 탭(홈·통계)으로 전환하면 다시 읽는다', () {
-      final main = _activeSource('lib/main.dart');
+      final main = activeSource('lib/main.dart');
       expect(main.contains('StatsProvider>().loadStats()'), isTrue,
           reason: '탭 전환 시 loadStats 호출이 빠지면 통계가 앱 재시작 전까지 멈춘다');
       // 홈 탭(합격 예측 카드가 있는 곳)까지 갱신 대상이어야 한다.
@@ -563,7 +553,7 @@ void main() {
     test('홈 화면의 퀴즈·모의고사 복귀 경로도 다시 읽는다', () {
       // 홈→퀴즈→뒤로 는 가장 흔한 주 경로다. 탭 전환 갱신만으로는
       // 이 경로가 잡히지 않아, 문제를 풀고 돌아와도 홈이 옛 값이었다.
-      final home = _activeSource('lib/screens/home_screen.dart');
+      final home = activeSource('lib/screens/home_screen.dart');
       final calls = RegExp(r'\.\s*loadStats\s*\(\)').allMatches(home).length;
       expect(calls, greaterThanOrEqualTo(2),
           reason: '퀴즈 복귀·AI 모의고사 복귀 두 경로 모두 loadStats 를 불러야 한다 '
@@ -571,13 +561,19 @@ void main() {
     });
   });
 
-  // ── 8) 기출/예상 경계 ────────────────────────────────────────────────────
-  // 이 경계가 >= 로 되돌아가면 2025년 기출 전체가 'AI 예상'으로 표기되어
-  // 유료 유저 기만이 된다. 어떤 테스트도 지키지 않던 값이다.
-  group('기출/AI 예상 경계', () {
-    test('lastRealExamYear 까지는 기출, 그 뒤는 예상이다', () {
-      expect(AppConfig.isPredictedYear(AppConfig.lastRealExamYear), isFalse);
-      expect(AppConfig.isPredictedYear(AppConfig.lastRealExamYear + 1), isTrue);
+  // ── 8) 가격 표기 정본 ────────────────────────────────────────────────────
+  // 가격은 AppConfig.premiumPrice 에 있는데 결제 화면에는 '₩4,900' 이 문자열로
+  // 박혀 있었다. 상수를 올려도 화면은 옛 가격 그대로 → 표기-실제 불일치는
+  // 결제 화면에서 곧장 환불·심사 분쟁이 된다.
+  group('가격 표기 정본', () {
+    test('구독 화면이 가격 문자열을 직접 박아두지 않는다', () {
+      final src = activeSource('lib/screens/subscription_screen.dart');
+      expect(src.contains('₩4,900'), isFalse,
+          reason: '가격 리터럴이 화면에 남아 있으면 premiumPrice 를 고쳐도 안 따라온다');
+      expect(src.contains('formatPrice('), isTrue,
+          reason: '가격 표기는 formatPrice 정본만 쓴다');
+      expect(src.contains('AppConfig.premiumPrice'), isTrue,
+          reason: '금액 값도 정본(AppConfig.premiumPrice)에서 읽어야 한다');
     });
   });
 }
