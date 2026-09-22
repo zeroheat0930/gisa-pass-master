@@ -366,6 +366,16 @@ class PurchaseService extends ChangeNotifier {
     return _iap.completePurchase(purchase);
   }
 
+  /// 스트림 핸들러 안에서 기다리지 않고 종결할 때 쓴다. 종결 실패(이미 큐에서
+  /// 빠진 트랜잭션, StoreKit 채널 예외 등)는 로그만 남긴다 — 미종결 트랜잭션은
+  /// 다음 실행에 스트림으로 다시 내려와 재시도되므로, 처리되지 않은 비동기
+  /// 예외로 앱을 흔들 이유가 없다.
+  void _completePurchaseInBackground(PurchaseDetails purchase) {
+    _completePurchase(purchase).catchError((Object e) {
+      debugPrint('트랜잭션 종결 실패 (${purchase.productID}): $e');
+    });
+  }
+
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
     for (final purchase in purchaseDetailsList) {
       debugPrint('구매 상태: ${purchase.status} - ${purchase.productID}');
@@ -385,7 +395,7 @@ class PurchaseService extends ChangeNotifier {
             return;
           }
           if (purchase.pendingCompletePurchase) {
-            _completePurchase(purchase);
+            _completePurchaseInBackground(purchase);
           }
         });
       } else if (purchase.status == PurchaseStatus.error) {
@@ -396,12 +406,12 @@ class PurchaseService extends ChangeNotifier {
         // pendingCompletePurchase 로 내려주는데, 종결하지 않으면 큐에 남아
         // 앱을 켤 때마다 재전달되고 취소한 유저마다 하나씩 계속 쌓인다.
         if (purchase.pendingCompletePurchase) {
-          _completePurchase(purchase);
+          _completePurchaseInBackground(purchase);
         }
       } else if (purchase.status == PurchaseStatus.canceled) {
         debugPrint('구매 취소됨');
         if (purchase.pendingCompletePurchase) {
-          _completePurchase(purchase);
+          _completePurchaseInBackground(purchase);
         }
       }
     }

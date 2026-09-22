@@ -286,19 +286,40 @@ class AdService {
 
     _rewardedAd = null; // 1회용
     var earned = false;
+    var shown = false;
 
     final completer = Completer<bool>();
+    // 콜백이 아예 오지 않는 비정상 경로의 안전판. 이게 없으면 호출자
+    // (모의고사 버튼의 _isNavigating 등)가 앱 재시작 전까지 잠긴다.
+    //
+    // 단, 광고가 **화면에 뜬 뒤**에는 이 안전판을 걷는다. 시청 중 전화가 오거나
+    // 앱이 오래 백그라운드에 갔다 오면 Dart 타이머는 복귀 즉시 발화하는데,
+    // 그때 false 로 먼저 끝내버리면 유저가 끝까지 본 광고의 보상이 사라진다
+    // (닫힘 콜백이 completer 를 채워도 듣는 쪽이 없다). 화면에 뜬 광고는
+    // 닫힐 때 반드시 onAdDismissed 가 오므로 그쪽에 맡긴다.
+    final guard = Timer(const Duration(minutes: 3), () {
+      if (shown || completer.isCompleted) return;
+      debugPrint('리워드 광고가 3분 안에 뜨지 않음 — 호출자를 풀어준다');
+      loadRewardedAd();
+      completer.complete(false);
+    });
+    void finish(bool result) {
+      guard.cancel();
+      if (!completer.isCompleted) completer.complete(result);
+    }
+
     ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (_) => shown = true,
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
         loadRewardedAd(); // 다음 기회를 위해 미리 채워둔다
-        if (!completer.isCompleted) completer.complete(earned);
+        finish(earned);
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         debugPrint('리워드 광고 표시 실패: ${error.message}');
         ad.dispose();
         loadRewardedAd();
-        if (!completer.isCompleted) completer.complete(false);
+        finish(false);
       },
     );
 
@@ -308,17 +329,9 @@ class AdService {
       debugPrint('리워드 광고 show 오류: $e');
       ad.dispose();
       loadRewardedAd(); // 정상 경로의 콜백들처럼 다음 노출 기회를 채워둔다
-      if (!completer.isCompleted) completer.complete(false);
+      finish(false);
     }
-    // 콜백이 아예 오지 않는 비정상 경로의 안전판. 이게 없으면 호출자
-    // (모의고사 버튼의 _isNavigating 등)가 앱 재시작 전까지 잠긴다.
-    return completer.future.timeout(
-      const Duration(minutes: 3),
-      onTimeout: () {
-        loadRewardedAd();
-        return false;
-      },
-    );
+    return completer.future;
   }
 
   /// 리소스 해제

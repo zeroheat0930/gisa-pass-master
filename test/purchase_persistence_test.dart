@@ -124,6 +124,31 @@ void main() {
       });
     }
 
+    // 종결은 스트림 핸들러 안에서 기다리지 않고 던져둔다. 그 Future 가 실패하면
+    // (이미 큐에서 빠진 트랜잭션, StoreKit 채널 예외) 처리되지 않은 비동기
+    // 예외로 올라와 앱을 흔든다 — 미종결분은 다음 실행에 재시도되므로 삼켜야 한다.
+    for (final status in [
+      PurchaseStatus.purchased,
+      PurchaseStatus.error,
+      PurchaseStatus.canceled,
+    ]) {
+      test('$status 트랜잭션 종결이 실패해도 예외가 새지 않는다', () async {
+        SharedPreferences.setMockInitialValues({});
+
+        final service = PurchaseService();
+        service.completePurchaseForTest = (_) async {
+          throw StateError('transaction no longer in queue');
+        };
+
+        service.handlePurchaseUpdates([_purchase(status)]);
+        // 처리되지 않은 비동기 예외가 있으면 여기서 테스트가 실패한다.
+        await pumpEventQueue();
+
+        expect(service.isPremium, status == PurchaseStatus.purchased,
+            reason: '종결 실패는 프리미엄 판정에 영향을 주면 안 된다');
+      });
+    }
+
     test('이미 종결된 error 트랜잭션은 다시 종결하지 않는다', () async {
       SharedPreferences.setMockInitialValues({});
 
