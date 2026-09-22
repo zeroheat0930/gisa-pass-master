@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
 import '../utils/duration_format.dart';
@@ -12,6 +11,7 @@ import '../services/database_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
 import '../widgets/banner_ad_bar.dart';
+import '../widgets/banner_ad_host.dart';
 import 'round_list_screen.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -493,8 +493,7 @@ class _QuizScreenState extends State<_QuizScreen> {
   Timer? _timerTick;
   String _elapsedDisplay = '00:00';
 
-  BannerAd? _bannerAd;
-  bool _bannerLoaded = false;
+  final _banner = BannerAdHost();
   int _adCounter = 0;
 
   @override
@@ -506,29 +505,18 @@ class _QuizScreenState extends State<_QuizScreen> {
       final elapsed = _stopwatch.elapsed;
       setState(() => _elapsedDisplay = formatElapsed(elapsed));
     });
-    _bannerAd = globalAdService?.createBannerAd(
-      onLoad: () {
-        if (mounted) setState(() => _bannerLoaded = true);
-      },
-      onError: () {
-        if (mounted) setState(() => _bannerLoaded = false);
-      },
-      // 로드가 실패해도 재시도한 배너로 교체한다. 재시도가 없으면 일시적인
-      // 네트워크 오류 한 번으로 이 화면 세션의 배너 수익이 0이 된다.
-      onRetry: (ad) {
-        if (!mounted) {
-          ad.dispose();
-          return;
-        }
-        _bannerAd?.dispose();
-        setState(() => _bannerAd = ad);
-      },
-    );
+    _banner
+      ..addListener(_onBannerChanged)
+      ..load();
+  }
+
+  void _onBannerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _bannerAd?.dispose();
+    _banner.dispose();
     _answerController.dispose();
     _timerTick?.cancel();
     _stopwatch.stop();
@@ -705,7 +693,7 @@ class _QuizScreenState extends State<_QuizScreen> {
         ],
       ),
       bottomNavigationBar:
-          BannerAdBar(bannerAd: _bannerAd, loaded: _bannerLoaded),
+          BannerAdBar(bannerAd: _banner.ad, loaded: _banner.loaded),
       body: SafeArea(
         child: Column(
           children: [

@@ -376,6 +376,24 @@ void main() {
                 '결제 직후 배너 잔존 버그가 재발한다');
       }
     });
+
+    // 표시(BannerAdBar)만 통합하고 로드·재시도·해제 블록은 세 화면에 그대로
+    // 복붙되어 있었다. 한쪽만 고치면 나머지가 어긋나는 패턴의 재발을 막는다.
+    test('배너 로드·해제도 BannerAdHost 정본을 쓴다', () {
+      for (final path in [
+        'lib/screens/quiz_screen.dart',
+        'lib/screens/ai_prediction_screen.dart',
+        'lib/screens/past_exam_screen.dart',
+      ]) {
+        final s = source(path);
+        expect(s.contains('BannerAdHost()'), isTrue,
+            reason: '$path 가 배너 생명주기 정본을 쓰지 않는다');
+        expect(s.contains('_banner.dispose()'), isTrue,
+            reason: '$path 가 화면을 내릴 때 배너를 해제하지 않는다');
+        expect(s.contains('createBannerAd('), isFalse,
+            reason: '$path 에 화면 로컬 배너 로드 사본이 되살아났다');
+      }
+    });
   });
 
   // ── 4) 출제 예측 선정 ────────────────────────────────────────────────────

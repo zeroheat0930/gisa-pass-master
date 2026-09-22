@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
 import '../providers/study_provider.dart';
-import '../services/ad_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
 import '../widgets/answer_effect.dart';
 import '../widgets/notification_opt_in.dart';
 import '../widgets/banner_ad_bar.dart';
+import '../widgets/banner_ad_host.dart';
 
 class QuizScreen extends StatefulWidget {
   final StudyMode mode;
@@ -25,30 +24,18 @@ class _QuizScreenState extends State<QuizScreen> {
   final TextEditingController _answerController = TextEditingController();
   bool _showExplanation = false;
   bool _optInScheduled = false;
-  BannerAd? _bannerAd;
-  bool _bannerLoaded = false;
+  final _banner = BannerAdHost();
 
   @override
   void initState() {
     super.initState();
-    _bannerAd = globalAdService?.createBannerAd(
-      onLoad: () {
-        if (mounted) setState(() => _bannerLoaded = true);
-      },
-      onError: () {
-        if (mounted) setState(() => _bannerLoaded = false);
-      },
-      // 로드가 실패해도 재시도한 배너로 교체한다. 재시도가 없으면 일시적인
-      // 네트워크 오류 한 번으로 이 화면 세션의 배너 수익이 0이 된다.
-      onRetry: (ad) {
-        if (!mounted) {
-          ad.dispose();
-          return;
-        }
-        _bannerAd?.dispose();
-        setState(() => _bannerAd = ad);
-      },
-    );
+    _banner
+      ..addListener(_onBannerChanged)
+      ..load();
+  }
+
+  void _onBannerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -56,7 +43,7 @@ class _QuizScreenState extends State<QuizScreen> {
     // 정답 이펙트는 Navigator 의 Overlay 에 붙으므로, 효과가 끝나기 전에 화면을
     // 벗어나면 이전 화면 위에 그대로 남는다.
     AnswerEffectOverlay.dismiss();
-    _bannerAd?.dispose();
+    _banner.dispose();
     _answerController.dispose();
     super.dispose();
   }
@@ -305,7 +292,7 @@ class _QuizScreenState extends State<QuizScreen> {
       backgroundColor: AppConfig.backgroundColor,
       appBar: _buildAppBar(context),
       bottomNavigationBar:
-          BannerAdBar(bannerAd: _bannerAd, loaded: _bannerLoaded),
+          BannerAdBar(bannerAd: _banner.ad, loaded: _banner.loaded),
       body: SafeArea(
         child: Column(
           children: [

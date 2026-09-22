@@ -300,6 +300,7 @@ class AdService {
     final guard = Timer(const Duration(minutes: 3), () {
       if (shown || completer.isCompleted) return;
       debugPrint('리워드 광고가 3분 안에 뜨지 않음 — 호출자를 풀어준다');
+      ad.dispose(); // 다른 종료 경로처럼 뜨지 못한 광고를 해제한다
       loadRewardedAd();
       completer.complete(false);
     });
@@ -334,7 +335,11 @@ class AdService {
     return completer.future;
   }
 
-  /// 리소스 해제
+  /// 리소스 해제.
+  ///
+  /// 앱에서는 부르는 곳이 없다 — main.dart 가 앱 수명 동안 하나만 만들어 쓰는
+  /// 싱글턴이라 해제 시점이 프로세스 종료뿐이다. 테스트나 핫 리스타트처럼
+  /// 서비스를 갈아끼울 때를 위한 것이지, 누수 방지 장치로 믿으면 안 된다.
   void dispose() {
     _interstitialAd?.dispose();
     _interstitialAd = null;

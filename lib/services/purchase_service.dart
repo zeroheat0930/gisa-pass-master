@@ -398,18 +398,18 @@ class PurchaseService extends ChangeNotifier {
             _completePurchaseInBackground(purchase);
           }
         });
-      } else if (purchase.status == PurchaseStatus.error) {
-        debugPrint('구매 실패: ${purchase.error?.message}');
-        _error = purchase.error?.message ?? '구매에 실패했습니다';
-        notifyListeners();
-        // 실패한 트랜잭션도 종결해야 한다. StoreKit 은 error/canceled 도
+      } else if (purchase.status == PurchaseStatus.error ||
+          purchase.status == PurchaseStatus.canceled) {
+        if (purchase.status == PurchaseStatus.error) {
+          debugPrint('구매 실패: ${purchase.error?.message}');
+          _error = purchase.error?.message ?? '구매에 실패했습니다';
+          notifyListeners();
+        } else {
+          debugPrint('구매 취소됨');
+        }
+        // 실패·취소 트랜잭션도 종결해야 한다. StoreKit 은 error/canceled 도
         // pendingCompletePurchase 로 내려주는데, 종결하지 않으면 큐에 남아
         // 앱을 켤 때마다 재전달되고 취소한 유저마다 하나씩 계속 쌓인다.
-        if (purchase.pendingCompletePurchase) {
-          _completePurchaseInBackground(purchase);
-        }
-      } else if (purchase.status == PurchaseStatus.canceled) {
-        debugPrint('구매 취소됨');
         if (purchase.pendingCompletePurchase) {
           _completePurchaseInBackground(purchase);
         }
