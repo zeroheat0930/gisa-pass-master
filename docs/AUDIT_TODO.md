@@ -111,6 +111,16 @@
 - [x] ~~ATT 요청을 runApp() 이전에 await~~ → 첫 프레임 이후로 이동
 - [x] ~~배너 로드 실패 시 재시도 없음~~ → 지수 백오프 최대 3회 재시도
 
+### v1.8.3+41 (2026-09-22) 에서 해소된 것
+- [x] ~~홈 첫 화면에서 'AI 예측 학습 시작' 버튼이 화면 밖 41px~~ → 유료 입구를
+      D-Day 아래로 재배치, 2기종×2배율 레이아웃 테스트(`test/home_first_screen_test.dart`)
+- [x] ~~복원 기출 결과 화면에 유료 퍼널 링크 0건~~ → CTA 2개, 진입은 `startAiExam` 정본
+- [x] ~~`AppConfig.premiumPrice` 미사용, 가격 하드코딩~~ → `formatPrice` 정본
+- [x] ~~죽은 정본 `lastRealExamYear`/`isPredictedYear`/`latestQuestionYear`~~ → 삭제
+- [x] ~~인앱 리뷰 요청 API 없음~~ → `ReviewPromptService`, 결과 화면 1곳
+- [ ] **(사람) Play 내부 테스트 트랙에서 리뷰 다이얼로그 실동작 확인** — 사이드로드는 no-op
+- [ ] **(사람) 스토어 스크린샷 재촬영** — 홈·구독 화면이 바뀜
+
 ---
 
 ## 실기기 검증 체크리스트 (배포 전 필수)
