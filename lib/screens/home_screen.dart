@@ -229,16 +229,25 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               const SizedBox(height: 16),
 
-              // 1.2 — 회차별 합격률 (D-Day 바로 아래)
+              // AI Prediction button — D-Day 바로 아래, 첫 화면 안.
+              // 유료 입구가 정보 카드들 뒤에 있어서 스크롤하지 않으면 보이지
+              // 않았다. 첫 화면에서 보이는지는 home_first_screen_test 가 지킨다.
+              _AiPredictionButton(
+                onTap: () => _startAiPrediction(context),
+              ),
+              const SizedBox(height: 12),
+
+              // 2 — 학습 플랜 버튼
               _staggered(
-                1,
-                _PassRateButton(
+                2,
+                _StudyPlanButton(
                   onTap: () {
                     HapticFeedback.lightImpact();
                     Navigator.push(
                       context,
                       CupertinoPageRoute(
-                          builder: (_) => const PassRateScreen()),
+                        builder: (_) => const StudyPlanScreen(),
+                      ),
                     );
                   },
                 ),
@@ -260,48 +269,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
               const SizedBox(height: 24),
-
-              // 2 — 학습 플랜 버튼
-              _staggered(
-                2,
-                _StudyPlanButton(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.push(
-                      context,
-                      CupertinoPageRoute(
-                        builder: (_) => const StudyPlanScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // AI Prediction button
-              _AiPredictionButton(
-                onTap: () => _startAiPrediction(context),
-              ),
-              const SizedBox(height: 12),
-
-              // 복원 기출 — AI 예상 바로 아래에 둔다. 시험이 가까울수록
-              // 실제로 나온 문제를 풀고 싶어지는데, 그때마다 문제은행 탭을
-              // 거쳐 들어가게 하면 손이 많이 간다.
-              _RestoredExamButton(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  Navigator.push(
-                    context,
-                    CupertinoPageRoute(
-                      builder: (_) => RoundListScreen(
-                        db: widget.db,
-                        sourceFilter: Question.sourceRestored,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
 
               // 3 — Primary mode buttons
               _staggered(
@@ -332,6 +299,44 @@ class _HomeScreenState extends State<HomeScreen>
                       onTap: () => _startMode(context, StudyMode.bookmark),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 복원 기출 — 학습 모드 버튼들 바로 아래에 둔다. 첫 화면은 유료
+              // 입구(AI 모의고사)와 학습 플랜에 내주고, 무료 개방된 복원 기출은
+              // 스크롤 한 번 안쪽에서 모드 버튼들과 같은 '문제 풀기' 묶음으로
+              // 읽히게 한다.
+              _RestoredExamButton(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                    context,
+                    CupertinoPageRoute(
+                      builder: (_) => RoundListScreen(
+                        db: widget.db,
+                        sourceFilter: Question.sourceRestored,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // 1.2 — 회차별 합격률 (참고 정보라 문제 풀기 묶음 뒤로 보낸다).
+              // 인덱스는 바로 아래 유형별 그룹과 같은 4 — 화면에서 붙어 있는
+              // 둘이 따로 뜨지 않게 한다.
+              _staggered(
+                4,
+                _PassRateButton(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                          builder: (_) => const PassRateScreen()),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 24),
@@ -871,13 +876,22 @@ class _AiPredictionButtonState extends State<_AiPredictionButton>
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      'AI 실전 모의고사',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.3,
+                                    // 제목만 줄어들고 AI 배지는 고정 폭을 지킨다.
+                                    // Flexible 없이는 좁은 화면·큰 글씨 배율에서
+                                    // 가로로 넘쳤다(SE 375·배율 1.0 에서 14px,
+                                    // 배율 1.3 에서 74px) — 첫 화면 유료 입구의
+                                    // 이름이 잘려 보이던 자리다.
+                                    Flexible(
+                                      child: Text(
+                                        'AI 실전 모의고사',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.3,
+                                        ),
                                       ),
                                     ),
                                     SizedBox(width: 8),
