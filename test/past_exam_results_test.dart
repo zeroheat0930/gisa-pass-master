@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gisa_pass_master/models/question.dart';
 import 'package:gisa_pass_master/providers/study_provider.dart';
 import 'package:gisa_pass_master/screens/past_exam_screen.dart';
+import 'package:gisa_pass_master/screens/subscription_screen.dart';
 import 'package:gisa_pass_master/services/ai_exam_quota.dart';
 import 'package:gisa_pass_master/services/database_service.dart';
 import 'package:gisa_pass_master/services/prediction_engine.dart';
@@ -79,7 +83,21 @@ void main() {
     };
   });
 
-  tearDown(() => ReviewPromptService.debugOpenStoreReview = null);
+  tearDown(() {
+    ReviewPromptService.debugOpenStoreReview = null;
+    ReviewPromptService.beforeOpenForTest = null;
+  });
+
+  /// 리뷰 평가를 [isCancelled] 검사 직전에 멈춰 세운다.
+  ///
+  /// 이게 없으면 상호배제를 검증할 수 없다. 위젯 테스트의 prefs 는 메모리라
+  /// 결과 화면이 그려지기도 전에 평가가 끝나버려, CTA 를 탭하는 시점에는 이미
+  /// 승패가 갈려 있다(= `_reviewChanceUsed` 를 지워도 초록불).
+  Completer<void> gateReviewEvaluation() {
+    final gate = Completer<void>();
+    ReviewPromptService.beforeOpenForTest = () => gate.future;
+    return gate;
+  }
 
   /// 기본 테스트 화면(800×600)에서는 결과 화면 하단 CTA 가 스크롤 밖으로
   /// 밀려 탭이 빗나간다. 탭 판정을 위해 뷰포트를 길게 잡는다.
@@ -274,7 +292,9 @@ void main() {
       expect(reviewCalls, 0);
     });
 
-    testWidgets('쿼터 소진 다이얼로그와 리뷰가 겹치지 않는다', (tester) async {
+    testWidgets('정답률 미달 세션은 CTA 를 탭해도 리뷰가 0회다', (tester) async {
+      // 조건 자체가 미달이라 상호배제 규칙은 이 테스트로 검증되지 않는다.
+      // 그건 아래 '평가 중 …' 두 건이 한다.
       SharedPreferences.setMockInitialValues({
         ReviewPromptService.solvedTotalKey: 100,
       });
@@ -282,7 +302,6 @@ void main() {
 
       tallViewport(tester);
       await tester.pumpWidget(host(premium: false));
-      // 오답 세션이라 진입 시점에는 리뷰 조건이 아니다.
       await finishQuiz(tester, questionCount: 1, correct: false);
       expect(reviewCalls, 0);
 
@@ -290,7 +309,126 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('오늘의 무료 모의고사 완료'), findsOneWidget);
-      expect(reviewCalls, 0, reason: '다이얼로그가 겹치면 둘 다 무시당하고 별점만 깎인다');
+      expect(reviewCalls, 0);
+    });
+
+    testWidgets('CTA 를 탭하지 않으면 평가가 끝난 뒤 한 번 요청한다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+      final gate = gateReviewEvaluation();
+
+      tallViewport(tester);
+      await tester.pumpWidget(host(premium: false, questionCount: 20));
+      await finishQuiz(tester, questionCount: 20, correct: true);
+      expect(reviewCalls, 0, reason: '아직 평가가 시임에 멈춰 있다');
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(reviewCalls, 1, reason: '조건을 채웠고 아무 CTA 도 가로채지 않았다');
+    });
+
+    testWidgets('평가 중 AI CTA 를 탭하면 리뷰 요청을 취소한다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+      await AiExamQuota.consume(isPremium: false); // 오늘 무료 1회 소진
+      final gate = gateReviewEvaluation();
+
+      tallViewport(tester);
+      // 20문항 전부 정답 = 리뷰 조건을 채운 세션. 겹칠 수 있는 유일한 상황이다.
+      await tester.pumpWidget(host(premium: false, questionCount: 20));
+      await finishQuiz(tester, questionCount: 20, correct: true);
+      expect(reviewCalls, 0);
+
+      await tester.tap(find.text('AI 실전 모의고사로 실력 점검'));
+      await tester.pumpAndSettle();
+      expect(find.text('오늘의 무료 모의고사 완료'), findsOneWidget);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(reviewCalls, 0,
+          reason: '쿼터 다이얼로그와 겹치면 둘 다 무시당하고 별점만 깎인다');
+    });
+
+    testWidgets('평가 중 구독 CTA 를 탭해도 리뷰 요청을 취소한다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+      final gate = gateReviewEvaluation();
+
+      tallViewport(tester);
+      await tester.pumpWidget(host(premium: false, questionCount: 20));
+      await finishQuiz(tester, questionCount: 20, correct: true);
+      expect(reviewCalls, 0);
+
+      await tester.tap(find.text('광고 없이 공부에 집중'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SubscriptionScreen), findsOneWidget);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(reviewCalls, 0, reason: '구독 화면 위로 리뷰 다이얼로그가 떠도 똑같이 묻힌다');
+    });
+
+    testWidgets('다시 풀기로 재완주해도 세션 리뷰는 1회, 누적도 이중 가산되지 않는다',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+
+      tallViewport(tester);
+      await tester.pumpWidget(host(premium: false, questionCount: 20));
+      await finishQuiz(tester, questionCount: 20, correct: true);
+      expect(reviewCalls, 1);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(ReviewPromptService.solvedTotalKey), 120);
+
+      // 재진입의 실제 경로는 재빌드가 아니라 '다시 풀기'다.
+      await tester.tap(find.text('다시 풀기'));
+      await tester.pump();
+      await finishQuiz(tester, questionCount: 20, correct: true);
+
+      expect(reviewCalls, 1, reason: '세션 내 1회를 넘기면 그 유저에게는 오래 못 묻는다');
+      expect(prefs.getInt(ReviewPromptService.solvedTotalKey), 120,
+          reason: '가드가 빠지면 140 이 되어 다음 쿨다운을 앞당겨 태운다');
+    });
+
+    testWidgets('리뷰 경로가 던져도 결과 화면으로 예외가 새지 않는다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+      ReviewPromptService.debugOpenStoreReview =
+          () async => throw MissingPluginException('in_app_review 없음');
+
+      await tester.pumpWidget(host(premium: false));
+      await finishQuiz(tester, questionCount: 1, correct: true);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull,
+          reason: 'unawaited 로 띄우므로 여기서 새면 미처리 비동기 예외가 된다');
+      expect(find.text('AI 실전 모의고사로 실력 점검'), findsOneWidget,
+          reason: '결과 화면은 그대로 살아 있어야 한다');
+    });
+
+    test('스토어가 던져도 requestIfEligible 은 false 로 끝난다', () async {
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+      ReviewPromptService.debugOpenStoreReview =
+          () async => throw MissingPluginException('in_app_review 없음');
+
+      expect(
+        await ReviewPromptService.requestIfEligible(
+          sessionTotal: 20,
+          sessionCorrect: 20,
+        ),
+        isFalse,
+      );
     });
   });
 }

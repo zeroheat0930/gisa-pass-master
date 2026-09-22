@@ -601,6 +601,41 @@ void main() {
           reason: '금액 값도 정본(AppConfig.premiumPrice)에서 읽어야 한다');
     });
   });
+
+  // ── 9) D-Day 판매 문구 정본 ──────────────────────────────────────────────
+  // 쿼터 다이얼로그와 구독 히어로가 `'· 시험까지 D-...'` 조립을 각자 갖고 있었다.
+  // 같은 것을 복붙하고 한쪽만 고치는 것 = 이 저장소의 1번 실패 패턴이라,
+  // 노출 조건·구분자까지 AppConfig.examCountdownSuffix 하나로 못박는다.
+  group('D-Day 판매 문구 정본', () {
+    test('판매 꼬리표 리터럴은 config.dart 한 곳에만 있다', () {
+      // 구분자까지 포함해 찾는다. quiz_screen 의 '시험까지 D-N! 포기하지 마세요!'
+      // 는 판매 꼬리표가 아니라 별개의 동기부여 문장이라 대상이 아니다.
+      final owners = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .map((f) => f.path)
+          .where((p) => p.endsWith('.dart'))
+          .where((p) => activeSource(p).contains(' · 시험까지 D-'))
+          .toList()
+        ..sort();
+
+      expect(owners, ['lib/config.dart'],
+          reason: '판매 꼬리표 조립은 정본 하나뿐이어야 한다 (현재 $owners)');
+    });
+
+    test('두 화면은 조립하지 않고 정본을 붙이기만 한다', () {
+      for (final path in const [
+        'lib/widgets/exam_quota_dialog.dart',
+        'lib/screens/subscription_screen.dart',
+      ]) {
+        final src = activeSource(path);
+        expect(src.contains('AppConfig.examCountdownSuffix'), isTrue,
+            reason: '$path 가 D-Day 정본을 쓰지 않는다');
+        expect(src.contains('시험까지 D-'), isFalse,
+            reason: '$path 에 조립이 남아 있으면 정본을 고쳐도 안 따라온다');
+      }
+    });
+  });
 }
 
 /// processAnswer 가 알림 재예약을 실제로 부르는지 세는 스파이.

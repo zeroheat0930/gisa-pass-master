@@ -23,13 +23,11 @@ class ExamQuotaDialog {
   ///
   /// "지금 안 사면" 류의 압박 문구는 쓰지 않는다. 결제 화면 카피와 실제
   /// 게이팅이 어긋나면 환불·심사 분쟁이 되므로, 숫자는 전부 정본에서 읽는다.
-  /// 남은 일수는 [AppConfig.daysUntilExam] 만 쓰고, 노출 여부도
-  /// [AppConfig.shouldShowExamCountdown] 이 혼자 판단한다.
-  static String _factLine() {
-    final quota = '무료는 하루 ${AiExamQuota.freeAttemptsPerDay}회';
-    if (!AppConfig.shouldShowExamCountdown) return quota;
-    return '$quota · 시험까지 D-${AppConfig.daysUntilExam}';
-  }
+  /// D-Day 꼬리표는 조립까지 [AppConfig.examCountdownSuffix] 가 끝낸 것을 붙이기만
+  /// 한다 — 여기서 다시 조립하면 구독 화면과 두 벌이 되어 한쪽만 고쳐진다.
+  static String _factLine() =>
+      '무료는 하루 ${AiExamQuota.freeAttemptsPerDay}회'
+      '${AppConfig.examCountdownSuffix}';
 
   /// 반환값이 true 면 지금 바로 응시할 수 있다(광고 보상 획득).
   static Future<bool> show(

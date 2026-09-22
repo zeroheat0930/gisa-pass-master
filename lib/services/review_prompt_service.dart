@@ -77,46 +77,69 @@ class ReviewPromptService {
     bool Function()? isCancelled,
     DateTime? now,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    // 리뷰 요청은 부가 기능이다. 호출부가 `unawaited` 로 띄우므로 여기서 예외가
+    // 새면 미처리 비동기 예외가 되어 결과 화면 흐름까지 같이 죽는다.
+    // 플랫폼 채널이 없거나(MissingPluginException) 스토어가 거부하는
+    // (PlatformException) 경우는 정상 동작 범위이므로 조용히 false 로 끝낸다.
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    final cumulative = (prefs.getInt(solvedTotalKey) ?? 0) +
-        (sessionTotal < 0 ? 0 : sessionTotal);
-    await prefs.setInt(solvedTotalKey, cumulative);
+      final cumulative = (prefs.getInt(solvedTotalKey) ?? 0) +
+          (sessionTotal < 0 ? 0 : sessionTotal);
+      await prefs.setInt(solvedTotalKey, cumulative);
 
-    final rawLast = prefs.getString(lastRequestedKey);
-    final lastRequestedAt = rawLast == null ? null : DateTime.tryParse(rawLast);
-    final at = now ?? DateTime.now();
+      final rawLast = prefs.getString(lastRequestedKey);
+      final lastRequestedAt =
+          rawLast == null ? null : DateTime.tryParse(rawLast);
+      final at = now ?? DateTime.now();
 
-    if (!shouldRequest(
-      sessionTotal: sessionTotal,
-      sessionCorrect: sessionCorrect,
-      cumulativeSolved: cumulative,
-      lastRequestedAt: lastRequestedAt,
-      now: at,
-    )) {
+      if (!shouldRequest(
+        sessionTotal: sessionTotal,
+        sessionCorrect: sessionCorrect,
+        cumulativeSolved: cumulative,
+        lastRequestedAt: lastRequestedAt,
+        now: at,
+      )) {
+        return false;
+      }
+
+      final before = beforeOpenForTest;
+      if (before != null) await before();
+
+      if (isCancelled?.call() ?? false) return false;
+
+      // 스토어가 못 띄웠는데 시각을 기록하면 90일을 그냥 버린다.
+      if (!await _openStoreReview(isCancelled)) return false;
+      await prefs.setString(lastRequestedKey, at.toIso8601String());
+      return true;
+    } catch (e) {
+      debugPrint('ReviewPromptService.requestIfEligible 실패: $e');
       return false;
     }
-
-    if (isCancelled?.call() ?? false) return false;
-
-    // 스토어가 못 띄웠는데 시각을 기록하면 90일을 그냥 버린다.
-    if (!await _openStoreReview()) return false;
-    await prefs.setString(lastRequestedKey, at.toIso8601String());
-    return true;
   }
 
   /// 테스트용 시임. 위젯 테스트에서 플랫폼 채널을 타지 않게 갈아끼운다.
   @visibleForTesting
   static Future<bool> Function()? debugOpenStoreReview;
 
+  /// 테스트용 시임. [isCancelled] 검사 **직전**에 await 된다.
+  ///
+  /// 실제 기기에서는 저장소 I/O 가 "평가 중 유저가 CTA 를 탭한다"는 창을 만들지만,
+  /// 위젯 테스트의 prefs 는 메모리라 결과 화면이 그려지기도 전에 평가가 끝나버려
+  /// 그 경합을 재현할 수 없다. 이 시임이 그 창을 테스트가 열어준다.
+  @visibleForTesting
+  static Future<void> Function()? beforeOpenForTest;
+
   /// 스토어 기본 리뷰 다이얼로그. **자체 별점 위젯을 만들지 않는다** —
   /// 앱이 직접 별점을 받아 스토어로 유도하는 것은 애플·구글 정책 위반이다.
-  static Future<bool> _openStoreReview() async {
+  static Future<bool> _openStoreReview(bool Function()? isCancelled) async {
     final override = debugOpenStoreReview;
     if (override != null) return override();
 
     final review = InAppReview.instance;
     if (!await review.isAvailable()) return false;
+    // isAvailable 이 플랫폼 왕복이라 그 사이에도 CTA 가 눌릴 수 있다.
+    if (isCancelled?.call() ?? false) return false;
     await review.requestReview();
     return true;
   }

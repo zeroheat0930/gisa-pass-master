@@ -114,6 +114,14 @@ class AppConfig {
   static bool get shouldShowExamCountdown =>
       isExamDateConfirmed && daysUntilExam <= examCountdownWindowDays;
 
+  /// 판매 문구 뒤에 붙는 D-Day 꼬리표 (단일 정본). 노출 여부 판단까지 여기서 끝낸다.
+  ///
+  /// 이 조립을 화면마다 따로 갖고 있으면 이 저장소의 반복된 실패 패턴이 그대로
+  /// 재발한다 — 같은 것을 복붙하고 한쪽만 고치는 것. 구분자(` · `)까지 포함해
+  /// 돌려주므로 호출부는 자기 문구 뒤에 **붙이기만** 한다.
+  static String get examCountdownSuffix =>
+      shouldShowExamCountdown ? ' · 시험까지 D-$daysUntilExam' : '';
+
   // === 테마 컬러 ===
   static const Color primaryColor = Color(0xFFE53935);
   static const Color backgroundColor = Color(0xFF121212);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config.dart';
@@ -668,8 +669,9 @@ class _QuizScreenState extends State<_QuizScreen> {
     _isNavigating = true;
     _reviewChanceUsed = true;
     try {
+      // 같은 화면은 같은 전환으로 연다(ai_exam_launcher 의 onSeePremium 과 동일).
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
       );
     } finally {
       _isNavigating = false;

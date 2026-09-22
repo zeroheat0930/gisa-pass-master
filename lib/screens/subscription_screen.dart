@@ -161,11 +161,10 @@ class SubscriptionScreen extends StatelessWidget {
 
 class _HeroHeader extends StatelessWidget {
   /// 무료 한도와 남은 일수를 그대로 적는 한 줄 (ExamQuotaDialog 와 같은 규칙).
-  static String _factLine() {
-    final quota = '무료는 AI 모의고사 하루 ${AiExamQuota.freeAttemptsPerDay}회';
-    if (!AppConfig.shouldShowExamCountdown) return quota;
-    return '$quota · 시험까지 D-${AppConfig.daysUntilExam}';
-  }
+  /// D-Day 꼬리표는 [AppConfig.examCountdownSuffix] 정본을 붙이기만 한다.
+  static String _factLine() =>
+      '무료는 AI 모의고사 하루 ${AiExamQuota.freeAttemptsPerDay}회'
+      '${AppConfig.examCountdownSuffix}';
 
   @override
   Widget build(BuildContext context) {
@@ -475,13 +474,16 @@ class _FeatureRow {
   final String? freeText;
   final String? premiumText;
 
+  /// 라벨만 적은 행은 무료·프리미엄 양쪽이 조용히 × 로 그려진다 —
+  /// "아무도 못 쓰는 기능"을 기능표에 파는 꼴이라 빌드 시점에 막는다.
   const _FeatureRow({
     required this.label,
     this.free = false,
     this.premium = false,
     this.freeText,
     this.premiumText,
-  });
+  }) : assert(free || premium || freeText != null || premiumText != null,
+            '무료·프리미엄 양쪽이 모두 비면 행이 ×/× 로만 그려진다');
 }
 
 class _FeatureRowWidget extends StatelessWidget {
