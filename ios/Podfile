@@ -43,5 +43,11 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    # 일부 플러그인 pod(in_app_review 계열)이 자기 podspec 에 11.0/13.0 을 선언한다.
+    # Xcode 27 은 15.0 미만 배포 타깃을 거부해 archive 가 통째로 실패하므로
+    # (v1.8.3+41 빌드에서 실제로 발생), 위 platform 과 같은 값으로 강제한다.
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
   end
 end
