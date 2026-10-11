@@ -22,10 +22,13 @@ class AppConfig {
   static String get appSubtitle => '${nextExam.year} 정보처리기사 실기';
 
   // === 시험 일정 (자동으로 다음 회차 전환) ===
+  // 큐넷은 기사 실기를 기간(3회: 10.24~11.13)으로만 공지한다. 정보처리기사
+  // 필답형은 그 안의 하루에 전국 동시 시행되며, 날짜는 에듀온 시험일정 기준이다.
+  // (2026-10 사용자 제보로 3회 10/18 → 10/25, 2회 7/5 → 7/19 정정)
   static final List<({int year, int round, DateTime date})> _examSchedule = [
     (year: 2026, round: 1, date: DateTime(2026, 4, 18)),
-    (year: 2026, round: 2, date: DateTime(2026, 7, 5)),
-    (year: 2026, round: 3, date: DateTime(2026, 10, 18)),
+    (year: 2026, round: 2, date: DateTime(2026, 7, 19)),
+    (year: 2026, round: 3, date: DateTime(2026, 10, 25)),
     (year: 2027, round: 1, date: DateTime(2027, 4, 17)),
   ];
 
@@ -33,8 +36,8 @@ class AppConfig {
   /// 실기는 매년 1회 4월 / 2회 7월 / 3회 10월 경에 시행된다.
   static const List<({int month, int day})> _typicalExamDates = [
     (month: 4, day: 18),
-    (month: 7, day: 5),
-    (month: 10, day: 18),
+    (month: 7, day: 19),
+    (month: 10, day: 25),
   ];
 
   /// 다음 시험 정보 (자동 전환)

@@ -127,8 +127,8 @@ void main() {
     }
 
     testWidgets('시험이 가까우면 무료 한도와 D-Day 를 사실대로 적는다', (tester) async {
-      AppConfig.nowForTest = () => DateTime(2026, 9, 22); // 시험 2026-10-18 확정
-      expect(AppConfig.daysUntilExam, 26, reason: '테스트 전제 확인');
+      AppConfig.nowForTest = () => DateTime(2026, 9, 22); // 시험 2026-10-25 확정
+      expect(AppConfig.daysUntilExam, 33, reason: '테스트 전제 확인');
 
       await openAndClose(tester);
 
@@ -159,7 +159,7 @@ void main() {
     });
 
     testWidgets('시험이 60일 넘게 남으면 D-Day 문구를 쓰지 않는다', (tester) async {
-      AppConfig.nowForTest = () => DateTime(2026, 7, 6); // 다음 확정 시험까지 104일
+      AppConfig.nowForTest = () => DateTime(2026, 7, 20); // 다음 확정 시험(10/25)까지 97일
       expect(AppConfig.daysUntilExam, greaterThan(60), reason: '테스트 전제 확인');
       expect(AppConfig.isExamDateConfirmed, isTrue, reason: '일수 조건만 검증');
 
