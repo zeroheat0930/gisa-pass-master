@@ -7,87 +7,126 @@ import '../services/plan_reset_quota.dart';
 import '../services/purchase_service.dart';
 import '../utils/price_format.dart';
 
-class SubscriptionScreen extends StatelessWidget {
+class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
 
-  void _onSubscribe(BuildContext context) async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('앱에서 구매할 수 있습니다'),
-          backgroundColor: AppConfig.cardColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-      return;
-    }
-    final purchaseService = context.read<PurchaseService>();
+  /// 복원 요청 뒤 결과(프리미엄 켜짐)를 기다리는 최대 시간.
+  @visibleForTesting
+  static const Duration restoreWait = Duration(seconds: 5);
 
-    // 상품이 아직 로딩 안 됐으면 재시도
-    if (purchaseService.products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('스토어 연결 중... 잠시만 기다려주세요'),
-          backgroundColor: AppConfig.cardColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-      await purchaseService.reloadProducts();
-    }
+  @override
+  State<SubscriptionScreen> createState() => _SubscriptionScreenState();
+}
 
-    // buyPremium 내부에서도 재로딩을 시도함
-    await purchaseService.buyPremium();
+class _SubscriptionScreenState extends State<SubscriptionScreen> {
+  late final PurchaseService _purchaseService;
 
-    if (purchaseService.error != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(purchaseService.error!),
-          backgroundColor: AppConfig.cardColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+  /// 이미 스낵바로 보여준 에러의 일련번호. 같은 에러를 두 번 띄우지 않고,
+  /// 화면에 들어오기 전에 났던 에러를 뒤늦게 띄우지도 않는다.
+  late int _shownErrorSerial;
+
+  /// 복원 결과를 기다리는 중인지 — 연타로 대기가 겹치면 스낵바가 쌓인다.
+  bool _restoring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _purchaseService = context.read<PurchaseService>();
+    _shownErrorSerial = _purchaseService.purchaseErrorSerial;
+    // 스토어 결과는 buyPremium 이 끝난 뒤 스트림으로 늦게 온다(결제 거절·카드
+    // 오류 등). 버튼 핸들러에서 한 번 읽는 것으로는 그 에러를 못 보여준다.
+    _purchaseService.addListener(_onPurchaseChanged);
+    // 회수 안내는 이번 진입에만 보이고 다음부터는 안 보인다.
+    if (_purchaseService.premiumRevoked) {
+      _purchaseService.acknowledgeRevokedNotice();
     }
   }
 
-  Future<void> _onRestore(BuildContext context) async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('앱에서 복원할 수 있습니다'),
-          backgroundColor: AppConfig.cardColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-      return;
-    }
+  @override
+  void dispose() {
+    _purchaseService.removeListener(_onPurchaseChanged);
+    super.dispose();
+  }
 
-    final purchaseService = context.read<PurchaseService>();
+  void _onPurchaseChanged() {
+    final serial = _purchaseService.purchaseErrorSerial;
+    if (serial == _shownErrorSerial) return;
+    _shownErrorSerial = serial;
+    final message = _purchaseService.error;
+    if (message == null || !mounted) return;
+    _showSnack(message);
+  }
 
-    // 결과를 기다렸다가 보여준다. 요청도 안 됐는데(스토어 연결 실패)
-    // '복원 중...'만 띄우면 유저는 성공한 줄 알고 기다리다 이탈한다.
-    final requested = await purchaseService.restorePurchases();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+  void _showSnack(String message, {Duration? duration}) {
+    final messenger = ScaffoldMessenger.of(context);
+    // 앞 스낵바가 떠 있으면 뒤 메시지가 몇 초씩 밀려 엉뚱한 때 나타난다.
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
-        content: Text(requested
-            ? '구매 복원 중... 구매 이력이 있으면 곧 반영됩니다'
-            : purchaseService.error ?? '구매 복원에 실패했습니다'),
+        content: Text(message),
         backgroundColor: AppConfig.cardColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: duration ?? const Duration(milliseconds: 4000),
       ),
     );
+  }
+
+  Future<void> _onSubscribe() async {
+    if (kIsWeb) {
+      _showSnack('앱에서 구매할 수 있습니다');
+      return;
+    }
+
+    // 상품이 아직 로딩 안 됐으면 재시도
+    if (_purchaseService.products.isEmpty) {
+      _showSnack('스토어 연결 중... 잠시만 기다려주세요',
+          duration: const Duration(seconds: 1));
+      await _purchaseService.reloadProducts();
+    }
+
+    // buyPremium 내부에서도 재로딩을 시도함.
+    // 실패 메시지는 여기서 읽지 않는다 — 즉시 실패든 스트림으로 늦게 온
+    // 실패든 _onPurchaseChanged 가 한 번만 띄운다(여기서도 띄우면 두 번 뜬다).
+    await _purchaseService.buyPremium();
+  }
+
+  Future<void> _onRestore() async {
+    if (kIsWeb) {
+      _showSnack('앱에서 복원할 수 있습니다');
+      return;
+    }
+    if (_restoring) return;
+
+    if (_purchaseService.isPremium) {
+      _showSnack('이미 프리미엄이에요');
+      return;
+    }
+
+    setState(() => _restoring = true);
+    try {
+      // 요청이 실패하면(스토어 연결 실패 등) 에러 스낵바는 리스너가 띄운다.
+      final requested = await _purchaseService.restorePurchases();
+      if (!requested || !mounted) return;
+
+      // 결과를 기다렸다가 보여준다. "곧 반영됩니다" 로 끝내면 복원할 구매가
+      // 없는 유저(다른 계정 로그인 등)는 아무 일도 안 일어난 이유를 모른다.
+      final restored =
+          await _purchaseService.waitForPremium(SubscriptionScreen.restoreWait);
+      if (!mounted) return;
+      _showSnack(restored
+          ? '복원됐어요'
+          : '복원할 구매를 찾지 못했어요. 구매한 계정으로 로그인돼 있는지 확인해주세요');
+    } finally {
+      if (mounted) setState(() => _restoring = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     // watch — 구매가 완료되면 이 화면이 즉시 '이용 중'으로 바뀌어야 한다.
-    final isPremium = context.watch<PurchaseService>().isPremium;
+    final purchase = context.watch<PurchaseService>();
+    final isPremium = purchase.isPremium;
 
     return Scaffold(
       backgroundColor: AppConfig.backgroundColor,
@@ -130,16 +169,34 @@ class SubscriptionScreen extends StatelessWidget {
             if (isPremium)
               const _PremiumActiveBanner()
             else ...[
-              _CtaButton(onTap: () => _onSubscribe(context)),
+              // 승인 대기 중이면 결제가 씹힌 게 아니라는 걸 알려준다. 버튼은
+              // 막지 않는다 — 승인이 거절됐을 때 다시 결제할 길이 있어야 한다.
+              if (purchase.isPendingApproval) ...[
+                const _NoticeCard(
+                  icon: Icons.hourglass_top_rounded,
+                  message: '결제 승인 대기 중이에요. 승인되면 자동으로 적용됩니다',
+                ),
+                const SizedBox(height: 12),
+              ] else if (purchase.premiumRevoked) ...[
+                // 스토어에서 구매가 확인되지 않아 회수된 경우(환불·취소, 또는
+                // 다른 계정 로그인). 정상 구매자라면 복원으로 되돌릴 수 있게 안내한다.
+                const _NoticeCard(
+                  icon: Icons.info_outline_rounded,
+                  message: '스토어에서 구매 내역이 확인되지 않아 프리미엄이 해제됐어요. '
+                      '구매하셨다면 구매한 계정으로 로그인한 뒤 아래 \'구매 복원\'을 눌러주세요',
+                ),
+                const SizedBox(height: 12),
+              ],
+              _CtaButton(onTap: _onSubscribe),
               const SizedBox(height: 16),
 
               // Restore purchases (이미 프리미엄이면 필요 없다)
               Center(
                 child: TextButton(
-                  onPressed: () => _onRestore(context),
-                  child: const Text(
-                    '구매 복원',
-                    style: TextStyle(
+                  onPressed: _restoring ? null : _onRestore,
+                  child: Text(
+                    _restoring ? '구매 내역 확인 중...' : '구매 복원',
+                    style: const TextStyle(
                       color: Color(0xFF9E9E9E),
                       fontSize: 13,
                       decoration: TextDecoration.underline,
@@ -152,6 +209,42 @@ class SubscriptionScreen extends StatelessWidget {
             const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 결제 상태 안내 한 줄 카드 (승인 대기·회수 안내).
+class _NoticeCard extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _NoticeCard({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppConfig.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppConfig.borderColor, width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppConfig.primaryColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

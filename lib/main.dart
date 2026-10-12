@@ -64,6 +64,12 @@ void main() async {
     purchaseService: purchaseService,
     studyPlanService: studyPlanService,
   ));
+
+  // 결제 결과 스트림은 runApp 직후에 바로 듣는다. 스토어 연결(initialize)은
+  // AdMob 초기화·ATT 뒤로 미뤄져 수 초 늦는데, 그 사이 유저가 결제하면
+  // Android 는 결과 이벤트가 리스너 없이 흘러가 유실된다(돈만 나가고 지급·
+  // acknowledge 안 됨 → 3일 뒤 자동 환불). 구독만 걸고 네트워크는 타지 않는다.
+  purchaseService.listenToPurchaseStream();
 }
 
 class GisaPassMasterApp extends StatelessWidget {
