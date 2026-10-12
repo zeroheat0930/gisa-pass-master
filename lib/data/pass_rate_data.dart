@@ -1,6 +1,9 @@
 /// 정보처리기사 회차별 합격률 (2020년 NCS 개편 이후).
 ///
-/// 숫자는 공개된 국가기술자격 통계에서 옮긴 것이다. 응시자·합격자 수를 함께
+/// 숫자는 공개된 국가기술자격 통계에서 옮긴 것이다. 2026년 2회(10/12 추가)는
+/// 큐넷 종목별 연간 통계가 아직 안 나와, 큐넷 발표를 옮긴 블로그 두 곳
+/// (실기: 응시 23,446·합격 8,142 / 필기: 응시 18,784·합격 11,769)과
+/// 에듀감자 합격률 표가 일치하는 것을 확인하고 넣었다. 응시자·합격자 수를 함께
 /// 담아두고, 합격률이 그 둘과 실제로 맞는지는 테스트가 지킨다 — 옮겨 적다 생긴
 /// 오타를 그렇게 잡는다.
 ///
@@ -67,6 +70,7 @@ class PassRateData {
     PassRateEntry(year: 2025, roundLabel: '2회', taken: 20853, passed: 13280, rate: 63.68),
     PassRateEntry(year: 2025, roundLabel: '3회', taken: 19777, passed: 12357, rate: 62.48),
     PassRateEntry(year: 2026, roundLabel: '1회', taken: 21998, passed: 14654, rate: 66.62),
+    PassRateEntry(year: 2026, roundLabel: '2회', taken: 18784, passed: 11769, rate: 62.65),
   ];
 
   static const List<PassRateEntry> practical = [
@@ -91,6 +95,7 @@ class PassRateData {
     PassRateEntry(year: 2025, roundLabel: '2회', taken: 24815, passed: 6905, rate: 27.83),
     PassRateEntry(year: 2025, roundLabel: '3회', taken: 22652, passed: 5414, rate: 23.90),
     PassRateEntry(year: 2026, roundLabel: '1회', taken: 23898, passed: 4335, rate: 18.14),
+    PassRateEntry(year: 2026, roundLabel: '2회', taken: 23446, passed: 8142, rate: 34.73),
   ];
 
   static List<PassRateEntry> of(ExamKind kind) =>

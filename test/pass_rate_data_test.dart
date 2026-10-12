@@ -61,10 +61,10 @@ void main() {
   test('회차 평균과 누적 합격률은 서로 다르다 (섞어 쓰면 안 된다)', () {
     // 응시자 수가 회차마다 크게 달라서 두 값이 갈린다. 화면에서 어느 쪽을
     // 보여주는지 분명히 하려고 계산을 나눠뒀다.
-    expect(PassRateData.roundAverage(ExamKind.practical), closeTo(22.18, 0.01));
-    expect(PassRateData.cumulativeRate(ExamKind.practical), closeTo(23.51, 0.01));
-    expect(PassRateData.roundAverage(ExamKind.written), closeTo(60.12, 0.01));
-    expect(PassRateData.cumulativeRate(ExamKind.written), closeTo(61.25, 0.01));
+    expect(PassRateData.roundAverage(ExamKind.practical), closeTo(22.75, 0.01));
+    expect(PassRateData.cumulativeRate(ExamKind.practical), closeTo(24.17, 0.01));
+    expect(PassRateData.roundAverage(ExamKind.written), closeTo(60.25, 0.01));
+    expect(PassRateData.cumulativeRate(ExamKind.written), closeTo(61.32, 0.01));
   });
 
   test('실기가 필기보다 확실히 어렵다는 사실이 데이터에 남아 있다', () {
