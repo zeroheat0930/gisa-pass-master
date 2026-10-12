@@ -1,14 +1,18 @@
+import '../config.dart';
 import '../models/question.dart';
 
-/// 2026 1회차 출제 예측 엔진
+/// 다음 회차 출제 예측 엔진
 /// 우선순위 점수 = 빈도(0.4) + 최신성(0.3) + 유형가중(0.2) + 취약도(0.1)
 class PredictionEngine {
-  // 연도별 최신성 점수
+  // 연도별 최신성 점수 — 올해 기준 상대값.
+  // 예전에는 `year >= 2025` 처럼 연도를 박아둬서, 해가 바뀌면 2년 전 기출이
+  // 계속 '최신' 대접을 받았다. 올해·작년 1.0 / 2년 전 0.7 / 3년 전 0.4 / 그 이전 0.2.
   static double _recencyScore(int year) {
-    if (year >= 2025) return 1.0;
-    if (year == 2024) return 0.7;
-    if (year == 2023) return 0.4;
-    return 0.2; // 2022년 이전
+    final thisYear = AppConfig.now.year;
+    if (year >= thisYear - 1) return 1.0;
+    if (year == thisYear - 2) return 0.7;
+    if (year == thisYear - 3) return 0.4;
+    return 0.2;
   }
 
   // 문제 유형별 가중치

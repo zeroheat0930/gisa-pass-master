@@ -1,3 +1,5 @@
+import '../config.dart';
+
 class StudyPlan {
   final int id;
   final DateTime startedAt;
@@ -47,8 +49,9 @@ class StudyPlan {
   }
 
   /// 오늘이 플랜 시작일 기준 며칠째인지 계산
+  /// (AppConfig.now — 테스트에서 고정한 '오늘' 을 따라가야 화면 판정과 맞는다)
   int get todayDay {
-    final now = DateTime.now();
+    final now = AppConfig.now;
     final today = DateTime(now.year, now.month, now.day);
     final start = DateTime(startedAt.year, startedAt.month, startedAt.day);
     return (today.difference(start).inDays + 1).clamp(1, totalDays);

@@ -13,6 +13,13 @@ class AppConfig {
 
   static DateTime _now() => nowForTest?.call() ?? DateTime.now();
 
+  /// 앱 전체가 쓰는 '지금' (단일 정본). [nowForTest] 를 반영한다.
+  ///
+  /// 화면마다 `DateTime.now()` 를 따로 부르면 테스트에서 시각을 고정해도 일부만
+  /// 따라와서, D-Day 타이머가 D-N 은 고정 시각으로, 시:분:초는 실제 시각으로
+  /// 계산하는 식으로 어긋났다.
+  static DateTime get now => _now();
+
   // === 앱 기본 정보 ===
   static const String appTitle = '기사패스마스터';
   static const String examLabel = '정보처리기사 실기 시험';
@@ -33,6 +40,58 @@ class AppConfig {
     // 넣으면 '(예정)' 없이 확정으로 표시되고 알림까지 예약된다 — 올해 2·3회
     // 날짜도 틀려서 사용자 제보로 고쳤다.
   ];
+
+  // === 시험 시각 ===
+  // 정보처리기사 실기 필답형: 입실 09:00, 시작 09:30 — 큐넷 공고 기준, 바뀌면 여기만.
+  // 소요 150분이라 12:00 에 끝난다. D-Day 카운트다운은 '시작 시각' 을 겨냥하고,
+  // 시작~종료 사이는 '시험 진행 중', 종료 뒤로는 '수고하셨습니다' 로 바뀐다.
+  static const int examStartHour = 9;
+  static const int examStartMinute = 30;
+  static const int examDurationMinutes = 150;
+
+  /// [examDay] 의 시험 시작 시각.
+  static DateTime examStartOn(DateTime examDay) => DateTime(examDay.year,
+      examDay.month, examDay.day, examStartHour, examStartMinute);
+
+  /// [examDay] 의 시험 종료 시각.
+  static DateTime examEndOn(DateTime examDay) =>
+      examStartOn(examDay).add(const Duration(minutes: examDurationMinutes));
+
+  /// 시험 다음날부터 며칠 동안 '수고하셨습니다' 를 보여줄지.
+  static const int examAftercareDays = 3;
+
+  /// 오늘 기준 1~[examAftercareDays]일 전에 치러진 **확정** 시험. 없으면 null.
+  ///
+  /// 시험 다음날 자정이면 [nextExam] 이 이미 다음 회차(대개 추정치)로 넘어가서,
+  /// 시험 본 다음날 아침 홈에 곧장 'D-174' 가 뜬다. 방금 시험을 치른 유저에게는
+  /// 며칠간 마무리 인사를 먼저 보여준다. 추정 일정은 실제로 치러졌는지 모르므로
+  /// 대상이 아니다.
+  static ({int year, int round, DateTime date})? get recentlyFinishedExam {
+    final n = _now();
+    final today = DateTime.utc(n.year, n.month, n.day);
+    for (final exam in _examSchedule.reversed) {
+      final d = DateTime.utc(exam.date.year, exam.date.month, exam.date.day);
+      final daysAgo = today.difference(d).inDays;
+      if (daysAgo >= 1 && daysAgo <= examAftercareDays) return exam;
+    }
+    return null;
+  }
+
+  /// 추정 날짜를 가장 가까운 주말(토·일)로 옮긴다. 같은 거리면 일요일.
+  ///
+  /// 통상 월/일을 해마다 그대로 쓰면 요일이 밀려 평일이 나온다(2027년 2회
+  /// 7/19 월요일, 3회 10/25 월요일). 실기는 주말에 시행되므로 평일 날짜를
+  /// 보여주면 '(예정)' 이라도 틀린 정보다.
+  static DateTime _nearestWeekend(DateTime date) {
+    // weekday: 월=1 … 토=6, 일=7
+    final wd = date.weekday;
+    if (wd >= DateTime.saturday) return date;
+    final back = wd; // 직전 일요일까지 (월 1 · 화 2 · 수 3 …)
+    final fwd = DateTime.saturday - wd; // 다음 토요일까지 (… 수 3 · 목 2 · 금 1)
+    // 수요일은 3:3 동률 → 일요일(뒤로).
+    final shift = back <= fwd ? -back : fwd;
+    return DateTime(date.year, date.month, date.day + shift);
+  }
 
   /// 확정 일정이 모두 지났을 때 쓰는 회차별 통상 시행 월/일.
   /// 실기는 매년 1회 4월 / 2회 7월 / 3회 10월 경에 시행된다.
@@ -68,7 +127,8 @@ class AppConfig {
       for (var i = 0; i < _typicalExamDates.length; i++) {
         if (held.contains((year, i + 1))) continue;
         final d = _typicalExamDates[i];
-        final date = DateTime(year, d.month, d.day);
+        // 주말 보정 뒤에 오늘과 비교한다 — 보정이 날짜를 앞당길 수 있다.
+        final date = _nearestWeekend(DateTime(year, d.month, d.day));
         if (!date.isBefore(today)) {
           return (year: year, round: i + 1, date: date);
         }
@@ -78,8 +138,8 @@ class AppConfig {
     return (
       year: today.year + 1,
       round: 1,
-      date: DateTime(today.year + 1, _typicalExamDates.first.month,
-          _typicalExamDates.first.day),
+      date: _nearestWeekend(DateTime(today.year + 1,
+          _typicalExamDates.first.month, _typicalExamDates.first.day)),
     );
   }
 

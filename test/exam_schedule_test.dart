@@ -70,4 +70,47 @@ void main() {
       expect(AppConfig.daysUntilExam, expected);
     });
   });
+
+  group('추정 시험일은 주말로 맞춘다', () {
+    tearDown(() => AppConfig.nowForTest = null);
+
+    test('2027년 추정 3회차가 모두 토·일이고, 평일이던 2·3회는 직전 일요일로', () {
+      final dates = <int, DateTime>{};
+      // 각 회차 직전 날짜로 '오늘' 을 옮겨 가며 추정치를 받는다.
+      for (final probe in [
+        DateTime(2027, 1, 10),
+        DateTime(2027, 5, 1),
+        DateTime(2027, 8, 1),
+      ]) {
+        AppConfig.nowForTest = () => probe;
+        expect(AppConfig.isExamDateConfirmed, isFalse,
+            reason: '2027년은 미공고 — 추정 경로를 검증한다');
+        dates[AppConfig.nextExam.round] = AppConfig.nextExam.date;
+      }
+      for (final d in dates.values) {
+        expect(d.weekday,
+            anyOf(DateTime.saturday, DateTime.sunday),
+            reason: '$d 는 평일이다');
+      }
+      expect(dates[1], DateTime(2027, 4, 18), reason: '이미 일요일이면 그대로');
+      expect(dates[2], DateTime(2027, 7, 18), reason: '7/19(월) → 7/18(일)');
+      expect(dates[3], DateTime(2027, 10, 24), reason: '10/25(월) → 10/24(일)');
+    });
+  });
+
+  group('최근 끝난 확정 시험', () {
+    tearDown(() => AppConfig.nowForTest = null);
+
+    test('시험 다음날부터 3일간만 돌려준다', () {
+      AppConfig.nowForTest = () => DateTime(2026, 10, 25, 15);
+      expect(AppConfig.recentlyFinishedExam, isNull, reason: '당일은 해당 없음');
+      for (final day in [26, 27, 28]) {
+        AppConfig.nowForTest = () => DateTime(2026, 10, day, 9);
+        expect(AppConfig.recentlyFinishedExam?.round, 3);
+        expect(AppConfig.recentlyFinishedExam?.year, 2026);
+      }
+      AppConfig.nowForTest = () => DateTime(2026, 10, 29);
+      expect(AppConfig.recentlyFinishedExam, isNull);
+    });
+  });
 }

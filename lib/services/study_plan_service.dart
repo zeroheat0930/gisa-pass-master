@@ -430,6 +430,19 @@ class StudyPlanService extends ChangeNotifier {
         : '시험($when)까지 $days일 남아 이 플랜은 시험 뒤까지 이어져요';
   }
 
+  /// 이 플랜이 겨냥한 **확정** 시험이 이미 끝났는가 (플랜 시작일 ≤ 시험일 < 오늘).
+  ///
+  /// 시험이 지나도 [StudyPlan.todayDay] 는 마지막 Day 에 멈춘 채 남아서, 시험을
+  /// 다 본 유저가 'Day 14 / 14' 화면에 갇혔다. 이 경우 화면이 새 플랜을 권한다.
+  /// 추정 일정(확정 아님)은 실제로 치러졌는지 모르므로 판정하지 않는다.
+  static bool examPassedSincePlanStart(StudyPlan plan) {
+    final exam = AppConfig.confirmedExamOnOrAfter(plan.startedAt);
+    if (exam == null) return false;
+    final n = AppConfig.now;
+    final today = DateTime(n.year, n.month, n.day);
+    return DateTime(exam.year, exam.month, exam.day).isBefore(today);
+  }
+
   StudyPlanService(this._db);
 
   /// 현재 진행 중인 플랜 로드
@@ -474,14 +487,15 @@ class StudyPlanService extends ChangeNotifier {
   Future<void> startNewPlan({String planType = '14day'}) async {
     if (kIsWeb) return;
     final db = await _db.database;
+    final startedAt = AppConfig.now;
     final id = await db.insert('study_plan', {
-      'started_at': DateTime.now().toIso8601String(),
+      'started_at': startedAt.toIso8601String(),
       'current_day': 1,
       'plan_type': planType,
     });
     _currentPlan = StudyPlan(
       id: id,
-      startedAt: DateTime.now(),
+      startedAt: startedAt,
       currentDay: 1,
       planType: planType,
     );

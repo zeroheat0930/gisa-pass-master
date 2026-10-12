@@ -22,6 +22,10 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
   bool _loading = false;
   bool _resetting = false;
 
+  /// Day 탭 연타 가드 — getQuestionsForDay 의 await 사이로 두 번째 탭이 들어오면
+  /// 퀴즈 화면이 두 번 쌓인다(home_screen 의 _isNavigating 과 같은 이유).
+  bool _isNavigating = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +113,16 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     }
   }
 
+  Future<void> _onDayTap(int dayNumber) async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    try {
+      await _startDayMission(dayNumber);
+    } finally {
+      _isNavigating = false;
+    }
+  }
+
   Future<void> _startDayMission(int dayNumber) async {
     final planService = context.read<StudyPlanService>();
     final purchaseService = context.read<PurchaseService>();
@@ -119,7 +133,8 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
         StudyPlanService.needsPremiumForDay(planType, dayNumber);
     if (needsPremium && !purchaseService.isPremium) {
       if (!mounted) return;
-      Navigator.push(
+      // 돌아올 때까지 기다려야 연타 가드가 구독 화면 중복 push 도 막는다.
+      await Navigator.push(
         context,
         CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
       );
@@ -248,6 +263,52 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     }
   }
 
+  /// 플랜이 겨냥한 시험이 끝난 뒤 '새 플랜 시작' — 초기화 쿼터를 쓰지 않는다.
+  ///
+  /// 시험을 다 본 유저가 다음 시험을 준비하려는 건 '플랜을 잘못 골라 바꾸는'
+  /// 경우가 아니라서 하루 1회 무료 초기화를 깎을 이유가 없다. 그래서
+  /// PlanResetQuota 를 거치지 않고 resetPlan 만 부른다. 악용 여지는 없다 —
+  /// 이 경로는 [StudyPlanService.examPassedSincePlanStart] 일 때만 열리고,
+  /// 오늘 새로 시작한 플랜은 다음 확정 시험이 지나기 전까지 다시 열리지 않는다.
+  Future<void> _startFreshPlanAfterExam() async {
+    if (_resetting) return; // 초기화 버튼과 같은 연타 가드를 공유한다
+    _resetting = true;
+    try {
+      final planService = context.read<StudyPlanService>();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppConfig.cardColor,
+          title: const Text('새 플랜 시작',
+              style: TextStyle(color: Colors.white)),
+          content: const Text(
+            '지난 시험용 플랜을 정리하고 다음 시험을 위한 플랜을 고릅니다.\n'
+            '무료 초기화 횟수는 차감되지 않아요.',
+            style: TextStyle(color: Colors.white70, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('취소', style: TextStyle(color: Colors.grey[400])),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('새 플랜 고르기',
+                  style: TextStyle(
+                      color: AppConfig.correctColor,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) {
+        await planService.resetPlan();
+      }
+    } finally {
+      _resetting = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final planService = context.watch<StudyPlanService>();
@@ -290,7 +351,10 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                   plan: plan,
                   progressMap: planService.progressMap,
                   completedDays: planService.completedDays,
-                  onDayTap: _startDayMission,
+                  onDayTap: _onDayTap,
+                  examPassed:
+                      StudyPlanService.examPassedSincePlanStart(plan),
+                  onStartFresh: _startFreshPlanAfterExam,
                 ),
     );
   }
@@ -550,11 +614,17 @@ class _PlanTimelineView extends StatelessWidget {
   final int completedDays;
   final ValueChanged<int> onDayTap;
 
+  /// 플랜이 겨냥한 시험이 이미 끝났는가 → 상단에 새 플랜 배너.
+  final bool examPassed;
+  final VoidCallback onStartFresh;
+
   const _PlanTimelineView({
     required this.plan,
     required this.progressMap,
     required this.completedDays,
     required this.onDayTap,
+    required this.examPassed,
+    required this.onStartFresh,
   });
 
   @override
@@ -567,6 +637,7 @@ class _PlanTimelineView extends StatelessWidget {
 
     return Column(
       children: [
+        if (examPassed) _ExamFinishedBanner(onStartFresh: onStartFresh),
         // 진행률 헤더
         _ProgressHeader(
           completedDays: completedDays,
@@ -607,6 +678,57 @@ class _PlanTimelineView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Exam Finished Banner ───────────────────────────────────────────────────
+
+/// 플랜이 겨냥한 시험이 지났을 때 상단 배너. 없으면 todayDay 가 마지막 Day 에
+/// 멈춘 화면만 보여서 무엇을 해야 할지 알 수 없다.
+class _ExamFinishedBanner extends StatelessWidget {
+  final VoidCallback onStartFresh;
+
+  const _ExamFinishedBanner({required this.onStartFresh});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+      decoration: BoxDecoration(
+        color: AppConfig.correctColor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppConfig.correctColor.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              '시험이 끝났어요. 다음 시험을 위해 새 플랜을 시작할까요?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onStartFresh,
+            style: TextButton.styleFrom(
+              foregroundColor: AppConfig.correctColor,
+            ),
+            child: const Text(
+              '새 플랜 시작',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

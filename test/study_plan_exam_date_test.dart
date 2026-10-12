@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:gisa_pass_master/config.dart';
+import 'package:gisa_pass_master/models/study_plan.dart';
 import 'package:gisa_pass_master/screens/study_plan_screen.dart';
 import 'package:gisa_pass_master/services/database_service.dart';
+import 'package:gisa_pass_master/services/plan_reset_quota.dart';
+import 'package:gisa_pass_master/services/purchase_service.dart';
 import 'package:gisa_pass_master/services/study_plan_service.dart';
 
 /// 학습 플랜은 시작일 기준 달력으로만 흘러간다. 예전에는 미션 문구에
@@ -219,6 +223,95 @@ void main() {
       expect(find.text('추천'), findsNothing);
     });
   });
+
+  group('시험이 끝난 플랜 — 새 플랜 배너', () {
+    StudyPlan planFrom(DateTime start, {String type = '14day'}) =>
+        StudyPlan(id: 1, startedAt: start, currentDay: 1, planType: type);
+
+    test('플랜 시작 ≤ 확정 시험일 < 오늘일 때만 참', () {
+      final plan = planFrom(DateTime(2026, 10, 12));
+      AppConfig.nowForTest = () => DateTime(2026, 10, 25, 20);
+      expect(StudyPlanService.examPassedSincePlanStart(plan), isFalse,
+          reason: '시험 당일은 아직 아니다');
+      AppConfig.nowForTest = () => DateTime(2026, 10, 26);
+      expect(StudyPlanService.examPassedSincePlanStart(plan), isTrue);
+      expect(plan.todayDay, 14, reason: 'todayDay 는 마지막 Day 에 멈춰 있다 — 배너가 필요한 이유');
+
+      // 시험 뒤에 시작한 플랜은 겨냥한 확정 시험이 없어 배너 대상이 아니다.
+      final after = planFrom(DateTime(2026, 10, 26));
+      AppConfig.nowForTest = () => DateTime(2026, 11, 3);
+      expect(StudyPlanService.examPassedSincePlanStart(after), isFalse);
+    });
+
+    Future<_PlanService> pumpPlan(WidgetTester tester, StudyPlan plan) async {
+      tester.view.physicalSize = const Size(1200, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final service = _PlanService(plan);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<StudyPlanService>.value(value: service),
+            ChangeNotifierProvider<PurchaseService>(
+                create: (_) => PurchaseService()),
+          ],
+          child: const MaterialApp(home: StudyPlanScreen()),
+        ),
+      );
+      await tester.pump();
+      return service;
+    }
+
+    const bannerText = '시험이 끝났어요. 다음 시험을 위해 새 플랜을 시작할까요?';
+
+    testWidgets('시험 전에는 배너가 없다', (tester) async {
+      AppConfig.nowForTest = () => DateTime(2026, 10, 20);
+      await pumpPlan(tester, planFrom(DateTime(2026, 10, 12)));
+      expect(find.text(bannerText), findsNothing);
+    });
+
+    testWidgets('시험 뒤: 배너 → 새 플랜 시작은 무료 초기화 쿼터를 쓰지 않는다',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PlanResetQuota.resetForTest();
+      AppConfig.nowForTest = () => DateTime(2026, 10, 27);
+      final service = await pumpPlan(tester, planFrom(DateTime(2026, 10, 12)));
+
+      expect(find.text(bannerText), findsOneWidget);
+      await tester.tap(find.text('새 플랜 시작'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('새 플랜 고르기'));
+      await tester.pumpAndSettle();
+
+      expect(service.resetCalls, 1);
+      expect(find.text(bannerText), findsNothing);
+      expect(find.text('14일 합격 플랜'), findsOneWidget,
+          reason: '리셋 뒤에는 플랜 선택 화면으로 돌아간다');
+      expect(await PlanResetQuota.canReset(isPremium: false), isTrue,
+          reason: '시험 뒤 새 플랜은 하루 1회 무료 초기화를 깎지 않는다');
+    });
+  });
+}
+
+/// 진행 중인 플랜 하나를 들고 있는 서비스(DB 접근 없음).
+class _PlanService extends StudyPlanService {
+  _PlanService(this._plan) : super(DatabaseService());
+
+  StudyPlan? _plan;
+  int resetCalls = 0;
+
+  @override
+  StudyPlan? get currentPlan => _plan;
+
+  @override
+  Future<void> loadCurrentPlan() async {}
+
+  @override
+  Future<void> resetPlan() async {
+    resetCalls++;
+    _plan = null;
+    notifyListeners();
+  }
 }
 
 /// 플랜이 없는 상태로 선택 화면만 띄운다(DB 접근 없음).

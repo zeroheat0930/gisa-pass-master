@@ -11,6 +11,7 @@ import '../services/ai_exam_launcher.dart';
 import '../services/answer_checker.dart';
 import '../services/database_service.dart';
 import '../services/purchase_service.dart';
+import '../services/restored_exam_coverage.dart';
 import '../services/review_prompt_service.dart';
 import '../widgets/answer_input_field.dart';
 import '../widgets/question_card.dart';
@@ -216,12 +217,17 @@ class _PastExamScreenState extends State<PastExamScreen> {
                   // 복원 기출 — 실제 시험을 복원한 문제. AI 예상과 성격이
                   // 완전히 달라 입구부터 나눈다. 섞어두면 "오늘은 기출만 풀자"
                   // 라는 아주 흔한 의도를 화면이 받아주지 못한다.
-                  _RoundBookTile(
-                    title: '복원 기출 회차별',
-                    subtitle: '실제 시험을 복원한 문제 · 2020~2026년 21개 회차',
-                    icon: Icons.verified_outlined,
-                    color: AppConfig.correctColor,
-                    onTap: () => _openRounds(Question.sourceRestored),
+                  // 숫자는 에셋에서 센 정본만 쓴다 — 홈 화면과 같은 함수.
+                  ValueListenableBuilder<RestoredCoverage>(
+                    valueListenable: RestoredExamCoverage.watch(),
+                    builder: (_, coverage, _) => _RoundBookTile(
+                      title: '복원 기출 회차별',
+                      subtitle: '실제 시험을 복원한 문제 · '
+                          '${RestoredExamCoverage.roundsLabel(coverage)}',
+                      icon: Icons.verified_outlined,
+                      color: AppConfig.correctColor,
+                      onTap: () => _openRounds(Question.sourceRestored),
+                    ),
                   ),
                   const SizedBox(height: 12),
 

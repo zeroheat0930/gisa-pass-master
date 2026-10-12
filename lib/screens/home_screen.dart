@@ -16,6 +16,7 @@ import 'quiz_screen.dart';
 import 'subscription_screen.dart';
 import '../data/pass_rate_data.dart';
 import '../services/database_service.dart';
+import '../services/restored_exam_coverage.dart';
 import '../models/question.dart';
 import 'round_list_screen.dart';
 import 'pass_rate_screen.dart';
@@ -1483,11 +1484,15 @@ class _RestoredExamButton extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    '2020~2026년 21개 회차 · 420문항 전체 공개',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 12,
+                  // 숫자는 에셋에서 센 정본만 쓴다 — 기출 화면과 같은 함수.
+                  ValueListenableBuilder<RestoredCoverage>(
+                    valueListenable: RestoredExamCoverage.watch(),
+                    builder: (_, coverage, _) => Text(
+                      '${RestoredExamCoverage.fullLabel(coverage)} 전체 공개',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
