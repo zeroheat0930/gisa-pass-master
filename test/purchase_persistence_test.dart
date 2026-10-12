@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:gisa_pass_master/services/ad_service.dart';
@@ -19,6 +21,26 @@ PurchaseDetails _purchase(PurchaseStatus status) {
   );
   p.pendingCompletePurchase = true;
   return p;
+}
+
+/// Android 복원 경로로 내려오는 구매. 플러그인은 status 를 전부 restored 로
+/// 덮어쓰므로 원래 상태는 [state] 에만 남는다.
+GooglePlayPurchaseDetails _androidRestored(PurchaseStateWrapper state,
+    {String productId = PurchaseService.premiumMonthlyId}) {
+  final wrapper = PurchaseWrapper(
+    orderId: 'GPA.0000',
+    packageName: 'com.gisapass.gisaPassMaster',
+    purchaseTime: 0,
+    purchaseToken: 'token-1',
+    signature: 'sig',
+    products: [productId],
+    isAutoRenewing: false,
+    originalJson: '{}',
+    isAcknowledged: false,
+    purchaseState: state,
+  );
+  return GooglePlayPurchaseDetails.fromPurchase(wrapper).single
+    ..status = PurchaseStatus.restored;
 }
 
 /// v1.5.4 회귀 방지:
@@ -99,6 +121,57 @@ void main() {
 
       expect(service.isPremium, isTrue,
           reason: '복원 콜백이 무시되면 재설치 유저가 평생 이용권을 잃는다');
+    });
+
+    // Android 의 restorePurchases 는 PENDING(가족 승인 대기·지연 결제) 구매까지
+    // restored 로 내려준다. 매 실행 복원을 돌리는 이 앱에서 이걸 그대로 지급하면
+    // 보류 결제를 걸어두고 재시작만 해도 평생 이용권이 공짜로 켜진다.
+    test('Android 보류(PENDING) 구매가 restored 로 와도 지급하지 않는다', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final service = PurchaseService();
+      final completed = <String>[];
+      service.completePurchaseForTest = (p) async {
+        completed.add(p.purchaseID ?? '');
+      };
+
+      service.handlePurchaseUpdates(
+          [_androidRestored(PurchaseStateWrapper.pending)]);
+      await pumpEventQueue();
+
+      expect(service.isPremium, isFalse,
+          reason: '승인되지 않은 결제에 프리미엄을 주면 거절돼도 영구히 남는다');
+      expect(completed, isEmpty,
+          reason: '보류 구매는 종결(acknowledge)할 수 없고 승인 뒤 다시 내려온다');
+    });
+
+    test('Android 완료(PURCHASED) 구매가 restored 로 오면 지급한다', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final service = PurchaseService();
+      service.completePurchaseForTest = (_) async {};
+
+      service.handlePurchaseUpdates(
+          [_androidRestored(PurchaseStateWrapper.purchased)]);
+      await pumpEventQueue();
+
+      expect(service.isPremium, isTrue,
+          reason: '보류 가드가 정상 복원까지 막으면 재설치 유저가 이용권을 잃는다');
+    });
+
+    test('다른 상품 ID 의 구매는 프리미엄으로 지급하지 않는다', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final service = PurchaseService();
+      service.completePurchaseForTest = (_) async {};
+
+      service.handlePurchaseUpdates([
+        _androidRestored(PurchaseStateWrapper.purchased,
+            productId: 'some_other_product'),
+      ]);
+      await pumpEventQueue();
+
+      expect(service.isPremium, isFalse);
     });
 
     // StoreKit 은 error/canceled 트랜잭션도 pendingCompletePurchase 로

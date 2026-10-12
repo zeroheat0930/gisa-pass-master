@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.8.3+41
+version: 1.8.3+42
 
 environment:
   sdk: ^3.11.4
@@ -42,6 +42,9 @@ dependencies:
   # 거부된다. 3.3.0 이 in_app_purchase_android 0.5.x(Billing 8)를 끌어온다.
   # 내려잡으면 스토어 업데이트가 막히므로 하한을 낮추지 말 것.
   in_app_purchase: ^3.3.0
+  # 복원 결과의 원래 구매 상태(PENDING 여부)를 보려면 Android 전용 타입이 필요하다.
+  # in_app_purchase 가 끌어오는 것과 같은 버전을 직접 의존성으로 올린다.
+  in_app_purchase_android: ^0.5.2
   shared_preferences: ^2.3.0
   flutter_local_notifications: ^18.0.0
   timezone: ^0.9.4

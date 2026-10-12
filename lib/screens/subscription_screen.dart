@@ -238,6 +238,13 @@ class _HeroHeader extends StatelessWidget {
 class _PlanComparisonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // 스토어가 내려준 실제 가격(현지 통화·등급 반영)을 우선 쓰고, 아직 로드
+    // 전이면 AppConfig.premiumPrice 를 대체값으로 쓴다. 상수만 쓰면 콘솔의
+    // 가격 등급이 바뀌거나 해외 스토어일 때 표기가 실제 청구액과 어긋난다.
+    final products = context.watch<PurchaseService>().products;
+    final premiumPrice = products.isNotEmpty
+        ? products.first.price
+        : formatPrice(AppConfig.premiumPrice);
     return Row(
       children: [
         Expanded(
@@ -255,7 +262,7 @@ class _PlanComparisonCard extends StatelessWidget {
             label: '프리미엄',
             // 가격 문자열을 화면에 박아두면 AppConfig.premiumPrice 를 고쳐도
             // 여기가 안 따라온다. 표기 정본은 formatPrice 하나다.
-            price: formatPrice(AppConfig.premiumPrice),
+            price: premiumPrice,
             period: '',
             color: AppConfig.primaryColor,
             isPremium: true,

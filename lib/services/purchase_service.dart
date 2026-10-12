@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ad_service.dart';
@@ -290,7 +292,25 @@ class PurchaseService extends ChangeNotifier {
     await _loadProducts();
   }
 
+  /// 결제 요청이 스토어로 나간 뒤 돌아오기 전인지. 연타 가드.
+  ///
+  /// iOS 는 같은 상품을 연달아 buyNonConsumable 하면 StoreKit 이
+  /// storekit_duplicate_product_object 를 던져, 결제 시트가 떠 있는데
+  /// "구매 처리 중 오류" 스낵바가 겹친다. 중복 결제는 아니지만 유저는 실패로 읽는다.
+  bool _buyInFlight = false;
+  bool get isBuying => _buyInFlight;
+
   Future<void> buyPremium() async {
+    if (_buyInFlight) return;
+    _buyInFlight = true;
+    try {
+      await _buyPremium();
+    } finally {
+      _buyInFlight = false;
+    }
+  }
+
+  Future<void> _buyPremium() async {
     try {
       // 이전 시도의 실패 메시지를 지운다. 남겨두면 이번 결제가 정상 진행 중인데도
       // 화면이 옛 에러 스낵바를 띄운다.
@@ -376,12 +396,34 @@ class PurchaseService extends ChangeNotifier {
     });
   }
 
+  /// purchased/restored 로 내려온 구매가 **실제로 지급해도 되는 것**인지.
+  ///
+  /// Android 결제 플러그인의 restorePurchases 는 조회한 구매 전부의 status 를
+  /// restored 로 덮어쓴다 — Play 에서 아직 승인되지 않은 **PENDING** 구매(가족
+  /// 승인 대기, 편의점·현금 지연 결제)까지. 매 실행 복원을 돌리는 이 앱에서는
+  /// 보류 결제를 시작만 하고 앱을 재시작하면 평생 이용권이 공짜로 켜지고, 결제가
+  /// 거절돼도 남는다. 그래서 Android 는 원래 purchaseState 가 purchased 일 때만
+  /// 지급한다. 상품 ID 도 함께 본다 — 상품이 늘어나면 아무 구매나 프리미엄이 된다.
+  @visibleForTesting
+  static bool isGrantable(PurchaseDetails purchase) {
+    if (purchase.productID != premiumMonthlyId) return false;
+    if (purchase is GooglePlayPurchaseDetails) {
+      return purchase.billingClientPurchase.purchaseState ==
+          PurchaseStateWrapper.purchased;
+    }
+    return true;
+  }
+
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
     for (final purchase in purchaseDetailsList) {
       debugPrint('구매 상태: ${purchase.status} - ${purchase.productID}');
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
+        if (!isGrantable(purchase)) {
+          debugPrint('지급 보류: ${purchase.productID} (상태 미완료 또는 다른 상품)');
+          continue;
+        }
         // 저장이 끝난 뒤에 트랜잭션을 종결한다. 순서가 뒤바뀌면 저장 전에 앱이
         // 죽었을 때 스토어는 '완료'로 처리했는데 기기에는 구매 근거가 없어,
         // 결제한 유저가 프리미엄을 잃는다.
