@@ -29,7 +29,9 @@ class AppConfig {
     (year: 2026, round: 1, date: DateTime(2026, 4, 18)),
     (year: 2026, round: 2, date: DateTime(2026, 7, 19)),
     (year: 2026, round: 3, date: DateTime(2026, 10, 25)),
-    (year: 2027, round: 1, date: DateTime(2027, 4, 17)),
+    // 2027년 일정은 큐넷 공고(통상 11~12월) 뒤에 넣는다. 공고 전 날짜를 여기
+    // 넣으면 '(예정)' 없이 확정으로 표시되고 알림까지 예약된다 — 올해 2·3회
+    // 날짜도 틀려서 사용자 제보로 고쳤다.
   ];
 
   /// 확정 일정이 모두 지났을 때 쓰는 회차별 통상 시행 월/일.
@@ -93,6 +95,19 @@ class AppConfig {
 
   static DateTime get examDate => nextExam.date;
 
+  /// [day] 당일 또는 그 이후의 첫 **확정** 시험일. 확정 일정이 바닥났으면
+  /// (추정 경로) null — 추정 날짜로 D-문구를 단언하면 거짓 표기가 된다.
+  ///
+  /// 학습 플랜 미션 문구용이다. [nextExam] 은 '오늘' 기준이라 시험이 지나면
+  /// 다음 회차로 넘어가 버려서, 플랜이 겨냥한 시험을 알려면 플랜 시작일로 찾아야 한다.
+  static DateTime? confirmedExamOnOrAfter(DateTime day) {
+    final d = DateTime(day.year, day.month, day.day);
+    for (final exam in _examSchedule) {
+      if (!exam.date.isBefore(d)) return exam.date;
+    }
+    return null;
+  }
+
   /// 시험까지 남은 일수 (달력 기준, 단일 정본).
   ///
   /// `examDate.difference(now).inDays` 를 쓰면 남은 시간을 24로 나눈 값이라
@@ -122,8 +137,13 @@ class AppConfig {
   /// 이 조립을 화면마다 따로 갖고 있으면 이 저장소의 반복된 실패 패턴이 그대로
   /// 재발한다 — 같은 것을 복붙하고 한쪽만 고치는 것. 구분자(` · `)까지 포함해
   /// 돌려주므로 호출부는 자기 문구 뒤에 **붙이기만** 한다.
-  static String get examCountdownSuffix =>
-      shouldShowExamCountdown ? ' · 시험까지 D-$daysUntilExam' : '';
+  ///
+  /// 시험 당일은 'D-0' 이 아니라 홈 D-Day 타이머와 같은 'D-DAY' 로 적는다.
+  static String get examCountdownSuffix {
+    if (!shouldShowExamCountdown) return '';
+    final days = daysUntilExam;
+    return days == 0 ? ' · 오늘이 시험일(D-DAY)' : ' · 시험까지 D-$days';
+  }
 
   // === 테마 컬러 ===
   static const Color primaryColor = Color(0xFFE53935);

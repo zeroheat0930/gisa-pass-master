@@ -41,6 +41,25 @@ void main() {
   });
 
   group('시험 당일 처리', () {
+    tearDown(() => AppConfig.nowForTest = null);
+
+    test('판매 문구 꼬리표는 당일에 D-0 이 아니라 D-DAY 로 적는다', () {
+      // 홈 D-Day 타이머는 당일을 'D-DAY' 로 쓴다. 구독 화면·쿼터 다이얼로그가
+      // 같은 날 '시험까지 D-0' 이라 적으면 표기가 갈린다.
+      final exam = AppConfig.examDate;
+      AppConfig.nowForTest = () => DateTime(exam.year, exam.month, exam.day, 9);
+      expect(AppConfig.daysUntilExam, 0, reason: '테스트 전제 확인');
+      expect(AppConfig.examCountdownSuffix, contains('D-DAY'));
+      expect(AppConfig.examCountdownSuffix, isNot(contains('D-0')));
+    });
+
+    test('하루 전에는 D-1 로 적는다', () {
+      final exam = AppConfig.examDate;
+      AppConfig.nowForTest =
+          () => DateTime(exam.year, exam.month, exam.day - 1, 23, 59);
+      expect(AppConfig.examCountdownSuffix, ' · 시험까지 D-1');
+    });
+
     test('남은 일수가 달력 기준으로 계산된다', () {
       // Duration.inDays 를 쓰면 전날 밤에 이미 0 이 되어 하루 밀린다.
       final exam = AppConfig.examDate;

@@ -612,9 +612,10 @@ class _QuizScreenState extends State<_QuizScreen> {
     if (!_showExplanation) return;
 
     // 해설을 다 본 뒤에 광고를 띄운다.
+    var showedAd = false;
     if (_adCounter >= AppConfig.adIntervalQuestions) {
       _adCounter = 0;
-      globalAdService?.showInterstitialAd();
+      showedAd = globalAdService?.showInterstitialAd() ?? false;
     }
 
     _answerController.clear();
@@ -625,7 +626,15 @@ class _QuizScreenState extends State<_QuizScreen> {
       setState(() => _isFinished = true);
       // 결과 화면이 그려지기 전에 조건을 평가한다. CTA 가 아직 화면에 없어
       // 쿼터 다이얼로그와 겹칠 수 없는 시점이 여기뿐이다.
-      unawaited(_maybeRequestReview());
+      //
+      // 단, 같은 탭에서 전면광고가 떴으면(문항 수가 광고 간격의 배수일 때)
+      // 이번 세션은 리뷰를 건너뛴다. 광고 위에 OS 리뷰 팝업이 겹치거나 광고에
+      // 묻혀 안 보이는데, iOS 는 결과를 돌려주지 않아 90일 쿨다운만 소진된다.
+      if (showedAd) {
+        _reviewChanceUsed = true;
+      } else {
+        unawaited(_maybeRequestReview());
+      }
     } else {
       setState(() => _currentIndex++);
     }

@@ -177,18 +177,23 @@ class AdService {
     }
   }
 
-  /// 전면광고 표시 (프리미엄이면 표시 안 함)
-  void showInterstitialAd() {
+  /// 전면광고 표시 (프리미엄이면 표시 안 함).
+  ///
+  /// 실제로 광고가 떴으면 true. 호출부가 광고 위에 다른 팝업(OS 리뷰 요청 등)을
+  /// 겹쳐 올리지 않도록 판단하는 데 쓴다. 준비가 안 돼 로드만 걸었으면 false.
+  bool showInterstitialAd() {
     try {
-      if (!shouldShowAds) return;
+      if (!shouldShowAds) return false;
       if (_isAdLoaded && _interstitialAd != null) {
         _interstitialAd!.show();
+        return true;
       } else {
         loadInterstitialAd();
       }
     } catch (e) {
       debugPrint('광고 표시 실패: $e');
     }
+    return false;
   }
 
   /// 배너광고 생성 (shouldShowAds=false면 null 반환)

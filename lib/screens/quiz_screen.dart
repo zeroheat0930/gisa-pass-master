@@ -248,9 +248,13 @@ class _QuizScreenState extends State<QuizScreen> {
                   ),
                 ),
                 child: Text(
-                  daysLeft > 0
-                      ? '시험까지 D-$daysLeft! 포기하지 마세요!'
-                      : '시험 당일! 최선을 다하세요!',
+                  // 시험 다음날부터 다음 회차(추정)까지 'D-173' 을 세면 어색하다.
+                  // 확정 일정·60일 이내(정본 shouldShowExamCountdown)일 때만 센다.
+                  daysLeft == 0
+                      ? '시험 당일! 최선을 다하세요!'
+                      : AppConfig.shouldShowExamCountdown
+                          ? '시험까지 D-$daysLeft! 포기하지 마세요!'
+                          : '꾸준함이 합격을 만듭니다!',
                   style: TextStyle(
                     color: daysLeft <= 7
                         ? AppConfig.primaryColor

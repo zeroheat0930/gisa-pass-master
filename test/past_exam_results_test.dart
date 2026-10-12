@@ -10,6 +10,7 @@ import 'package:gisa_pass_master/models/question.dart';
 import 'package:gisa_pass_master/providers/study_provider.dart';
 import 'package:gisa_pass_master/screens/past_exam_screen.dart';
 import 'package:gisa_pass_master/screens/subscription_screen.dart';
+import 'package:gisa_pass_master/services/ad_service.dart';
 import 'package:gisa_pass_master/services/ai_exam_quota.dart';
 import 'package:gisa_pass_master/services/database_service.dart';
 import 'package:gisa_pass_master/services/prediction_engine.dart';
@@ -55,6 +56,29 @@ class _FakeStudyProvider extends StudyProvider {
   List<Question> get questionList => const [];
 }
 
+/// 전면광고가 "실제로 떴다/안 떴다"만 흉내 낸다. 리뷰 요청이 광고와 겹치지
+/// 않는지 검증하는 데 그 사실 하나만 필요하다.
+class _FakeInterstitialAdService extends AdService {
+  _FakeInterstitialAdService({required this.shows});
+  final bool shows;
+  int showCalls = 0;
+
+  /// false 로 둔다. true 면 쿼터 다이얼로그가 리워드 광고 준비 폴링 타이머를
+  /// 걸어, 같은 파일의 다른 테스트가 pending timer 로 깨진다. 전면광고 노출
+  /// 여부는 아래 [showInterstitialAd] 가 직접 답한다.
+  @override
+  bool get shouldShowAds => false;
+
+  @override
+  void loadInterstitialAd() {}
+
+  @override
+  bool showInterstitialAd() {
+    showCalls++;
+    return shows;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -86,6 +110,8 @@ void main() {
   tearDown(() {
     ReviewPromptService.debugOpenStoreReview = null;
     ReviewPromptService.beforeOpenForTest = null;
+    // 전역 광고 서비스는 null 로 되돌릴 수 없어 '안 뜨는' 가짜로 되돌린다.
+    setGlobalAdService(_FakeInterstitialAdService(shows: false));
   });
 
   /// 리뷰 평가를 [isCancelled] 검사 직전에 멈춰 세운다.
@@ -396,6 +422,41 @@ void main() {
       expect(reviewCalls, 1, reason: '세션 내 1회를 넘기면 그 유저에게는 오래 못 묻는다');
       expect(prefs.getInt(ReviewPromptService.solvedTotalKey), 120,
           reason: '가드가 빠지면 140 이 되어 다음 쿨다운을 앞당겨 태운다');
+    });
+
+    testWidgets('마지막 문항에서 전면광고가 떴으면 이번 세션은 리뷰를 묻지 않는다',
+        (tester) async {
+      // 문항 수가 광고 간격의 배수면 '결과 보기' 탭에서 전면광고가 뜬다. 그 위에
+      // OS 리뷰 팝업이 겹치면 광고에 묻히는데, iOS 는 결과를 돌려주지 않아
+      // 90일 쿨다운만 소진된다. 광고가 뜬 세션은 건너뛴다.
+      final ads = _FakeInterstitialAdService(shows: true);
+      setGlobalAdService(ads);
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+
+      await tester.pumpWidget(host(premium: false, questionCount: 3));
+      await finishQuiz(tester, questionCount: 3, correct: true);
+
+      expect(ads.showCalls, 1, reason: '테스트 전제: 3문항이면 마지막 탭에 광고');
+      expect(reviewCalls, 0);
+    });
+
+    testWidgets('광고가 준비되지 않아 뜨지 않았으면 리뷰는 그대로 묻는다',
+        (tester) async {
+      // 광고 로드만 걸리고 실제로 안 떴는데 리뷰까지 건너뛰면, 광고 없는 유저가
+      // 리뷰 기회를 잃는다. "떴는지" 로 판단해야 한다.
+      final ads = _FakeInterstitialAdService(shows: false);
+      setGlobalAdService(ads);
+      SharedPreferences.setMockInitialValues({
+        ReviewPromptService.solvedTotalKey: 100,
+      });
+
+      await tester.pumpWidget(host(premium: false, questionCount: 3));
+      await finishQuiz(tester, questionCount: 3, correct: true);
+
+      expect(ads.showCalls, 1);
+      expect(reviewCalls, 1);
     });
 
     testWidgets('리뷰 경로가 던져도 결과 화면으로 예외가 새지 않는다', (tester) async {

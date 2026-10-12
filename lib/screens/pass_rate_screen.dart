@@ -169,7 +169,10 @@ class _HeadlineCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '2020년 개편 이후 ${PassRateData.of(kind).length}개 회차 기준',
+            // 복원 기출은 2026년 2회까지 있는데 공개 통계는 그보다 늦게 나온다.
+            // 어디까지의 숫자인지 적어두지 않으면 '21개 회차' 가 같은 집합으로 읽힌다.
+            '2020년 개편 이후 ${PassRateData.of(kind).length}개 회차 · '
+            '공개 통계는 ${latest.label}까지',
             style: const TextStyle(color: Color(0xFF6B6B6B), fontSize: 11),
           ),
           const SizedBox(height: 18),
