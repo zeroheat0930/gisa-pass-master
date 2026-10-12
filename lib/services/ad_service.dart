@@ -3,6 +3,18 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+/// 리워드 광고 한 번의 결말. 유저에게 줄 안내가 셋 다 다르다.
+enum RewardedAdResult {
+  /// 광고가 뜨지 못했다(미로드·표시 실패·show 예외·타임아웃). 유저 잘못이 아니다.
+  failedToShow,
+
+  /// 광고는 떴지만 보상 조건 전에 닫았다.
+  dismissedEarly,
+
+  /// 끝까지 봐서 보상 조건을 채웠다. 이때만 보상한다.
+  earned,
+}
+
 AdService? _globalAdService;
 void setGlobalAdService(AdService s) => _globalAdService = s;
 AdService? get globalAdService => _globalAdService;
@@ -279,65 +291,71 @@ class AdService {
     }
   }
 
-  /// 리워드 광고를 보여주고 **끝까지 봤는지** 반환한다.
-  /// 중간에 닫으면 false — 보상을 주면 안 된다.
-  Future<bool> showRewardedAd() async {
-    if (!shouldShowAds) return false;
+  /// 리워드 광고 보상 판정을 기다리는 유예 시간.
+  /// 닫힘 콜백이 보상 콜백보다 먼저 오는 어댑터(미디에이션)가 있어, 닫히자마자
+  /// 판정하면 끝까지 본 유저의 보상이 사라진다. 그 순서 차이를 흡수할 만큼만 기다린다.
+  @visibleForTesting
+  static const Duration rewardGracePeriod = Duration(milliseconds: 500);
+
+  /// 리워드 광고를 보여주고 결과를 [RewardedAdResult] 로 돌려준다.
+  ///
+  /// 실패([RewardedAdResult.failedToShow])와 중간 이탈
+  /// ([RewardedAdResult.dismissedEarly])을 구분하는 이유: 예전엔 둘 다 false 라,
+  /// 광고가 아예 뜨지도 못했는데 "끝까지 보셔야 지급돼요" 라고 유저 탓을 했다.
+  /// 보상은 [RewardedAdResult.earned] 일 때만 준다.
+  Future<RewardedAdResult> showRewardedAd() async {
+    if (!shouldShowAds) return RewardedAdResult.failedToShow;
     final ad = _rewardedAd;
     if (ad == null) {
       loadRewardedAd();
-      return false;
+      return RewardedAdResult.failedToShow;
     }
 
     _rewardedAd = null; // 1회용
-    var earned = false;
     var shown = false;
-
-    final completer = Completer<bool>();
+    final settler = RewardedAdSettler(gracePeriod: rewardGracePeriod);
     // 콜백이 아예 오지 않는 비정상 경로의 안전판. 이게 없으면 호출자
     // (모의고사 버튼의 _isNavigating 등)가 앱 재시작 전까지 잠긴다.
     //
     // 단, 광고가 **화면에 뜬 뒤**에는 이 안전판을 걷는다. 시청 중 전화가 오거나
     // 앱이 오래 백그라운드에 갔다 오면 Dart 타이머는 복귀 즉시 발화하는데,
-    // 그때 false 로 먼저 끝내버리면 유저가 끝까지 본 광고의 보상이 사라진다
+    // 그때 실패로 먼저 끝내버리면 유저가 끝까지 본 광고의 보상이 사라진다
     // (닫힘 콜백이 completer 를 채워도 듣는 쪽이 없다). 화면에 뜬 광고는
     // 닫힐 때 반드시 onAdDismissed 가 오므로 그쪽에 맡긴다.
     final guard = Timer(const Duration(minutes: 3), () {
-      if (shown || completer.isCompleted) return;
+      if (shown || settler.isSettled) return;
       debugPrint('리워드 광고가 3분 안에 뜨지 않음 — 호출자를 풀어준다');
       ad.dispose(); // 다른 종료 경로처럼 뜨지 못한 광고를 해제한다
       loadRewardedAd();
-      completer.complete(false);
+      settler.fail();
     });
-    void finish(bool result) {
-      guard.cancel();
-      if (!completer.isCompleted) completer.complete(result);
-    }
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdShowedFullScreenContent: (_) => shown = true,
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
         loadRewardedAd(); // 다음 기회를 위해 미리 채워둔다
-        finish(earned);
+        settler.dismiss();
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         debugPrint('리워드 광고 표시 실패: ${error.message}');
         ad.dispose();
         loadRewardedAd();
-        finish(false);
+        settler.fail();
       },
     );
 
     try {
-      await ad.show(onUserEarnedReward: (_, __) => earned = true);
+      await ad.show(onUserEarnedReward: (_, __) => settler.reward());
     } catch (e) {
       debugPrint('리워드 광고 show 오류: $e');
       ad.dispose();
       loadRewardedAd(); // 정상 경로의 콜백들처럼 다음 노출 기회를 채워둔다
-      finish(false);
+      settler.fail();
     }
-    return completer.future;
+    final result = await settler.result;
+    guard.cancel();
+    return result;
   }
 
   /// 리소스 해제.
@@ -352,5 +370,61 @@ class AdService {
     _rewardedAd?.dispose();
     _rewardedAd = null;
     _isLoadingRewarded = false;
+  }
+}
+
+/// 리워드 광고 콜백들을 모아 **한 번만** 결론을 내는 판정기.
+///
+/// 보상 판정은 **보상 콜백과 닫힘 콜백이 둘 다 정해졌을 때** 내린다. 예전에는
+/// onUserEarnedReward 가 닫힘보다 먼저 온다고 가정하고 닫히는 순간 판정했는데,
+/// 미디에이션 어댑터에 따라 순서가 뒤집히면 끝까지 본 유저의 보상이 사라진다.
+/// 닫혔는데 보상이 아직이면 [gracePeriod] 만큼 더 기다린 뒤에야 이탈로 본다.
+///
+/// 광고 SDK 객체 없이 순서만 검증할 수 있게 [AdService] 밖으로 뺐다.
+@visibleForTesting
+class RewardedAdSettler {
+  RewardedAdSettler({required this.gracePeriod});
+
+  final Duration gracePeriod;
+  final Completer<RewardedAdResult> _completer = Completer<RewardedAdResult>();
+  bool _earned = false;
+  bool _dismissed = false;
+  Timer? _grace;
+
+  Future<RewardedAdResult> get result => _completer.future;
+  bool get isSettled => _completer.isCompleted;
+
+  /// onUserEarnedReward. 닫힘이 먼저 와서 유예 중이면 여기서 바로 결론낸다.
+  void reward() {
+    _earned = true;
+    _settleIfDismissed();
+  }
+
+  /// onAdDismissedFullScreenContent
+  void dismiss() {
+    _dismissed = true;
+    _settleIfDismissed();
+  }
+
+  /// 표시 실패·show 예외·타임아웃. 유저 잘못이 아니다.
+  void fail() => _finish(RewardedAdResult.failedToShow);
+
+  void _settleIfDismissed() {
+    if (!_dismissed) return;
+    if (_earned) {
+      _finish(RewardedAdResult.earned);
+      return;
+    }
+    _grace ??= Timer(gracePeriod, () {
+      _finish(
+        _earned ? RewardedAdResult.earned : RewardedAdResult.dismissedEarly,
+      );
+    });
+  }
+
+  // 모든 종료 경로가 여기로 모인다. 두 번 불려도 처음 결과만 남는다.
+  void _finish(RewardedAdResult result) {
+    _grace?.cancel();
+    if (!_completer.isCompleted) _completer.complete(result);
   }
 }

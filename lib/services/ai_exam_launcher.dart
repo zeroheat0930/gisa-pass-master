@@ -25,8 +25,12 @@ Future<void> startAiExam(BuildContext context) async {
   // 구독 화면은 AI 모의고사를 유료 전용으로 광고하는데 게이트가 없었다.
   // 완전히 막으면 쓰던 유저에게서 기능을 빼앗는 것이라 하루 1회는 열어둔다.
   final isPremium = context.read<PurchaseService>().isPremium;
-  if (!await AiExamQuota.canStart(isPremium: isPremium)) {
+  // 판정 시점의 날짜를 잡아 소모까지 들고 간다. 판정 뒤 문제 로드·로딩 화면을
+  // 지나는 사이 자정을 넘기면, 오늘 허용받은 응시가 내일 무료 1회를 깎는다.
+  var quotaDay = AiExamQuota.dayKey();
+  if (!await AiExamQuota.canStart(isPremium: isPremium, day: quotaDay)) {
     if (!context.mounted) return;
+    // onSeePremium 의 push 를 돌려줘야 다이얼로그가 구독 화면 pop 까지 기다린다.
     final earned = await ExamQuotaDialog.show(
       context,
       isPremium: isPremium,
@@ -35,8 +39,13 @@ Future<void> startAiExam(BuildContext context) async {
         CupertinoPageRoute(builder: (_) => const SubscriptionScreen()),
       ),
     );
-    // 광고를 끝까지 봐서 1회를 얻었으면 그대로 이어서 응시한다.
-    if (!earned || !context.mounted) return;
+    if (!context.mounted) return;
+    // 광고를 끝까지 봐서 1회를 얻었거나, 구독 화면에서 프리미엄이 되어 돌아왔으면
+    // 그대로 이어서 응시한다. 결제 직후 버튼을 다시 찾게 하면 산 보람이 깎인다.
+    if (!earned && !context.read<PurchaseService>().isPremium) return;
+    // 보너스는 다이얼로그 안에서 '오늘' 장부에 적혔다. 그 사이 자정이 지났을 수
+    // 있으니 날짜를 다시 잡는다.
+    quotaDay = AiExamQuota.dayKey();
   }
 
   HapticFeedback.lightImpact();
@@ -59,7 +68,8 @@ Future<void> startAiExam(BuildContext context) async {
   await Navigator.push(
     context,
     CupertinoPageRoute(
-      builder: (_) => AiPredictionScreen(questions: examQuestions),
+      builder: (_) =>
+          AiPredictionScreen(questions: examQuestions, quotaDay: quotaDay),
     ),
   );
 }

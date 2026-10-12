@@ -27,20 +27,24 @@ class DailyQuota {
   /// 날짜와 함께 초기화되는 카운터 키들
   final List<String> counterKeys;
 
+  /// 테스트용 시계. 자정 경계를 재현하려면 '지금'을 바꿀 수 있어야 한다.
+  @visibleForTesting
+  static DateTime Function()? nowForTest;
+
   /// 로컬 날짜 키 (yyyy-MM-dd). 기기 시간대 기준.
   static String today() {
-    final now = DateTime.now();
+    final now = nowForTest?.call() ?? DateTime.now();
     final m = now.month.toString().padLeft(2, '0');
     final d = now.day.toString().padLeft(2, '0');
     return '${now.year}-$m-$d';
   }
 
-  /// 오늘 [key] 의 값. 날짜가 바뀌었으면 0.
+  /// [day](생략하면 오늘) 기준 [key] 의 값. 저장된 날짜가 다르면 0.
   /// 조회 실패도 0 — 조회 실패로 유저를 막지 않는다.
-  Future<int> read(String key) async {
+  Future<int> read(String key, {String? day}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getString(dateKey) != today()) return 0;
+      if (prefs.getString(dateKey) != (day ?? today())) return 0;
       return prefs.getInt(key) ?? 0;
     } catch (e) {
       debugPrint('$label 조회 실패: $e');
@@ -53,11 +57,22 @@ class DailyQuota {
   ///
   /// 날짜가 바뀐 첫 기록이면 오늘 날짜를 찍고 나머지 카운터를 0 으로 돌린 뒤
   /// [key] 는 곧바로 1 로 쓴다(0 을 썼다가 다시 1 을 쓰지 않는다).
-  Future<bool> increment(String key, {int? limit}) async {
+  ///
+  /// [day] 를 주면 '오늘' 대신 **그 날짜**로 기록한다. 판정(canStart)과 소모
+  /// 사이에 자정이 끼면, 판정한 날의 응시권을 다음 날 장부에서 깎는 사고가 난다
+  /// (23:59:58 에 시작한 응시가 내일 무료 1회를 먹는다). 판정 시점의 날짜를
+  /// 넘겨받아 그날 장부에 적는다. 저장된 날짜가 [day] 보다 뒤면 그날 장부는 이미
+  /// 롤오버로 지워졌으므로 아무것도 쓰지 않고 true(날짜 키 문자열은 사전순=시간순).
+  Future<bool> increment(String key, {int? limit, String? day}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final today = DailyQuota.today();
-      final isNewDay = prefs.getString(dateKey) != today;
+      final today = day ?? DailyQuota.today();
+      final stored = prefs.getString(dateKey);
+      if (stored != null && stored.compareTo(today) > 0) {
+        debugPrint('$label: $today 장부는 이미 지나 기록하지 않음');
+        return true;
+      }
+      final isNewDay = stored != today;
       final current = isNewDay ? 0 : (prefs.getInt(key) ?? 0);
       if (limit != null && current >= limit) return false;
       if (isNewDay) {

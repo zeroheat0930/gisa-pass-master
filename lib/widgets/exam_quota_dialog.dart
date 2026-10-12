@@ -30,10 +30,15 @@ class ExamQuotaDialog {
       '${AppConfig.examCountdownSuffix}';
 
   /// 반환값이 true 면 지금 바로 응시할 수 있다(광고 보상 획득).
+  ///
+  /// [onSeePremium] 이 Future 를 돌려주면(구독 화면 push 등) **그게 끝날 때까지**
+  /// 기다렸다가 반환한다. 호출부는 반환 뒤 프리미엄 여부를 다시 보고 곧장 응시로
+  /// 이어갈 수 있다 — 기다리지 않으면 결제를 마치고 돌아와도 모의고사가 시작되지
+  /// 않아, 방금 돈을 낸 유저가 버튼을 다시 찾아 눌러야 한다.
   static Future<bool> show(
     BuildContext context, {
     required bool isPremium,
-    required VoidCallback onSeePremium,
+    required FutureOr<void> Function() onSeePremium,
   }) async {
     final canEarn =
         await AiExamQuota.canEarnBonus(isPremium: isPremium) &&
@@ -121,7 +126,7 @@ class ExamQuotaDialog {
     readyPoll?.cancel();
 
     if (choice == 'premium') {
-      onSeePremium();
+      await onSeePremium();
       return false;
     }
     if (choice != 'ad') return false;
@@ -147,23 +152,41 @@ class ExamQuotaDialog {
     }
 
     // 광고를 끝까지 본 경우에만 보상한다.
-    final watched = await globalAdService?.showRewardedAd() ?? false;
-    if (!watched) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('광고를 끝까지 보셔야 1회가 지급돼요.'),
-            backgroundColor: AppConfig.cardColor,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-      return false;
+    // 뜨지 못한 것과 중간에 닫은 것은 안내를 나눈다. 둘을 한 문구로 묶으면
+    // 광고를 보지도 못한 유저에게 "끝까지 보셔야" 라고 유저 탓을 하게 된다.
+    final result =
+        await globalAdService?.showRewardedAd() ??
+        RewardedAdResult.failedToShow;
+    switch (result) {
+      case RewardedAdResult.failedToShow:
+        if (context.mounted) {
+          _snack(context, '광고를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+        }
+        return false;
+      case RewardedAdResult.dismissedEarly:
+        if (context.mounted) _snack(context, '광고를 끝까지 보셔야 1회가 지급돼요.');
+        return false;
+      case RewardedAdResult.earned:
+        break;
     }
 
-    return AiExamQuota.grantBonus();
+    // 광고를 다 봤는데 저장이 실패하면 조용히 끝내지 않는다. 유저는 광고를 본
+    // 대가를 못 받은 채 이유도 모르고 버튼만 다시 누르게 된다.
+    final granted = await AiExamQuota.grantBonus();
+    if (!granted && context.mounted) {
+      _snack(context, '보너스 저장에 실패했어요. 다시 시도해주세요.');
+    }
+    return granted;
+  }
+
+  static void _snack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppConfig.cardColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 }

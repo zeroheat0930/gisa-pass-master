@@ -19,7 +19,16 @@ import 'subscription_screen.dart';
 class AiPredictionScreen extends StatefulWidget {
   final List<Question> questions;
 
-  const AiPredictionScreen({super.key, required this.questions});
+  /// 진입 게이트(canStart)가 허용한 쿼터 날짜 키([AiExamQuota.dayKey]).
+  /// 소모를 이 날짜 장부에 적어야 자정 직전 시작이 다음 날 무료 1회를 먹지 않는다.
+  /// 생략하면 화면이 열린 시점의 날짜를 쓴다.
+  final String? quotaDay;
+
+  const AiPredictionScreen({
+    super.key,
+    required this.questions,
+    this.quotaDay,
+  });
 
   @override
   State<AiPredictionScreen> createState() => _AiPredictionScreenState();
@@ -49,9 +58,13 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
   int _adCounter = 0;
   bool _isRetrying = false;
 
+  /// 이번 응시를 허용한 날짜 키. 소모는 반드시 이 날짜로 한다.
+  late String _quotaDay;
+
   @override
   void initState() {
     super.initState();
+    _quotaDay = widget.quotaDay ?? AiExamQuota.dayKey();
     _stopwatch = Stopwatch();
     _startLoadingPhase();
     _banner
@@ -82,8 +95,10 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
 
       // 시험이 실제로 시작되는 이 시점에 무료 응시 1회를 소모한다.
       // 진입 시점에 깎으면 로딩 중 이탈만으로 1회가 날아간다.
+      // 날짜는 판정 시점의 것(_quotaDay)으로 — 로딩 2초 사이 자정을 넘겨도
+      // 허용받은 날의 장부에서 깎는다.
       final isPremium = context.read<PurchaseService>().isPremium;
-      unawaited(AiExamQuota.consume(isPremium: isPremium));
+      unawaited(AiExamQuota.consume(isPremium: isPremium, day: _quotaDay));
     });
   }
 
@@ -170,8 +185,10 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
     _isRetrying = true;
     try {
       final isPremium = context.read<PurchaseService>().isPremium;
-      if (!await AiExamQuota.canStart(isPremium: isPremium)) {
+      var day = AiExamQuota.dayKey();
+      if (!await AiExamQuota.canStart(isPremium: isPremium, day: day)) {
         if (!mounted) return;
+        // 구독 화면 pop 까지 기다린다. 결제하고 돌아왔으면 바로 다시 풀기로 잇는다.
         final earned = await ExamQuotaDialog.show(
           context,
           isPremium: isPremium,
@@ -180,8 +197,13 @@ class _AiPredictionScreenState extends State<AiPredictionScreen> {
             MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
           ),
         );
-        if (!earned || !mounted) return;
+        if (!mounted) return;
+        if (!earned && !context.read<PurchaseService>().isPremium) return;
+        // 보너스는 방금 '오늘' 장부에 적혔다. 다이얼로그를 띄운 사이 자정이
+        // 지났을 수 있으니 날짜를 다시 잡는다.
+        day = AiExamQuota.dayKey();
       }
+      _quotaDay = day;
 
       _timerTick?.cancel();
       _timerTick = null;

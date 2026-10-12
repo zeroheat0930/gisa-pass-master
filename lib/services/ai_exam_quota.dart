@@ -57,17 +57,26 @@ class AiExamQuota {
     return await bonusToday() < maxBonusPerDay;
   }
 
+  /// 지금의 쿼터 날짜 키. 판정 시점에 잡아 두었다가 [canStart]·[consume] 에
+  /// 같은 값을 넘기면, 둘 사이에 자정이 끼어도 같은 날 장부로 계산된다.
+  static String dayKey() => DailyQuota.today();
+
   /// 응시 가능 여부. 프리미엄은 항상 true.
-  static Future<bool> canStart({required bool isPremium}) async {
+  /// [day] 를 생략하면 오늘 기준.
+  static Future<bool> canStart({required bool isPremium, String? day}) async {
     if (isPremium) return true;
-    final allowed = freeAttemptsPerDay + await bonusToday();
-    return await usedToday() < allowed;
+    final allowed = freeAttemptsPerDay + await _quota.read(_bonusKey, day: day);
+    return await _quota.read(_countKey, day: day) < allowed;
   }
 
   /// 응시 1회 소모. 프리미엄은 카운트하지 않는다.
-  static Future<void> consume({required bool isPremium}) async {
+  ///
+  /// [day] 는 [canStart] 로 허용받은 날짜 키([dayKey]). 판정 뒤 로딩(2초) 사이에
+  /// 자정을 넘기면, 생략 시 '오늘'로 깎여 내일 무료 1회가 사라지고 어젯밤 광고로
+  /// 받은 보너스는 롤오버로 날아간다. 판정한 날 장부에서 깎아야 맞다.
+  static Future<void> consume({required bool isPremium, String? day}) async {
     if (isPremium) return;
-    await _quota.increment(_countKey);
+    await _quota.increment(_countKey, day: day);
   }
 
   @visibleForTesting
