@@ -65,6 +65,10 @@ class DailyMission {
   final int? minDifficulty;
   final int questionCount;
 
+  /// 실제 날짜로 계산한 'D-N!' 을 설명 앞에 붙이는 미션(실전 모의고사 자리).
+  /// 문구에 D-숫자를 박아두면 시작일에 따라 시험 뒤에도 'D-2!' 가 뜬다.
+  final bool showsExamCountdown;
+
   const DailyMission({
     required this.dayNumber,
     required this.title,
@@ -74,6 +78,7 @@ class DailyMission {
     this.filterValue,
     this.minDifficulty,
     required this.questionCount,
+    this.showsExamCountdown = false,
   });
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import '../config.dart';
 import '../models/study_plan.dart';
 import '../models/question.dart';
 import 'database_service.dart';
@@ -114,10 +115,11 @@ class StudyPlanService extends ChangeNotifier {
     DailyMission(
       dayNumber: 12,
       title: '실전 모의고사',
-      description: 'D-2! 실전과 동일한 환경으로 모의시험을 봅니다',
+      description: '실전과 동일한 환경으로 모의시험을 봅니다',
       icon: 'psychology',
       queryType: 'prediction',
       questionCount: 20,
+      showsExamCountdown: true,
     ),
     DailyMission(
       dayNumber: 13,
@@ -129,7 +131,7 @@ class StudyPlanService extends ChangeNotifier {
     ),
     DailyMission(
       dayNumber: 14,
-      title: '시험 당일! 가볍게 복습',
+      title: '가볍게 복습',
       description: '족보 훑어보고 가벼운 문제로 컨디션 점검!',
       icon: 'emoji_events',
       queryType: 'review',
@@ -185,10 +187,11 @@ class StudyPlanService extends ChangeNotifier {
     DailyMission(
       dayNumber: 6,
       title: '실전 모의고사',
-      description: 'D-1! 실전 환경으로 모의시험을 봅니다',
+      description: '실전 환경으로 모의시험을 봅니다',
       icon: 'psychology',
       queryType: 'prediction',
       questionCount: 20,
+      showsExamCountdown: true,
     ),
     DailyMission(
       dayNumber: 7,
@@ -338,6 +341,94 @@ class StudyPlanService extends ChangeNotifier {
   /// 실제 기출을 푸는 편이 낫다.
   static bool usesRestoredPool(String planType, String queryType) =>
       queryType == 'prediction' || planType == '1day';
+
+  /// 이 미션이 화면에 보일 제목·설명. **표시 시점에 실제 날짜로** 정한다.
+  ///
+  /// 플랜은 시작일 기준 달력으로만 흘러가서, 마지막 날이 시험 당일이라는 보장이
+  /// 없다. 예전에는 'D-2!'·'시험 당일!' 을 미션 문구에 박아둬서 10/15 시작
+  /// 14일 플랜이면 시험(10/25) 뒤인 10/27~29 에 'D-2!'·'시험 당일!' 이 떴다.
+  /// 저장 포맷은 그대로 두고 [planStart] + (day-1) 날짜로 판정한다.
+  ///
+  ///  - 그날이 시험일 → 제목 앞에 '시험 당일!'
+  ///  - 그날이 시험 뒤 → 설명 앞에 '복습 · 다음 시험 대비'
+  ///  - 그 전 → [DailyMission.showsExamCountdown] 미션만 실제 'D-N!'
+  ///  - 플랜이 겨냥한 시험일이 확정이 아니면(추정 경로) 날짜 문구를 쓰지 않는다.
+  static ({String title, String description}) missionTextFor(
+    DailyMission mission,
+    DateTime planStart,
+  ) {
+    final plain = (title: mission.title, description: mission.description);
+    final exam = AppConfig.confirmedExamOnOrAfter(planStart);
+    if (exam == null) return plain;
+
+    // 달력 날짜끼리 비교한다(UTC 로 맞춰 서머타임·시각 영향 제거).
+    final day = DateTime.utc(
+      planStart.year,
+      planStart.month,
+      planStart.day + mission.dayNumber - 1,
+    );
+    final examDay = DateTime.utc(exam.year, exam.month, exam.day);
+    final daysLeft = examDay.difference(day).inDays;
+
+    if (daysLeft == 0) {
+      // 시험 당일에 '고난이도 도전' 같은 미션을 내지 않는다. 플랜 길이와 무관하게
+      // 당일은 가볍게 훑는 날이다.
+      return (
+        title: '시험 당일! 가볍게 복습',
+        description: '컨디션이 우선 · 핵심 암기만 훑고 시험장으로',
+      );
+    }
+    if (daysLeft < 0) {
+      return (
+        title: mission.title,
+        description: '복습 · 다음 시험 대비 · ${mission.description}',
+      );
+    }
+    if (mission.showsExamCountdown &&
+        daysLeft <= AppConfig.examCountdownWindowDays) {
+      return (
+        title: mission.title,
+        description: 'D-$daysLeft! ${mission.description}',
+      );
+    }
+    return plain;
+  }
+
+  /// 플랜 선택 화면에서 날짜 판정을 해도 되는가 — 홈 D-Day 노출 조건과 같은 정본.
+  static bool get _examFitApplies => AppConfig.shouldShowExamCountdown;
+
+  /// 오늘 이 플랜을 시작하면 시험일을 넘겨서까지 이어지는가.
+  /// 오늘이 Day 1 이므로 시험일까지 쓸 수 있는 날은 `daysUntilExam + 1` 일이다.
+  static bool planRunsPastExam(String planType) =>
+      _examFitApplies &&
+      getMissionsForPlanType(planType).length > AppConfig.daysUntilExam + 1;
+
+  /// 시험일 안에 끝나는 플랜 중 가장 긴 것. 판정할 수 없으면 null.
+  static String? recommendedPlanType(Iterable<String> planTypes) {
+    if (!_examFitApplies) return null;
+    String? best;
+    var bestLen = 0;
+    for (final t in planTypes) {
+      final len = getMissionsForPlanType(t).length;
+      if (!planRunsPastExam(t) && len > bestLen) {
+        best = t;
+        bestLen = len;
+      }
+    }
+    return best;
+  }
+
+  /// 시험 뒤까지 이어지는 플랜 카드에 붙일 경고. 해당 없으면 null.
+  /// 날짜는 [AppConfig.examDate] 로 조립한다(하드코딩 금지).
+  static String? examOverrunWarning(String planType) {
+    if (!planRunsPastExam(planType)) return null;
+    final exam = AppConfig.examDate;
+    final when = '${exam.month}월 ${exam.day}일';
+    final days = AppConfig.daysUntilExam;
+    return days == 0
+        ? '오늘이 시험일($when)이라 이 플랜은 시험 뒤까지 이어져요'
+        : '시험($when)까지 $days일 남아 이 플랜은 시험 뒤까지 이어져요';
+  }
 
   StudyPlanService(this._db);
 

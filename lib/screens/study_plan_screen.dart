@@ -348,6 +348,10 @@ class _NoPlanView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 시험이 가까우면 시험일 안에 끝나는 플랜을 추천하고, 넘치는 플랜엔 경고만 단다.
+    // 비활성화는 하지 않는다 — 시험 뒤까지 이어가려는 유저도 있다.
+    final recommended = StudyPlanService.recommendedPlanType(
+        _planOptions.map((o) => o['type'] as String));
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
@@ -379,6 +383,9 @@ class _NoPlanView extends StatelessWidget {
               days: opt['days'] as String,
               color: opt['color'] as Color,
               icon: opt['icon'] as IconData,
+              isRecommended: opt['type'] == recommended,
+              warning:
+                  StudyPlanService.examOverrunWarning(opt['type'] as String),
               onTap: () => onSelectPlan(opt['type'] as String),
             )),
       ],
@@ -393,6 +400,8 @@ class _PlanOptionCard extends StatelessWidget {
   final String days;
   final Color color;
   final IconData icon;
+  final bool isRecommended;
+  final String? warning;
   final VoidCallback onTap;
 
   const _PlanOptionCard({
@@ -402,6 +411,8 @@ class _PlanOptionCard extends StatelessWidget {
     required this.days,
     required this.color,
     required this.icon,
+    this.isRecommended = false,
+    this.warning,
     required this.onTap,
   });
 
@@ -466,6 +477,25 @@ class _PlanOptionCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (isRecommended) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppConfig.primaryColor,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            '추천',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -476,6 +506,27 @@ class _PlanOptionCard extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (warning != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            color: AppConfig.warningColor, size: 14),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            warning!,
+                            style: const TextStyle(
+                              color: AppConfig.warningColor,
+                              fontSize: 11,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -537,9 +588,13 @@ class _PlanTimelineView extends StatelessWidget {
                   StudyPlanService.needsPremiumForDay(plan.planType, dayNumber) &&
                       !isPremium;
               final isPast = dayNumber < todayDay;
+              final text =
+                  StudyPlanService.missionTextFor(mission, plan.startedAt);
 
               return _DayCard(
                 mission: mission,
+                title: text.title,
+                description: text.description,
                 progress: progress,
                 isCompleted: isCompleted,
                 isToday: isToday,
@@ -628,6 +683,9 @@ class _ProgressHeader extends StatelessWidget {
 
 class _DayCard extends StatelessWidget {
   final DailyMission mission;
+  // 날짜로 판정한 표시 문구 — mission.title/description 을 직접 쓰지 않는다.
+  final String title;
+  final String description;
   final DailyProgress? progress;
   final bool isCompleted;
   final bool isToday;
@@ -638,6 +696,8 @@ class _DayCard extends StatelessWidget {
 
   const _DayCard({
     required this.mission,
+    required this.title,
+    required this.description,
     required this.progress,
     required this.isCompleted,
     required this.isToday,
@@ -836,7 +896,7 @@ class _DayCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            mission.title,
+                            title,
                             style: TextStyle(
                               color: isLocked ? Colors.grey[600] : Colors.white,
                               fontSize: 14,
@@ -845,7 +905,7 @@ class _DayCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isLocked ? '프리미엄으로 잠금 해제' : mission.description,
+                            isLocked ? '프리미엄으로 잠금 해제' : description,
                             style: TextStyle(
                               color: Colors.grey[500],
                               fontSize: 11,
