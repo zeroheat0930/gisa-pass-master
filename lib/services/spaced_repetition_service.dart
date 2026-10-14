@@ -81,6 +81,15 @@ class SpacedRepetitionService {
     await rescheduleReviewNotification();
   }
 
+  /// 오답노트를 비운다. 비운 뒤 복습 알림도 같이 정리한다 — 큐가 빈 채로
+  /// "틀린 문제 N개" 알림이 남아 있으면 초기화한 유저에게 거짓말이 된다.
+  /// 지운 문제 수를 돌려준다.
+  Future<int> resetAll() async {
+    final removed = await _db.clearSpacedRepetition();
+    await rescheduleReviewNotification();
+    return removed;
+  }
+
   /// 현재 복습 큐를 기준으로 알림을 다시 예약한다.
   Future<void> rescheduleReviewNotification() async {
     try {

@@ -121,6 +121,19 @@ class StudyProvider extends ChangeNotifier {
     }
   }
 
+  /// 오답노트 초기화 (사용자 요청 기능, 2026-10 피드백). 복습 큐만 비우고
+  /// 풀이 기록·통계는 남긴다. 오답노트 모드 중이면 화면의 문제 목록도 비운다.
+  Future<int> resetWrongAnswerNote() async {
+    final removed = await _spacedRepetitionService.resetAll();
+    if (_studyMode == StudyMode.wrongAnswer) {
+      _questionList = [];
+      _questionIndex = 0;
+      _resetSession();
+    }
+    notifyListeners();
+    return removed;
+  }
+
   /// 즐겨찾기 모드: 북마크된 문제 로드
   Future<void> loadBookmarkedQuestions() async {
     _setLoading(true);

@@ -1078,6 +1078,13 @@ class DatabaseService {
     );
   }
 
+  /// 복습 큐를 통째로 비운다 (오답노트 초기화). answer_records 의 풀이 이력과
+  /// 통계는 그대로 남는다 — 유저가 지우고 싶은 건 "다시 풀 목록" 이지 기록이 아니다.
+  Future<int> clearSpacedRepetition() async {
+    final db = await database;
+    return db.delete('spaced_repetition');
+  }
+
   /// 복습 큐에서 제거한다 (졸업). answer_records 의 풀이 이력은 남는다.
   Future<void> deleteSpacedRepetition(int questionId) async {
     final db = await database;

@@ -435,6 +435,47 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
+  /// 오답노트 초기화 — 복습 목록만 비우고 통계는 남긴다. 되돌릴 수 없으니
+  /// 확인 다이얼로그를 거친다.
+  Future<void> _confirmResetWrongNote(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppConfig.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('오답노트를 초기화할까요?',
+            style: TextStyle(color: Colors.white, fontSize: 17)),
+        content: const Text(
+          '복습 목록이 모두 지워집니다. 풀이 기록과 통계는 남아요.\n이 작업은 되돌릴 수 없습니다.',
+          style: TextStyle(color: Colors.grey, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            key: const Key('reset_wrong_note_confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('초기화',
+                style: TextStyle(color: AppConfig.primaryColor)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final removed = await context.read<StudyProvider>().resetWrongAnswerNote();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('오답노트를 비웠어요 ($removed문제)'),
+        backgroundColor: AppConfig.cardColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   AppBar _buildAppBar(BuildContext context) {
     String title;
     switch (widget.mode) {
@@ -462,6 +503,13 @@ class _QuizScreenState extends State<QuizScreen> {
       centerTitle: true,
       elevation: 0,
       actions: [
+        if (widget.mode == StudyMode.wrongAnswer)
+          IconButton(
+            key: const Key('reset_wrong_note'),
+            tooltip: '오답노트 초기화',
+            icon: Icon(Icons.delete_sweep_outlined, color: Colors.grey[500]),
+            onPressed: () => _confirmResetWrongNote(context),
+          ),
         if (question != null && question.id != null)
           FutureBuilder<bool>(
             future: provider.isBookmarked(question.id!),
